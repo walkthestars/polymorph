@@ -21,28 +21,6 @@ jobs:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
 
-      - name: TEMP-DIAG worktree path form
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          git --version
-          Write-Output "TEMP=$env:TEMP"
-          Write-Output "TMP=$env:TMP"
-          Write-Output "GetTempPath=$([System.IO.Path]::GetTempPath())"
-          $d = Join-Path ([System.IO.Path]::GetTempPath()) ("diag" + [guid]::NewGuid().ToString("N").Substring(0,6))
-          New-Item -ItemType Directory -Path $d | Out-Null
-          Write-Output "dir=$d"
-          Write-Output "short=$((New-Object -ComObject Scripting.FileSystemObject).GetFolder($d).ShortPath)"
-          git -C $d init -b main | Out-Null
-          git -C $d config core.autocrlf false
-          Set-Content -Path (Join-Path $d "f.txt") -Value "v1"
-          git -C $d add .
-          git -C $d -c user.email=t@t -c user.name=t commit -m seed --quiet
-          New-Item -ItemType Directory -Path (Join-Path $d "wt") | Out-Null
-          git -C $d worktree add --detach (Join-Path $d "wt/c1") HEAD
-          Write-Output "--- worktree list ---"
-          git -C $d worktree list
-
       - name: Build workspace
         run: cargo build --workspace --all-targets --locked
 

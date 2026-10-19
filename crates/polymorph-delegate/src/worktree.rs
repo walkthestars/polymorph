@@ -335,7 +335,13 @@ pub async fn merge_back(kept: KeptWorktree, message: &str) -> Result<MergeReport
             files,
         });
     }
-    if let Err(merge_err) = git(&kept.repo, &["merge", "--squash", &branch]).await {
+    // Identity first: git refuses to prepare a squash merge at all when no
+    // user.email is resolvable (`Committer identity unknown`, exit 128), so
+    // the merge must run under the same fallback identity as the commit.
+    let id = commit_identity_args(&kept.repo).await;
+    let mut merge_cmd = id.clone();
+    merge_cmd.extend(["merge".to_string(), "--squash".to_string(), branch.clone()]);
+    if let Err(merge_err) = git_ref(&kept.repo, &merge_cmd).await {
         // Squash leaves no MERGE_HEAD, so `--abort` is a no-op here:
         // `reset --hard` clears the conflict debris (the repo was
         // pre-checked clean, so nothing of value is discarded).
@@ -372,7 +378,6 @@ pub async fn merge_back(kept: KeptWorktree, message: &str) -> Result<MergeReport
             files: Vec::new(),
         });
     }
-    let id = commit_identity_args(&kept.repo).await;
     let mut commit: Vec<String> = vec!["commit".into(), "-m".into(), message.into()];
     let mut full = id;
     full.append(&mut commit);
@@ -630,6 +635,20 @@ mod tests {
         p
     }
 
+    /// Comparison key for a path git may spell differently than we do: 8.3
+    /// short names (`RUNNER~1`) versus the long form, backslashes versus
+    /// slashes, and Windows case. Resolves through the filesystem and drops
+    /// the `\\?\` verbatim prefix `canonicalize` adds. `None` when the path
+    /// no longer resolves (a removed worktree).
+    fn canonical_cmp(path: &Path) -> Option<String> {
+        let canon = std::fs::canonicalize(path).ok()?;
+        let text = canon.to_string_lossy().replace('\\', "/");
+        let text = text
+            .strip_prefix("//?/")
+            .map_or(text.clone(), str::to_string);
+        Some(text.to_ascii_lowercase())
+    }
+
     #[tokio::test]
     async fn detached_create_remove_round_trip() {
         let dir = tempfile::tempdir().unwrap();
@@ -644,23 +663,26 @@ mod tests {
             "c1\n"
         );
         let list = git(&repo, &["worktree", "list"]).await.unwrap();
-        // Match on the worktree PATH (first column), never substring "c1":
-        // the temp parent itself may randomly contain "c1", which made the
-        // old `contains` assert luck-dependent (green 5/5 reruns after a
-        // full-suite failure — chunk-9 smoke audit).
-        let here = wt.path().to_string_lossy().replace('\\', "/");
+        // Match on the worktree PATH, never substring "c1": the temp parent
+        // itself may randomly contain "c1". Compare through the filesystem —
+        // git prints the long form while %TEMP% may be the 8.3 short form
+        // (`C:/Users/RUNNER~1/...` on windows CI), which broke string equality.
+        let here = canonical_cmp(wt.path()).expect("live worktree path resolves");
         let listed = |list: &str| {
             list.lines().any(|l| {
                 l.split_whitespace()
                     .next()
-                    .is_some_and(|p| p.replace('\\', "/") == here)
+                    .and_then(|p| canonical_cmp(Path::new(p)))
+                    .is_some_and(|c| c == here)
             })
         };
         assert!(listed(&list), "want {here:?} listed in:\n{list}");
         wt.remove().await.unwrap();
         assert!(!dir.path().join("wt").join("c1").exists());
+        // Registration gone: only the main tree stays listed (count is
+        // spelling-independent, so the 8.3/long-form split cannot hide it).
         let list = git(&repo, &["worktree", "list"]).await.unwrap();
-        assert!(!listed(&list), "{list}");
+        assert_eq!(list.lines().count(), 1, "still registered:\n{list}");
     }
 
     #[tokio::test]
