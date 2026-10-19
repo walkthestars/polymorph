@@ -1,0 +1,23 @@
+[package]
+name = "polymorph-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+figment.workspace = true
+rusqlite.workspace = true
+tokio-rusqlite.workspace = true
+rusqlite_migration.workspace = true
+uuid.workspace = true
+polymorph-tasks = { path = "../polymorph-tasks" }
+
+[dev-dependencies]
+tempfile.workspace = true

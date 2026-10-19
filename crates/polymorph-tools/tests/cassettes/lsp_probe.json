@@ -1,0 +1,15 @@
+{
+  "note": "Shape-golden transcript for the L1b op surface (chunk 93). READ-ONLY input: no test writes this file (the mcp_probe.json key-order churn lesson). Comparison is order-insensitive over parsed method names, never byte compare.",
+  "server": "polymorph-probe-lsp",
+  "spine": [
+    "initialize",
+    "textDocument/hover",
+    "textDocument/definition",
+    "textDocument/references",
+    "textDocument/diagnostic",
+    "textDocument/rename",
+    "textDocument/codeAction",
+    "textDocument/documentSymbol",
+    "shutdown"
+  ]
+}

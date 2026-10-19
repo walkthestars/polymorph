@@ -1,0 +1,40 @@
+[package]
+name = "polymorph-tools"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+similar.workspace = true
+sha2.workspace = true
+portable-pty.workspace = true
+futures.workspace = true
+async-trait.workspace = true
+grep-regex.workspace = true
+grep-searcher.workspace = true
+ignore.workspace = true
+globset.workspace = true
+rmcp.workspace = true
+reqwest.workspace = true
+polymorph-core = { path = "../polymorph-core" }
+
+# Unix process-group reaping (`exec::kill_tree_sync`: `kill(-pgid, SIGKILL)`).
+# Already in the lock transitively (MIT OR Apache-2.0); no new crate.
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+toml.workspace = true
+wiremock.workspace = true
+# U2 datum only: proves skills::validate accepts diagnoser output.
+# Test-only edge (runtime stays decoupled — 134-plan ruling).
+polymorph-skills = { path = "../polymorph-skills" }

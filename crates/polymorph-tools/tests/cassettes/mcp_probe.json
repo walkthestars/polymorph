@@ -1,0 +1,144 @@
+{
+  "frames": [
+    {
+      "dir": "out",
+      "line": {
+        "id": 0,
+        "jsonrpc": "2.0",
+        "method": "initialize",
+        "params": {
+          "capabilities": {},
+          "clientInfo": {
+            "name": "rmcp",
+            "version": "3.3.0"
+          },
+          "protocolVersion": "2025-11-25"
+        }
+      }
+    },
+    {
+      "dir": "in",
+      "line": {
+        "id": 0,
+        "jsonrpc": "2.0",
+        "result": {
+          "capabilities": {
+            "tools": {}
+          },
+          "protocolVersion": "2025-11-25",
+          "serverInfo": {
+            "name": "polymorph-probe",
+            "version": "0.1.0"
+          }
+        }
+      }
+    },
+    {
+      "dir": "out",
+      "line": {
+        "jsonrpc": "2.0",
+        "method": "notifications/initialized"
+      }
+    },
+    {
+      "dir": "out",
+      "line": {
+        "id": 1,
+        "jsonrpc": "2.0",
+        "method": "tools/list",
+        "params": {
+          "_meta": {
+            "progressToken": 0
+          }
+        }
+      }
+    },
+    {
+      "dir": "in",
+      "line": {
+        "id": 1,
+        "jsonrpc": "2.0",
+        "result": {
+          "tools": [
+            {
+              "description": "probe echo tool",
+              "inputSchema": {
+                "type": "object"
+              },
+              "name": "probe_echo"
+            },
+            {
+              "description": "probe failing tool",
+              "inputSchema": {
+                "type": "object"
+              },
+              "name": "probe_fail"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "dir": "out",
+      "line": {
+        "id": 2,
+        "jsonrpc": "2.0",
+        "method": "tools/call",
+        "params": {
+          "_meta": {
+            "progressToken": 1
+          },
+          "arguments": {},
+          "name": "probe_echo"
+        }
+      }
+    },
+    {
+      "dir": "in",
+      "line": {
+        "id": 2,
+        "jsonrpc": "2.0",
+        "result": {
+          "content": [
+            {
+              "text": "echo",
+              "type": "text"
+            }
+          ],
+          "isError": false
+        }
+      }
+    },
+    {
+      "dir": "out",
+      "line": {
+        "id": 3,
+        "jsonrpc": "2.0",
+        "method": "tools/call",
+        "params": {
+          "_meta": {
+            "progressToken": 2
+          },
+          "arguments": {},
+          "name": "probe_fail"
+        }
+      }
+    },
+    {
+      "dir": "in",
+      "line": {
+        "id": 3,
+        "jsonrpc": "2.0",
+        "result": {
+          "content": [
+            {
+              "text": "boom",
+              "type": "text"
+            }
+          ],
+          "isError": true
+        }
+      }
+    }
+  ]
+}

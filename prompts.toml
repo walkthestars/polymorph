@@ -1,0 +1,43 @@
+# Prompt-pack manifest (Epic A6 + F5 — ENFORCED, not a placeholder)
+#
+# This file pins sha256 of every pack file. CI FAILS on drift (unlisted file,
+# missing file, or hash mismatch). To change a prompt:
+#   1. Edit prompts/{model}/{role}.md
+#   2. Update the sha256 below (Epic D automates this via `polymorph config`)
+#   3. Commit BOTH the .md and this manifest (F5 eval gate runs on the pair).
+# Deprecation policy: never delete a pack file in the same PR that changes
+# behavior — deprecate (rename to *.deprecated.md, keep hash row) for one
+# milestone, then remove.
+# Hashes recorded 2026-09-06 (chunk 1 scaffold prompts).
+
+[packs.glm-glm-5-3-edit]
+path = "prompts/glm/glm-5.3/edit.md"
+sha256 = "007776c88ca1952107528cca88a809a739e7c18bb0407f925915a85681a907f5"
+
+[packs.glm-glm-5-3-act]
+path = "prompts/glm/glm-5.3/act.md"
+sha256 = "36da5b4a0f502505c6dbc2b8cb268b7f7b2d73481ba9f7aa2d44d50d08b07ac7"
+
+[packs.glm-glm-5-3-review]
+path = "prompts/glm/glm-5.3/review.md"
+sha256 = "8452d9ba42ecfddf72f7f41feae6b4f3ba105d13a76a194f358efdc4beb0d254"
+
+[packs.muse-muse-spark-1-3-review]
+path = "prompts/muse/muse-spark-1.3/review.md"
+sha256 = "d044a462c2f060f820c99a3b114043659067da92dd7f0a9a594ff6af60baa54b"
+
+[packs.glm-glm-5-3-plan]
+path = "prompts/glm/glm-5.3/plan.md"
+sha256 = "8a827f4b2392e6d2288ef51431512766347ad3ec0439f14b64ed9071746a26ad"
+
+[packs.glm-glm-5-3-str-replace]
+path = "prompts/glm/glm-5.3/str_replace.md"
+sha256 = "0150c15ab28f10379f1512b98e5ed1c2a399b50126163a2a8641428444571058"
+
+[packs.deepseek-deepseek-v4-1-flash-act]
+path = "prompts/deepseek/deepseek-v4.1-flash/act.md"
+sha256 = "0f83506f363a402541c30c68c858fed29f8f5b71756d4533856732885fb80e1c"
+
+[packs.deepseek-deepseek-v4-1-flash-edit]
+path = "prompts/deepseek/deepseek-v4.1-flash/edit.md"
+sha256 = "56b5c7f5e356cb4e9a87419f2e88766dcf8dd386a6f37d5a202938b2df0985d9"

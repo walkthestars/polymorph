@@ -1,0 +1,72 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/polymorph-core",
+  "crates/polymorph-llm",
+  "crates/polymorph-skills",
+  "crates/polymorph-delegate",
+  "crates/polymorph-review",
+  "crates/polymorph-tasks",
+  "crates/polymorph-tools",
+  "crates/polymorph-acp",
+  "crates/polymorph-web",
+  "crates/polymorph-renderdoc",
+  "crates/polymorph-cli",
+  "crates/polymorph-tui",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+license = "AGPL-3.0-only"
+repository = "https://github.com/walkthestars/polymorph"
+authors = ["walkthestars <64265241+walkthestars@users.noreply.github.com>"]
+
+[workspace.dependencies]
+anyhow = "1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-appender = "0.2"
+clap = { version = "4", features = ["derive", "env"] }
+clap_complete = "4"
+figment = { version = "0.10", features = ["toml", "env"] }
+genai = "0.6"
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
+rmcp = { version = "3", features = ["client", "server", "transport-child-process", "transport-async-rw"] }
+portable-pty = "0.9"
+grep-regex = "0.1"
+regex = "1"
+grep-searcher = "0.1"
+ignore = "0.4"
+globset = "0.4"
+similar = "2"
+sha2 = "0.10"
+toml = "0.8"
+insta = "1"
+wiremock = "0.6"
+termimad = "0.35"
+syntect = "5"
+reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"] }
+futures = "0.3"
+async-trait = "0.1"
+uuid = { version = "1", features = ["v4", "serde"] }
+jiff = "0.2"
+tempfile = "3"
+pretty_assertions = "1"
+rusqlite = { version = "0.37", features = ["bundled"] }
+tokio-rusqlite = "0.7"
+rusqlite_migration = "2"
+agent-client-protocol = "2"
+libc = "0.2"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

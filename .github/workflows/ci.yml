@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  verify:
+    name: Build, Clippy, Test & Format
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build workspace
+        run: cargo build --workspace --all-targets --locked
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Run workspace tests
+        run: cargo test --workspace --locked
+
+      - name: Verify prompt manifest (prompts.toml)
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Recurse -File prompts | ForEach-Object { $_.FullName.Replace("$PWD\", "").Replace("\", "/") }
+          $manifest = Get-Content prompts.toml -Raw
+          $missing = @()
+          foreach ($f in $files) { if ($manifest -notmatch [regex]::Escape($f)) { $missing += $f } }
+          if ($missing.Count -gt 0) { Write-Error "Unlisted prompt files: $($missing -join ', ')"; exit 1 }
+          Write-Output "Prompt files verified: $($files.Count)"
+
+      - name: Verify ACP dependency pin
+        shell: pwsh
+        run: |
+          $lock = Get-Content Cargo.lock -Raw
+          if ($lock -notmatch 'name = "agent-client-protocol"\r?\nversion = "2\.1\.0"') { Write-Error "ACP pin drifted from 2.1.0"; exit 1 }
+          Write-Output "ACP pin verified: 2.1.0"

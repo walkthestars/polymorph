@@ -1,0 +1,18 @@
+# Rust build artifacts
+/target
+/target-test
+
+# Runtime state, sessions, logs, and attempts
+/.polymorph
+/.pi
+*.db
+*.db-shm
+*.db-wal
+*.eval.json
+*.bench.json
+*-events.json
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+*.swp

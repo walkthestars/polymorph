@@ -1,0 +1,555 @@
+# Agent-bench seeded corpus (Epic F6) — the deterministic basis of the
+# resolve-rate benchmark (see docs/plan-chunk33.md, docs/plan-chunk34.md).
+#
+# Schema per [[task]] (ORDER MATTERS in TOML, traps #16: task-level keys must
+# precede the first [table] header — keys after a [table] header belong to
+# that table):
+#   id, description: strings.
+#   instruction: agent-facing task text (content-specified like F5f: names the
+#     failing test + observed vs wanted values + the `cargo test` goal, NEVER
+#     solution code — the agent must locate and write the fix).
+#   fail_to_pass: test names that FAIL pre-fix (each must appear FAILED).
+#   pass_to_pass: test names that PASS pre-fix and must keep passing.
+#   [task.files]: initial crate files (dependency-free mini crates; the driver
+#     materializes to a tempdir OUTSIDE the repo workspace, so no [workspace]
+#     detach needed — the c33 rule applies only to fixtures under target/).
+#   [task.fix.files]: EXACT fixed contents (full files, B6 byte-exact spirit).
+#
+# File bodies use triple-single-quote literals (real newlines; NO escapes —
+# a `\n` here would land literally per the c34 driver catch).
+
+[[task]]
+id = "sum-off-by-one"
+description = "exclusive range drops n: (0..n).sum() instead of (1..=n).sum()"
+instruction = "In src/main.rs, the `sum_small` test fails: `sum_first_n(5)` returns 10 but the test wants 15 (`sum_zero` passes). Make `cargo test` pass without touching the tests."
+fail_to_pass = ["sum_small"]
+pass_to_pass = ["sum_zero"]
+[task.files]
+"Cargo.toml" = '''[package]
+name = "fixture"
+version = "0.1.0"
+edition = "2021"
+'''
+"src/main.rs" = '''pub fn sum_first_n(n: u32) -> u32 {
+    (0..n).sum()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sum_zero() {
+        assert_eq!(sum_first_n(0), 0);
+    }
+
+    #[test]
+    fn sum_small() {
+        assert_eq!(sum_first_n(5), 15);
+    }
+}
+'''
+[task.fix.files]
+"src/main.rs" = '''pub fn sum_first_n(n: u32) -> u32 {
+    (1..=n).sum()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sum_zero() {
+        assert_eq!(sum_first_n(0), 0);
+    }
+
+    #[test]
+    fn sum_small() {
+        assert_eq!(sum_first_n(5), 15);
+    }
+}
+'''
+
+[[task]]
+id = "max-flipped"
+description = "always-second: max_of ignores a and returns b"
+instruction = "In src/main.rs, the `max_first` test fails: `max_of(3, 1)` returns 1 but the test wants 3 (`max_second` passes). Make `cargo test` pass without touching the tests."
+fail_to_pass = ["max_first"]
+pass_to_pass = ["max_second"]
+[task.files]
+"Cargo.toml" = '''[package]
+name = "fixture"
+version = "0.1.0"
+edition = "2021"
+'''
+"src/main.rs" = '''pub fn max_of(a: i32, b: i32) -> i32 {
+    let _ = a;
+    b
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn max_first() {
+        assert_eq!(max_of(3, 1), 3);
+    }
+
+    #[test]
+    fn max_second() {
+        assert_eq!(max_of(1, 3), 3);
+    }
+}
+'''
+[task.fix.files]
+"src/main.rs" = '''pub fn max_of(a: i32, b: i32) -> i32 {
+    if a > b {
+        a
+    } else {
+        b
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn max_first() {
+        assert_eq!(max_of(3, 1), 3);
+    }
+
+    #[test]
+    fn max_second() {
+        assert_eq!(max_of(1, 3), 3);
+    }
+}
+'''
+
+[[task]]
+id = "last-element"
+description = "first returned instead of last: v[0] instead of v[len-1]"
+instruction = "In src/main.rs, the `last_of_three` test fails: `last(&[1, 2, 3])` returns 1 but the test wants 3 (`last_of_one` passes). Make `cargo test` pass without touching the tests."
+fail_to_pass = ["last_of_three"]
+pass_to_pass = ["last_of_one"]
+[task.files]
+"Cargo.toml" = '''[package]
+name = "fixture"
+version = "0.1.0"
+edition = "2021"
+'''
+"src/main.rs" = '''pub fn last(v: &[i32]) -> i32 {
+    v[0]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn last_of_one() {
+        assert_eq!(last(&[7]), 7);
+    }
+
+    #[test]
+    fn last_of_three() {
+        assert_eq!(last(&[1, 2, 3]), 3);
+    }
+}
+'''
+[task.fix.files]
+"src/main.rs" = '''pub fn last(v: &[i32]) -> i32 {
+    v[v.len() - 1]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn last_of_one() {
+        assert_eq!(last(&[7]), 7);
+    }
+
+    #[test]
+    fn last_of_three() {
+        assert_eq!(last(&[1, 2, 3]), 3);
+    }
+}
+'''
+
+[[task]]
+id = "sub-swapped"
+description = "operands reversed: b - a instead of a - b"
+instruction = "In src/main.rs, the `diff_pos` test fails: `diff(5, 3)` returns -2 but the test wants 2 (`diff_zero` passes). Make `cargo test` pass without touching the tests."
+fail_to_pass = ["diff_pos"]
+pass_to_pass = ["diff_zero"]
+[task.files]
+"Cargo.toml" = '''[package]
+name = "fixture"
+version = "0.1.0"
+edition = "2021"
+'''
+"src/main.rs" = '''pub fn diff(a: i32, b: i32) -> i32 {
+    b - a
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn diff_pos() {
+        assert_eq!(diff(5, 3), 2);
+    }
+
+    #[test]
+    fn diff_zero() {
+        assert_eq!(diff(4, 4), 0);
+    }
+}
+'''
+[task.fix.files]
+"src/main.rs" = '''pub fn diff(a: i32, b: i32) -> i32 {
+    a - b
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn diff_pos() {
+        assert_eq!(diff(5, 3), 2);
+    }
+
+    #[test]
+    fn diff_zero() {
+        assert_eq!(diff(4, 4), 0);
+    }
+}
+'''
+
+[[task]]
+id = "trim-missing"
+description = "no normalization: identity instead of trim"
+instruction = "In src/main.rs, the `clean_padded` test fails: `clean(\"  abc  \")` returns the padded string but the test wants `abc` (`clean_plain` passes). Make `cargo test` pass without touching the tests."
+fail_to_pass = ["clean_padded"]
+pass_to_pass = ["clean_plain"]
+[task.files]
+"Cargo.toml" = '''[package]
+name = "fixture"
+version = "0.1.0"
+edition = "2021"
+'''
+"src/main.rs" = '''pub fn clean(s: &str) -> String {
+    s.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clean_plain() {
+        assert_eq!(clean("abc"), "abc");
+    }
+
+    #[test]
+    fn clean_padded() {
+        assert_eq!(clean("  abc  "), "abc");
+    }
+}
+'''
+[task.fix.files]
+"src/main.rs" = '''pub fn clean(s: &str) -> String {
+    s.trim().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clean_plain() {
+        assert_eq!(clean("abc"), "abc");
+    }
+
+    #[test]
+    fn clean_padded() {
+        assert_eq!(clean("  abc  "), "abc");
+    }
+}
+'''
+
+[[task]]
+id = "inverted-predicate"
+description = "constant false: is_even never returns true"
+instruction = "In src/main.rs, the `even_two` test fails: `is_even(2)` returns false but the test wants true (`odd_three` passes). Make `cargo test` pass without touching the tests."
+fail_to_pass = ["even_two"]
+pass_to_pass = ["odd_three"]
+[task.files]
+"Cargo.toml" = '''[package]
+name = "fixture"
+version = "0.1.0"
+edition = "2021"
+'''
+"src/main.rs" = '''pub fn is_even(n: i32) -> bool {
+    let _ = n;
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn even_two() {
+        assert!(is_even(2));
+    }
+
+    #[test]
+    fn odd_three() {
+        assert!(!is_even(3));
+    }
+}
+'''
+[task.fix.files]
+"src/main.rs" = '''pub fn is_even(n: i32) -> bool {
+    n % 2 == 0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn even_two() {
+        assert!(is_even(2));
+    }
+
+    #[test]
+    fn odd_three() {
+        assert!(!is_even(3));
+    }
+}
+'''
+
+[[task]]
+id = "skipped-first"
+description = "dropped head: skip(1) before summing"
+instruction = "In src/main.rs, the `total_three` test fails: `total(&[1, 2, 3])` returns 5 but the test wants 6 (`total_empty` passes). Make `cargo test` pass without touching the tests."
+fail_to_pass = ["total_three"]
+pass_to_pass = ["total_empty"]
+[task.files]
+"Cargo.toml" = '''[package]
+name = "fixture"
+version = "0.1.0"
+edition = "2021"
+'''
+"src/main.rs" = '''pub fn total(xs: &[i32]) -> i32 {
+    xs.iter().skip(1).sum()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn total_empty() {
+        assert_eq!(total(&[]), 0);
+    }
+
+    #[test]
+    fn total_three() {
+        assert_eq!(total(&[1, 2, 3]), 6);
+    }
+}
+'''
+[task.fix.files]
+"src/main.rs" = '''pub fn total(xs: &[i32]) -> i32 {
+    xs.iter().sum()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn total_empty() {
+        assert_eq!(total(&[]), 0);
+    }
+
+    #[test]
+    fn total_three() {
+        assert_eq!(total(&[1, 2, 3]), 6);
+    }
+}
+'''
+
+[[task]]
+id = "char-count"
+description = "bytes instead of chars: len() instead of chars().count()"
+instruction = "In src/main.rs, the `unicode` test fails on a 5-letter accented word: byte length 6 is returned but the test wants the 5 characters (`ascii` passes). Make `cargo test` pass without touching the tests."
+fail_to_pass = ["unicode"]
+pass_to_pass = ["ascii"]
+[task.files]
+"Cargo.toml" = '''[package]
+name = "fixture"
+version = "0.1.0"
+edition = "2021"
+'''
+"src/main.rs" = '''pub fn nchars(s: &str) -> usize {
+    s.len()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ascii() {
+        assert_eq!(nchars("hello"), 5);
+    }
+
+    #[test]
+    fn unicode() {
+        assert_eq!(nchars("héllo"), 5);
+    }
+}
+'''
+[task.fix.files]
+"src/main.rs" = '''pub fn nchars(s: &str) -> usize {
+    s.chars().count()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ascii() {
+        assert_eq!(nchars("hello"), 5);
+    }
+
+    #[test]
+    fn unicode() {
+        assert_eq!(nchars("héllo"), 5);
+    }
+}
+'''
+
+[[task]]
+id = "concat-order"
+description = "reversed join: file/dir instead of dir/file"
+instruction = "In src/main.rs, the `nested` test fails: `path_join(\"src\", \"main.rs\")` returns `main.rs/src` but the test wants `src/main.rs` (`same_name` passes). Make `cargo test` pass without touching the tests."
+fail_to_pass = ["nested"]
+pass_to_pass = ["same_name"]
+[task.files]
+"Cargo.toml" = '''[package]
+name = "fixture"
+version = "0.1.0"
+edition = "2021"
+'''
+"src/main.rs" = '''pub fn path_join(dir: &str, file: &str) -> String {
+    format!("{file}/{dir}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn same_name() {
+        assert_eq!(path_join("x", "x"), "x/x");
+    }
+
+    #[test]
+    fn nested() {
+        assert_eq!(path_join("src", "main.rs"), "src/main.rs");
+    }
+}
+'''
+[task.fix.files]
+"src/main.rs" = '''pub fn path_join(dir: &str, file: &str) -> String {
+    format!("{dir}/{file}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn same_name() {
+        assert_eq!(path_join("x", "x"), "x/x");
+    }
+
+    #[test]
+    fn nested() {
+        assert_eq!(path_join("src", "main.rs"), "src/main.rs");
+    }
+}
+'''
+
+[[task]]
+id = "clamp-swapped"
+description = "bounds inverted: max(hi).min(lo) collapses everything to lo"
+instruction = "In src/main.rs, the `inside` and `above` tests fail: `clamp01(50)` returns 0 but the test wants 50, and `clamp01(150)` returns 0 but the test wants 100 (`below` passes). Make `cargo test` pass without touching the tests."
+fail_to_pass = ["inside", "above"]
+pass_to_pass = ["below"]
+[task.files]
+"Cargo.toml" = '''[package]
+name = "fixture"
+version = "0.1.0"
+edition = "2021"
+'''
+"src/main.rs" = '''pub fn clamp01(x: i32) -> i32 {
+    x.max(100).min(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn below() {
+        assert_eq!(clamp01(-5), 0);
+    }
+
+    #[test]
+    fn inside() {
+        assert_eq!(clamp01(50), 50);
+    }
+
+    #[test]
+    fn above() {
+        assert_eq!(clamp01(150), 100);
+    }
+}
+'''
+[task.fix.files]
+"src/main.rs" = '''pub fn clamp01(x: i32) -> i32 {
+    x.max(0).min(100)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn below() {
+        assert_eq!(clamp01(-5), 0);
+    }
+
+    #[test]
+    fn inside() {
+        assert_eq!(clamp01(50), 50);
+    }
+
+    #[test]
+    fn above() {
+        assert_eq!(clamp01(150), 100);
+    }
+}
+'''
