@@ -335,16 +335,20 @@ pub async fn merge_back(kept: KeptWorktree, message: &str) -> Result<MergeReport
             files,
         });
     }
-    if git(&kept.repo, &["merge", "--squash", &branch])
-        .await
-        .is_err()
-    {
+    if let Err(merge_err) = git(&kept.repo, &["merge", "--squash", &branch]).await {
         // Squash leaves no MERGE_HEAD, so `--abort` is a no-op here:
         // `reset --hard` clears the conflict debris (the repo was
         // pre-checked clean, so nothing of value is discarded).
         let files = unmerged_files(&kept.repo).await;
         let _ = git(&kept.repo, &["reset", "--hard", "HEAD"]).await;
         let _ = cleanup_kept(&kept).await;
+        // No unmerged paths ⇒ the merge died for a non-conflict reason
+        // (locked index, unreadable tree, missing branch). Report the Git
+        // fault verbatim: an empty `Conflict` would blame the child's
+        // content for a plumbing failure (chunk-43: never mislabel).
+        if files.is_empty() {
+            return Err(MergeError::Git(merge_err.to_string()));
+        }
         return Err(MergeError::Conflict { branch, files });
     }
     // Empty diff (child changed nothing durable): a squash that stages
@@ -652,7 +656,7 @@ mod tests {
                     .is_some_and(|p| p.replace('\\', "/") == here)
             })
         };
-        assert!(listed(&list), "{list}");
+        assert!(listed(&list), "want {here:?} listed in:\n{list}");
         wt.remove().await.unwrap();
         assert!(!dir.path().join("wt").join("c1").exists());
         let list = git(&repo, &["worktree", "list"]).await.unwrap();
