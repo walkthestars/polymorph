@@ -3754,12 +3754,13 @@ impl Executor for BusExecutor {
                 // Empty-text fallback (chunk 110): the child edited the
                 // file but returned blank text — grade the file work, not
                 // the empty string (the 109 4× empty-artifact pattern).
-                // File-first when the child mutated files: its closing
-                // chat text is a summary at best, and at worst raw
-                // tool-call markup (Frontier SSIM drive, round 3: the
-                // reviewer graded DSML instead of the file on disk).
-                // Pure-text fixes (no successful write/edit) keep grading
-                // the text, so they never regress to a stale file.
+                // File-first, always: the child's closing chat text is a
+                // summary at best, and at worst raw tool-call markup
+                // (Frontier SSIM drive, round 3: the reviewer graded DSML
+                // instead of the file on disk) — or, worse still, code that
+                // was never written (drive false-pass, 2026-10-20). When an
+                // artifact path is known, the file decides; the text is used
+                // only when the file cannot be read.
                 let mutated = outcome
                     .result
                     .data
@@ -3778,34 +3779,35 @@ impl Executor for BusExecutor {
                     let text = rendered.text.clone();
                     rendered_set = Some(rendered);
                     text
-                } else if mutated || text.trim().is_empty() {
-                    if let Some(path) = self.artifact_path.as_deref() {
-                        match artifact_from_file(&self.workdir, path) {
-                            // Forensics (the 110 validation lesson: silent
-                            // fallback is indistinguishable from snippet
-                            // grading in round-2 issues): static message
-                            // only — never file content (C4 secrets
-                            // posture). The unreadable-path warn below
-                            // carries the path (finding_issues logs
-                            // file:line the same way); content never logs.
-                            Some(content) => {
-                                tracing::info!(
-                                    mutated,
-                                    "fix child mutated files or returned empty text; graded artifact file"
-                                );
-                                content
-                            }
-                            None => {
-                                tracing::warn!(
-                                    path = %path.display(),
-                                    mutated,
-                                    "artifact file unreadable — scoring fix child text as-is"
-                                );
-                                text
-                            }
+                } else if let Some(path) = self.artifact_path.as_deref() {
+                    // File-first, always (drive false-pass lesson, 2026-10-20): with a known artifact
+                    // file the FILE is the artifact. Grading the fix child's closing text let a turn
+                    // that wrote nothing pass the reviewer — observed as `DRIVE PASSED in 2 rounds`
+                    // with zero findings and an empty `git diff`, twice in one session. `mutated` is
+                    // still logged, but it can no longer decide what gets graded.
+                    match artifact_from_file(&self.workdir, path) {
+                        // Forensics (the 110 validation lesson: silent
+                        // fallback is indistinguishable from snippet
+                        // grading in round-2 issues): static message
+                        // only — never file content (C4 secrets
+                        // posture). The unreadable-path warn below
+                        // carries the path (finding_issues logs
+                        // file:line the same way); content never logs.
+                        Some(content) => {
+                            tracing::info!(
+                                mutated,
+                                "graded artifact file from disk (file-first, text not graded)"
+                            );
+                            content
                         }
-                    } else {
-                        text
+                        None => {
+                            tracing::warn!(
+                                path = %path.display(),
+                                mutated,
+                                "artifact file unreadable — scoring fix child text as-is"
+                            );
+                            text
+                        }
                     }
                 } else {
                     text
@@ -3853,39 +3855,74 @@ impl Executor for BusExecutor {
     }
 }
 
-/// Load a prompt pack file (read-only; the manifest is never touched here).
-/// Refuses missing/empty files with the path named.
-pub fn load_pack(path: &Path) -> anyhow::Result<String> {
-    if let Ok(text) = std::fs::read_to_string(path) {
-        if text.trim().is_empty() {
-            anyhow::bail!("pack {} is empty", path.display());
+/// Ordered candidate locations for a prompt pack, most specific first.
+///
+/// Pure — no filesystem reads, no environment access — so the search order is
+/// unit-testable and `load_pack` is the only caller that touches the disk.
+///
+/// Order: (a) an absolute pack path is used as given; (b) `POLYMORPH_PROMPTS_DIR`
+/// joined with the pack path minus a leading `prompts` component (and joined
+/// with the whole path, for packs referenced outside that directory); (c) the
+/// path as given, i.e. relative to the current directory; (d) each ancestor of
+/// the current directory, nearest first, so a checkout works from any of its
+/// subdirectories; (e) the executable and its three parents, so an installed
+/// binary finds a `prompts` directory beside or above it. Duplicates are
+/// dropped, first occurrence wins.
+pub fn pack_candidates(
+    path: &std::path::Path,
+    prompts_dir: Option<&std::path::Path>,
+    cwd: Option<&std::path::Path>,
+    exe: Option<&std::path::Path>,
+) -> Vec<std::path::PathBuf> {
+    fn push(out: &mut Vec<std::path::PathBuf>, candidate: std::path::PathBuf) {
+        if !out.iter().any(|p| p == &candidate) {
+            out.push(candidate);
         }
-        return Ok(text);
     }
-    // Fallback: search relative to executable. No absolute repo paths here:
-    // the binary must work from any checkout or install location. Collect
-    // tried candidates so the final error is actionable.
-    let mut tried: Vec<std::path::PathBuf> = vec![path.to_path_buf()];
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(exe_dir) = exe.parent() {
-            for candidate in [
-                exe_dir.join(path),
-                exe_dir.join("..").join(path),
-                exe_dir.join("../..").join(path),
-                exe_dir.join("../../..").join(path),
-            ] {
-                tried.push(candidate.clone());
-                if let Ok(text) = std::fs::read_to_string(&candidate) {
-                    if text.trim().is_empty() {
-                        anyhow::bail!("pack {} is empty", candidate.display());
-                    }
-                    return Ok(text);
-                }
+    let mut out: Vec<std::path::PathBuf> = Vec::new();
+    if path.is_absolute() {
+        out.push(path.to_path_buf());
+        return out;
+    }
+    if let Some(dir) = prompts_dir {
+        let stripped = path.strip_prefix("prompts").unwrap_or(path);
+        push(&mut out, dir.join(stripped));
+        push(&mut out, dir.join(path));
+    }
+    push(&mut out, path.to_path_buf());
+    if let Some(cwd) = cwd {
+        for ancestor in cwd.ancestors() {
+            push(&mut out, ancestor.join(path));
+        }
+    }
+    if let Some(exe_dir) = exe {
+        push(&mut out, exe_dir.join(path));
+        for up in ["..", "../..", "../../.."] {
+            push(&mut out, exe_dir.join(up).join(path));
+        }
+    }
+    out
+}
+
+/// Load a prompt pack file (read-only; the manifest is never touched here).
+/// Refuses missing/empty files with the path named and the candidates tried.
+pub fn load_pack(path: &Path) -> anyhow::Result<String> {
+    let prompts_dir = std::env::var_os("POLYMORPH_PROMPTS_DIR").map(std::path::PathBuf::from);
+    let cwd = std::env::current_dir().ok();
+    let exe = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.to_path_buf()));
+    let tried = pack_candidates(path, prompts_dir.as_deref(), cwd.as_deref(), exe.as_deref());
+    for candidate in &tried {
+        if let Ok(text) = std::fs::read_to_string(candidate) {
+            if text.trim().is_empty() {
+                anyhow::bail!("pack {} is empty", candidate.display());
             }
+            return Ok(text);
         }
     }
     anyhow::bail!(
-        "cannot read pack {}: path not found (tried: {})",
+        "cannot read pack {}: path not found (tried: {}); set POLYMORPH_PROMPTS_DIR to the directory holding the prompt packs (e.g. <checkout>/prompts) to resolve it from any working directory",
         path.display(),
         tried
             .iter()
@@ -4335,9 +4372,11 @@ mod tests {
         assert_eq!(out, "fixed on disk\n");
     }
 
-    /// File-first on mutation: a child that wrote the file grades the FILE,
-    /// even when its closing text is non-empty (e.g. leaked tool-call
-    /// markup); without a mutation, non-empty text is still graded as text.
+    /// File-first, always (drive false-pass lesson): a child that wrote the
+    /// file grades the FILE, even when its closing text is non-empty; a child
+    /// that only *narrated* the change grades the unchanged FILE too, so a
+    /// no-op turn can no longer pass on its own prose. Text is graded only
+    /// when no artifact path is known (pure-text loops).
     #[tokio::test]
     async fn bus_executor_grades_file_when_child_mutated_files() {
         let dir = tempfile::tempdir().unwrap();
@@ -4367,10 +4406,44 @@ mod tests {
             make(true).execute(input()).await.unwrap(),
             "fixed on disk\n"
         );
+        // No mutation: the narration must NOT become the graded artifact.
         assert_eq!(
             make(false).execute(input()).await.unwrap(),
-            "<｜tool call begin｜>write"
+            "fixed on disk\n"
         );
+    }
+
+    /// Without an artifact path (pure-text loops) the child's text is still the
+    /// artifact — file-first must not turn those loops into stale-file graders.
+    #[tokio::test]
+    async fn bus_executor_grades_text_when_no_artifact_path() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.txt"), "old\n").unwrap();
+        let ex = BusExecutor {
+            bus: Arc::new(Bus::flat()),
+            runner: Arc::new(StubRunner::new(vec![done_out(
+                "new text",
+                serde_json::json!({ "artifact": "new text", "mutated_files": false }),
+            )])),
+            workdir: polymorph_delegate::WorkdirSpec::InPlace(dir.path().to_path_buf()),
+            tools: Vec::new(),
+            tool_outcomes: Arc::new(std::sync::Mutex::new(Vec::new())),
+            merge: None,
+            artifact_path: None,
+            peripherals: None,
+            artifact_set: None,
+        };
+        let out = ex
+            .execute(ExecutorInput {
+                goal: "g".into(),
+                criteria: String::new(),
+                artifact: "v1".into(),
+                findings: Vec::new(),
+                mode: LoopMode::Act,
+            })
+            .await
+            .unwrap();
+        assert_eq!(out, "new text");
     }
 
     /// Evidence attaches on finding-bearing turns (harness-observed file
@@ -4692,10 +4765,12 @@ mod tests {
         .is_empty());
     }
 
-    /// Non-empty child text keeps exact behavior (a pure-text fix must
-    /// never regress to a stale file).
+    /// File-first even for a pure-text turn (drive false-pass fix): with an
+    /// artifact path the file decides, so a child that only *narrates* a fix
+    /// cannot pass the reviewer on its own prose. The stale file is the honest
+    /// artifact — the fix is to write it, not to grade the narration.
     #[tokio::test]
-    async fn bus_executor_keeps_nonempty_text_over_file() {
+    async fn bus_executor_grades_file_over_nonempty_text() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("a.txt"), "stale\n").unwrap();
         let ex = BusExecutor {
@@ -4722,7 +4797,7 @@ mod tests {
             })
             .await
             .unwrap();
-        assert_eq!(out, "fixed!");
+        assert_eq!(out, "stale\n");
     }
 
     /// Unreadable path degrades to the child text (best-effort never
@@ -7414,6 +7489,83 @@ v1
         assert_eq!(load_pack(&full).unwrap(), "# review\nBe strict.\n");
     }
 
+    /// Pack search order is pure and therefore testable: an absolute path
+    /// short-circuits, `POLYMORPH_PROMPTS_DIR` strips the `prompts` prefix, the
+    /// cwd ancestors are walked nearest-first, and duplicates never repeat.
+    #[test]
+    fn pack_candidates_order_and_dedup() {
+        use std::path::{Path as P, PathBuf as B};
+        let pack = P::new("prompts/muse/muse-spark-1.3/review.md");
+
+        assert_eq!(
+            pack_candidates(
+                P::new("C:/abs/pack.md"),
+                Some(P::new("D:/p")),
+                Some(P::new("C:/w")),
+                None
+            ),
+            vec![B::from("C:/abs/pack.md")],
+            "an absolute pack path is used as given"
+        );
+
+        let with_dir = pack_candidates(pack, Some(P::new("D:/packs")), None, None);
+        assert_eq!(
+            with_dir[0],
+            B::from("D:/packs/muse/muse-spark-1.3/review.md")
+        );
+        assert_eq!(
+            with_dir[1],
+            B::from("D:/packs/prompts/muse/muse-spark-1.3/review.md")
+        );
+        assert_eq!(
+            with_dir[2],
+            B::from("prompts/muse/muse-spark-1.3/review.md")
+        );
+
+        let from_cwd = pack_candidates(
+            pack,
+            None,
+            Some(P::new("C:/repo/crates/x")),
+            Some(P::new("C:/bin")),
+        );
+        assert_eq!(
+            from_cwd,
+            vec![
+                B::from("prompts/muse/muse-spark-1.3/review.md"),
+                B::from("C:/repo/crates/x/prompts/muse/muse-spark-1.3/review.md"),
+                B::from("C:/repo/crates/prompts/muse/muse-spark-1.3/review.md"),
+                B::from("C:/repo/prompts/muse/muse-spark-1.3/review.md"),
+                B::from("C:/prompts/muse/muse-spark-1.3/review.md"),
+                B::from("C:/bin/prompts/muse/muse-spark-1.3/review.md"),
+                B::from("C:/bin/../prompts/muse/muse-spark-1.3/review.md"),
+                B::from("C:/bin/../../prompts/muse/muse-spark-1.3/review.md"),
+                B::from("C:/bin/../../../prompts/muse/muse-spark-1.3/review.md"),
+            ],
+            "cwd-relative, then the ancestor walk nearest-first, then the exe fallbacks"
+        );
+    }
+
+    /// The override actually resolves a pack that is not reachable from the cwd
+    /// or the executable: the failure mode that forced `cd`-into-the-checkout.
+    #[test]
+    fn pack_candidates_override_reaches_an_unrelated_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let pack = dir.path().join("muse/muse-spark-1.3/review.md");
+        std::fs::create_dir_all(pack.parent().unwrap()).unwrap();
+        std::fs::write(&pack, "# review\nBe strict.\n").unwrap();
+        let candidates = pack_candidates(
+            std::path::Path::new("prompts/muse/muse-spark-1.3/review.md"),
+            Some(dir.path()),
+            Some(std::path::Path::new("C:/elsewhere")),
+            Some(std::path::Path::new("C:/bin")),
+        );
+        assert_eq!(candidates[0], pack);
+        assert_eq!(
+            std::fs::read_to_string(&candidates[0]).unwrap(),
+            "# review\nBe strict.\n"
+        );
+    }
+
     /// Loop-worktree merge mode (chunk 44): a fix turn that changes nothing
     /// merges as an empty-diff no-op (chunk-43 live catch) and returns the
     /// artifact text; the repo stays clean and no worktree/branch litters.
@@ -7960,17 +8112,12 @@ v1
             serde_json::json!({ "artifact": "closing text", "mutated_files": true, "mutated_paths": ["a.txt"] }),
             serde_json::json!({ "artifact": "closing text" }),
         ] {
-            let mutated = data.get("mutated_files").is_some();
             let out = peripheral_executor(&dir, data)
                 .execute(act_input(Vec::new()))
                 .await
                 .unwrap();
-            let want = if mutated {
-                "artifact body\n"
-            } else {
-                "closing text"
-            };
-            assert_eq!(out, want);
+            // File-first: the file decides whether or not the turn mutated it.
+            assert_eq!(out, "artifact body\n");
         }
         let brief = render_review_brief(
             &ReviewerInput {
