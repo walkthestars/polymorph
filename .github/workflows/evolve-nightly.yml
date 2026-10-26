@@ -1,0 +1,30 @@
+name: evolve-nightly
+
+# Nightly re-run of the evolution and eval gates. The push/PR workflow runs
+# the full suite once; this one re-runs the two harness-facing modules on a
+# schedule, so time-dependent drift (fixtures, cassettes, clock edges) shows
+# up without a code change. No live model calls: no API key is used here.
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  evolve-gate:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Evolution gate tests
+        run: cargo test -p polymorph-tools --lib --locked evolve
+
+      - name: Eval replay gates
+        run: cargo test -p polymorph-tools --lib --locked eval
