@@ -953,7 +953,12 @@ impl LlmClient {
                     // Complete tool calls ride the stream End (genai merges
                     // per-fragment deltas by index there); text-only paths
                     // ignore the End payload, so this changes nothing for them.
-                    .with_capture_tool_calls(true),
+                    .with_capture_tool_calls(true)
+                    // Reasoning rides the End payload only when the adapter
+                    // captured it. The collecting folds also accumulate
+                    // `ReasoningChunk` deltas, so this covers providers that
+                    // report reasoning once rather than streaming it.
+                    .with_capture_reasoning_content(true),
             ),
         }
     }
@@ -2091,6 +2096,7 @@ mod tests {
             Some("high")
         );
         assert!(options.capture_tool_calls == Some(true));
+        assert!(options.capture_reasoning_content == Some(true));
         let headers = format!("{:?}", options.extra_headers);
         assert!(headers.contains("x-opencode-session"), "{headers}");
     }
