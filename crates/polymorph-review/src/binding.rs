@@ -5852,8 +5852,8 @@ v1
 
     #[tokio::test]
     async fn agentic_runner_labels_stale_edit_subtype() {
-        // Live-shaped stale: mint the true tag, rotate one hex digit (B6
-        // corrupt_tag precedent), then edit against a real file.
+        // Live-shaped stale: mint the true tag, rotate one hex digit (the
+        // corpus `corrupt_tag_for` precedent), then edit against a real file.
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("a.txt"), "l1\nl2\n").unwrap();
         let registry = Arc::new(polymorph_tools::registry::v1_registry());

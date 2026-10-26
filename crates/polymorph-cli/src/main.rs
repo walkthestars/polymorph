@@ -552,7 +552,7 @@ enum EvalCmd {
         #[command(flatten)]
         args: Box<EvalCheckArgs>,
     },
-    /// Sweep the B6 edit corpus live: one model turn per scorable task,
+    /// Sweep the edit corpus live: one model turn per scorable task,
     /// one v2 `*.eval.json` per case for `eval check` to gate. Single
     /// attempt per case on `--model` (no fallback — attribution over
     /// robustness). Rejection tasks skip NAMED (byte-compare cannot score
@@ -614,10 +614,10 @@ struct EvalCheckArgs {
 /// precedent — nesting alone never shrinks variants).
 #[derive(Debug, Args)]
 struct EvalSweepArgs {
-    /// Corpus TOML (default: the committed B6 fixture; read-only input).
+    /// Corpus TOML (default: the committed edit-corpus fixture; read-only).
     #[arg(
         long,
-        default_value = "crates/polymorph-tools/tests/eval_b6/edit_corpus.toml"
+        default_value = "crates/polymorph-tools/tests/fixtures/edit_corpus.toml"
     )]
     corpus: std::path::PathBuf,
     /// Subject model (REQUIRED: eval must name its subject; no chain default).
@@ -3651,7 +3651,7 @@ fn retry_feedback_str(outcome: &polymorph_tools::CaseOutcome) -> Option<String> 
     }
 }
 
-/// One parsed B6 corpus task (sweep input). `files`/`expected`
+/// One parsed edit-corpus task (sweep input). `files`/`expected`
 /// sorted by name; `expect_error` carries the rejection variant when the
 /// corpus declares one (those tasks skip — byte-compare cannot score a
 /// rejection, and a live turn mints live tags so it could never reproduce
@@ -3666,9 +3666,9 @@ struct SweepTask {
     expect_error: Option<String>,
 }
 
-/// Parse the B6 TOML into tasks (pure over text so fixtures prove the
+/// Parse the corpus TOML into tasks (pure over text so fixtures prove the
 /// skip classes; the live test parses the committed corpus). Table shapes
-/// mirror the edit-corpus driver (`eval_b6`); unknown shapes bail naming
+/// mirror the edit-corpus driver; unknown shapes bail naming
 /// the task (operator error, never a score).
 fn parse_sweep_corpus(toml_text: &str) -> Result<Vec<SweepTask>, String> {
     let doc: toml::Value =
@@ -3788,8 +3788,8 @@ fn sweep_plan(
             ));
         } else {
             // Content-specified instruction when the corpus carries one;
-            // description fallback keeps custom corpora working (the B6
-            // live-disk test forbids relying on it for these tasks).
+            // description fallback keeps custom corpora working (the live-disk
+            // test forbids relying on it for these tasks).
             let instruction = t.instruction.unwrap_or(t.description);
             cases.push(SweepCase {
                 id: t.id,
@@ -6302,7 +6302,7 @@ mod tests {
         // fixture, same instructions — only the arm moved.
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../");
         let text = std::fs::read_to_string(
-            root.join("crates/polymorph-tools/tests/eval_b6/edit_corpus.toml"),
+            root.join("crates/polymorph-tools/tests/fixtures/edit_corpus.toml"),
         )
         .unwrap();
         let (cases, skips) = sweep_plan(
@@ -6468,11 +6468,11 @@ mod tests {
 
     #[test]
     fn sweep_live_corpus_plans_fifteen_with_five_rejection_skips() {
-        // Live gate: the committed B6 fixture plans 15 scorable + 5
+        // Live gate: the committed corpus fixture plans 15 scorable + 5
         // rejection skips (NOTHING else narrows). CWD-independent.
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../");
         let text = std::fs::read_to_string(
-            root.join("crates/polymorph-tools/tests/eval_b6/edit_corpus.toml"),
+            root.join("crates/polymorph-tools/tests/fixtures/edit_corpus.toml"),
         )
         .unwrap();
         let (cases, skips) = sweep_plan(

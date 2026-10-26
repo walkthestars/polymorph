@@ -586,7 +586,7 @@ pub fn apply_to_disk(
     Ok(report)
 }
 
-/// Parse + apply to disk in one call (the tool-call entry point for B6).
+/// Parse + apply to disk in one call (the tool-call entry point for the corpus).
 pub fn apply_text_to_disk(
     patch_text: &str,
     root: &Path,

@@ -1,6 +1,6 @@
 //! Model-output eval skeleton (offline).
 //!
-//! The B6 corpus scores FIXED patches; this scores RAW MODEL OUTPUT:
+//! The edit corpus scores FIXED patches; this scores RAW MODEL OUTPUT:
 //! extract → apply → byte-compare, with recorded or hand-written outputs
 //! (hand-written ones say so — never present a fixture as a model run).
 //! Live-model generation is F5b; the scorer + gate land here, LLM-free.
@@ -236,7 +236,7 @@ pub(crate) fn check_workspace(root: &Path, expected: &[(String, String)]) -> Res
 }
 
 /// Score one case inside `root` (caller-owned dir manages lifetimes).
-/// Setup mirrors the B6 driver: write initials, mint tags over NORMALIZED
+/// Setup mirrors the edit-corpus driver: write initials, mint tags over NORMALIZED
 /// text (the same convention the applier verifies — minting raw bytes
 /// would fork CRLF/BOM), extract, apply, byte-compare, temp check.
 pub fn score_case(case: &EvalCase, root: &Path) -> CaseReport {

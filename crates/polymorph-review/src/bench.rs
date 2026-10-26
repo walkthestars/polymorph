@@ -1,6 +1,6 @@
 //! Agent-bench corpus + scoring primitives.
 //!
-//! The seeded corpus (TOML manifest, B6-dialect schema) and the LLM-free
+//! The seeded corpus (TOML manifest, edit-corpus schema) and the LLM-free
 //! machinery around it: loading, tempdir materialization, deadline-bound
 //! `cargo test` runs, hidden-test scoring. Live loop-driving lives in the
 //! CLI (`review bench`); this module stays drivable from unit tests.
