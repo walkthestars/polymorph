@@ -1,9 +1,9 @@
-//! Drive restore ledger (docket #8): a failed in-place drive leaves the
+//! Drive restore ledger: a failed in-place drive leaves the
 //! tree as it found it.
 //!
 //! `review drive` runs [`WorkdirSpec::InPlace`](polymorph_delegate::WorkdirSpec)
 //! by default, so a halted attempt used to leave partial edits that later
-//! fixers discovered and adopted (traps #57, #65). The ledger records, on the
+//! fixers discovered and adopted. The ledger records, on the
 //! FIRST `write`/`edit` of each path in the drive, the file's exact original
 //! bytes (or that it did not exist), and fingerprints the drive's own writes.
 //! On a non-passing outcome [`RestoreLedger::rollback`] puts every original
@@ -195,7 +195,7 @@ enum DriveStart {
     Tree(Option<std::collections::HashSet<String>>),
 }
 
-/// Drive-level restore ledger (docket #8). Shared (`Arc`) between the
+/// Drive-level restore ledger. Shared (`Arc`) between the
 /// fixer runner, which records, and the CLI guard, which rolls back.
 #[derive(Debug)]
 pub struct RestoreLedger {
@@ -909,7 +909,7 @@ fn missing_ancestors(path: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
-/// What a rollback did (docket #8): printed as a summary and attached to
+/// What a rollback did: printed as a summary and attached to
 /// the drive's terminal event.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct RollbackReport {
@@ -1122,7 +1122,7 @@ impl Drop for RollbackGuard {
     }
 }
 
-/// Turn decorator (docket #8): after every fix turn — its verify commands
+/// Turn decorator: after every fix turn — its verify commands
 /// included when this wraps the verify gate — adopt the tracked files'
 /// state as the drive's, so command-made changes to them roll back instead
 /// of reading as conflicts.
@@ -1488,6 +1488,7 @@ mod tests {
                     String::new()
                 },
                 tool_calls,
+                reasoning_content: None,
                 aborted: false,
                 rule_hit: None,
             })
@@ -1696,6 +1697,7 @@ mod tests {
                         thought_signatures: None,
                     })
                     .collect(),
+                reasoning_content: None,
                 aborted: false,
                 rule_hit: None,
             })

@@ -1,7 +1,7 @@
-//! `polymorph-acp::session_loop` — docket 63b/c text binding (chunks 67–68).
+//! `polymorph-acp::session_loop` — text and tool turn binding.
 //!
-//! Drives ONE model turn per ACP prompt over the CLI recipe verbatim
-//! (chunk 66 D2): fresh `LlmClient` + `Managed` act role + act-pack system
+//! Drives ONE model turn per ACP prompt over the CLI recipe verbatim:
+//! fresh `LlmClient` + `Managed` act role + act-pack system
 //! through `FixTurnRunner` (text) or `AgenticFixRunner` (tools), called
 //! directly (no bus spawn for text; tools run InPlace on the serve cwd —
 //! worktree isolation stays `review run`'s `--repo`). History bounds the
@@ -42,7 +42,7 @@ pub struct LiveTextLoop {
 impl LiveTextLoop {
     /// One live text turn: fresh conversation client + `FixTurnRunner`,
     /// driven directly (no bus). Transport/auth failures propagate LOUD
-    /// (chunk 66 D4 — a dead model is an error, never a silent turn).
+    /// (a dead model is an error, never a silent turn).
     pub async fn drive_live(
         &self,
         brief: &str,
@@ -65,7 +65,7 @@ impl LiveTextLoop {
     }
 }
 
-/// Live tool-loop pieces (chunk 63c): everything `AgenticFixRunner::live`
+/// Live tool-loop pieces: everything `AgenticFixRunner::live`
 /// needs except the per-turn client. CLI-owned; built once per serve when
 /// `--tools` is on (registry includes MCP servers then — fail-soft).
 pub struct LiveToolLoop {
@@ -77,7 +77,7 @@ pub struct LiveToolLoop {
     pub gate: polymorph_tools::Gate,
     pub tools: Vec<String>,
     pub max_tool_rounds: u32,
-    /// Watching reviewer (Epic S, chunk 126): project toggle carried to
+    /// Watching reviewer: project toggle carried to
     /// the fixer (off = pre-S behavior). Bench paths never set this.
     pub advisor: bool,
 }
@@ -85,9 +85,9 @@ pub struct LiveToolLoop {
 impl LiveToolLoop {
     /// One live agentic turn: fresh conversation client +
     /// `AgenticFixRunner::live`, driven directly. Allowlist + Gate enforce
-    /// every call (runner call-time, chunk-66 D2); denials feed back as
-    /// text (F3b — recoverable, never a bail). Transport/auth failures
-    /// propagate LOUD (chunk 66 D4).
+    /// every call at runner call time; denials feed back as
+    /// text (recoverable, never a bail). Transport/auth failures
+    /// propagate LOUD.
     pub async fn drive_live_tools(
         &self,
         brief: &str,
@@ -112,7 +112,7 @@ impl LiveToolLoop {
         // Only the turn text is used here: no ledger, attachment or
         // rollback reads command change detection, so skip its walks.
         runner.command_changes = 0;
-        // S advisor (chunk 126): same project toggle as review-run.
+        // S advisor: same project toggle as review-run.
         if self.advisor {
             runner.advisor = Some(polymorph_review::AdvisorRunner::managed(
                 self.router.clone(),
@@ -127,7 +127,7 @@ impl LiveToolLoop {
 /// Drive one turn through an injected runner (the F1 seam): builds the
 /// `TurnContext` and returns the turn text. Offline tests script the runner;
 /// live path passes `FixTurnRunner` (above). `scope` stays `None`
-/// (unpinned — D1b pins are `review run`'s `--scope`; `acp` has no flag).
+/// (unpinned pins are `review run`'s `--scope`; `acp` has no flag).
 pub async fn drive_turn(
     runner: &dyn polymorph_delegate::TurnRunner,
     brief: &str,
@@ -253,6 +253,7 @@ mod tests {
             polymorph_llm::CollectedTurn {
                 text: text.into(),
                 tool_calls: Vec::new(),
+                reasoning_content: None,
                 aborted: false,
                 rule_hit: None,
             }
@@ -312,6 +313,7 @@ mod tests {
                 polymorph_llm::CollectedTurn {
                     text: "reading".into(),
                     tool_calls: vec![call],
+                    reasoning_content: None,
                     aborted: false,
                     rule_hit: None,
                 },
@@ -330,7 +332,7 @@ mod tests {
         assert_eq!(text, "saw-it");
     }
 
-    /// Deny feeds back as TEXT (F3b recoverable) — the loop continues,
+    /// Deny feeds back as TEXT (recoverable) — the loop continues,
     /// never bails.
     #[tokio::test]
     async fn tools_deny_feeds_text_not_bail() {
@@ -342,6 +344,7 @@ mod tests {
                 polymorph_llm::CollectedTurn {
                     text: "trying".into(),
                     tool_calls: vec![call],
+                    reasoning_content: None,
                     aborted: false,
                     rule_hit: None,
                 },
@@ -370,6 +373,7 @@ mod tests {
                 polymorph_llm::CollectedTurn {
                     text: "oops".into(),
                     tool_calls: vec![call],
+                    reasoning_content: None,
                     aborted: false,
                     rule_hit: None,
                 },
