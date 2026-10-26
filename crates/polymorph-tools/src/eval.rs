@@ -1,4 +1,4 @@
-//! Model-output eval skeleton (Epic F5a, offline).
+//! Model-output eval skeleton (offline).
 //!
 //! The B6 corpus scores FIXED patches; this scores RAW MODEL OUTPUT:
 //! extract → apply → byte-compare, with recorded or hand-written outputs
@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 
 use super::hashline::{apply::normalize, apply_text_to_disk, SnapshotStore};
 
-/// Eval format arm (Chunk 28, design `plan-chunk27.md` §4–5): which
+/// Eval format arm: which
 /// extractor/applier scores a case. Recordings stamp it; ABSENCE means
 /// hashline — every pre-format recording replays unchanged (pinned).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -118,7 +118,7 @@ pub fn extract_patch(text: &str) -> Result<String, ExtractError> {
 }
 
 /// One scored unit: initial files + the model's raw output + the expected
-/// end state. `model_output` may be a live recording (F5b) or hand-written
+/// end state. `model_output` may be a live recording or hand-written
 /// (fixture — always labeled at the call site).
 #[derive(Debug, Clone)]
 pub struct EvalCase {
@@ -153,7 +153,7 @@ impl CaseReport {
     }
 }
 
-/// Write initial workspace files (shared setup for both scorers — chunk 28:
+/// Write initial workspace files (shared setup for both scorers:
 /// `score_case` mints hashline tags after this; the str_replace scorer
 /// needs no tags). Caller-owned `root`; setup faults are `ApplyFail`.
 pub(crate) fn write_initial_files(root: &Path, files: &[(String, String)]) -> Result<(), String> {
@@ -171,7 +171,7 @@ pub(crate) fn write_initial_files(root: &Path, files: &[(String, String)]) -> Re
     Ok(())
 }
 
-/// Byte-exact workspace comparison shared by both scorers (chunk 28:
+/// Byte-exact workspace comparison shared by both scorers
 /// factored, not copied — the ONLY thing that may differ between arms is
 /// extract+apply). Includes the no-temp-files check (corpus-driver
 /// precedent). `Ok` = Pass; `Err(msg)` = the `Mismatch` detail.
@@ -235,7 +235,7 @@ pub(crate) fn check_workspace(root: &Path, expected: &[(String, String)]) -> Res
     Ok(())
 }
 
-/// Score one case inside `root` (caller-owned dir; F5b manages lifetimes).
+/// Score one case inside `root` (caller-owned dir manages lifetimes).
 /// Setup mirrors the B6 driver: write initials, mint tags over NORMALIZED
 /// text (the same convention the applier verifies — minting raw bytes
 /// would fork CRLF/BOM), extract, apply, byte-compare, temp check.
@@ -320,7 +320,7 @@ pub fn gate(sb: &Scoreboard, min_rate: f64) -> Result<(), String> {
 }
 
 /// Rebuild an `EvalCase` from an `eval run/sweep --record` JSON recording
-/// (Epic F5c offline CI replay; v2 shape since F5e). Two shapes, detected
+/// (offline CI replay; v2 shape since F5e). Two shapes, detected
 /// on the `files` key: v2 carries `files` + `expected` as `{name, content}`
 /// arrays (multi-file, absence, rename all expressible); legacy carries
 /// `input` + `expected` strings with the workspace name in `path` (or the
@@ -387,7 +387,7 @@ pub fn load_recording(json_text: &str) -> Result<EvalCase, String> {
     })
 }
 
-/// Rebuild an `EvalCase` plus its format arm (Chunk 28): the `format`
+/// Rebuild an `EvalCase` plus its format arm: the `format`
 /// stamp selects the scorer (`hashline` → `score_case`, `str-replace` →
 /// `score_str_case`). ABSENT stamp defaults hashline — every pre-format
 /// recording replays unchanged. UNKNOWN stamps are hard errors naming the
@@ -412,9 +412,9 @@ pub fn load_recording_with_format(json_text: &str) -> Result<(EvalCase, EvalForm
     Ok((case, format))
 }
 
-/// Render the user prompt for a live eval turn (F5b): the instruction plus
+/// Render the user prompt for a live eval turn: the instruction plus
 /// each workspace file with its CURRENT tag. The tag flow mirrors the
-/// tools-executor read→tag→edit loop (F3b): the model patches against tags
+/// tools-executor read→tag→edit loop: the model patches against tags
 /// minted here, never invented ones. Runtime assembly (TOOLS_PREAMBLE
 /// precedent) — pack migration, if warranted, is F5's call on measured data.
 ///
@@ -446,7 +446,7 @@ mod tests {
     use super::*;
 
     // Hand-written model outputs (NOT model runs — fixtures proving the
-    // scorer discriminates; F5b brings recordings).
+    // scorer discriminates brings recordings).
     const GOOD_RAW: &str = "[a.txt#TAG]\nPUT 1:\n+fixed\n";
     const GOOD_FENCED: &str =
         "Here is the patch:\n```text\n[a.txt#TAG]\nPUT 1:\n+fixed\n```\nDone.\n";
@@ -466,7 +466,7 @@ mod tests {
     }
 
     /// Mint over the NORMALIZED fixture content — exactly like score_case's
-    /// setup (terminator-stripped per the line model, traps #20). Minting
+    /// setup (terminator-stripped per the line model). Minting
     /// the raw `"orig\n"` forks the tag and every fixture goes stale.
     fn fixture_tag() -> String {
         let mut store = SnapshotStore::new();
@@ -581,7 +581,7 @@ mod tests {
     }
 
     // Hand-written recordings in the exact `eval run --record` shape
-    // (NOT model runs — fixtures proving the loader replays; F5b brings
+    // (NOT model runs — fixtures proving the loader replays brings
     // live bytes). The `output` tag is minted like `case()` above so the
     // replay hits the Pass path for the right reason (live tag, not luck).
     fn recording(id: &str, output: &str) -> String {
@@ -722,7 +722,7 @@ mod tests {
         assert_eq!(rep.id, "replace-single-line");
     }
 
-    // v2 array-shape recordings (F5e). Hand-written correct patches with
+    // v2 array-shape recordings. Hand-written correct patches with
     // live tags (NOT model runs — proves the loader + scorer cover the
     // shapes legacy strings cannot express: multi-file, rename, absence).
     fn v2_recording(

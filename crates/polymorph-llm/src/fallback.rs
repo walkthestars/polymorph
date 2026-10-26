@@ -1,4 +1,4 @@
-//! Fallback policy pieces (Epic D1a/D1c).
+//! Fallback policy pieces.
 //!
 //! - [`Cooldowns`]: per-model 429 timestamps; a limited model is skipped
 //!   until its cooldown expires, then automatically restored. Time is an
@@ -76,7 +76,7 @@ impl Cooldowns {
     }
 }
 
-/// Managed-loop state for one process invocation (Epic D1a + D1c combined).
+/// Managed-loop state for one process invocation (+ D1c combined).
 #[derive(Debug, Default)]
 pub struct FallbackState {
     pub cooldowns: Cooldowns,

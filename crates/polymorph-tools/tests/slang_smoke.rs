@@ -1,4 +1,4 @@
-//! Slang supply-chain smoke (chunk 114, N2a): `slangc` pinned +
+//! Slang supply-chain smoke: `slangc` pinned +
 //! working + emitting debug-info SPIR-V (the artifact the future
 //! Vulkan pipeline consumes). Probe + loud-skip discipline mirrors
 //! `dap_matrix.rs` (roster: `docs/renderdoc.md`). No agent tool

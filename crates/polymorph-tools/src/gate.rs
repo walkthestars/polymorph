@@ -1,4 +1,4 @@
-//! Permission gate (Epic B5): allow/deny lists over tool-call strings.
+//! Permission gate: allow/deny lists over tool-call strings.
 //!
 //! Semantics (contract, tested): `deny` beats `allow` on the same prefix.
 //! Matching is prefix-on-segments: rule `bash:rm` matches `bash:rm`,

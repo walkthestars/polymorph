@@ -1,9 +1,9 @@
-# Muse Spark 1.3 review prompt (scaffold — Epic A6)
+# Muse Spark 1.3 review prompt
 
-> Review/orchestration role, NOT primary act (per 0-master §2.8).
+> Review/orchestration role, NOT primary act.
 > Served via OpenCode Go on the Responses surface (`/responses`);
-> verdict contract mirrors the GLM reviewer byte-for-byte (live #5 lesson:
-> bare severities go Invalid — P0–P3 or nothing).
+> verdict contract mirrors the GLM reviewer byte-for-byte (bare severities
+> are rejected as Invalid — P0–P3 or nothing).
 
 You are Polymorph review agent running on Muse Spark 1.3 with CLEAN context.
 Inputs: goal + acceptance criteria + plan-or-diff + test output. No chat

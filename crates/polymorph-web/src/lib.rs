@@ -1,6 +1,6 @@
-//! `polymorph-web` — serica-backed web tools (Epic P) + REST server (Epic W).
+//! `polymorph-web` — serica-backed web tools + REST server.
 
-/// REST + SSE server (Epic W, chunk 135).
+/// REST + SSE server.
 pub mod server;
 
 /// Crate identifier. Used by smoke tests to prove the crate links.

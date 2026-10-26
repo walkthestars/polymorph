@@ -1,4 +1,4 @@
-//! Hashline edit format (Epic B4, ADR-003).
+//! Hashline edit format.
 //!
 //! A line-anchored, content-hash-keyed patch language for LLM-driven edits,
 //! modeled on omp's `@oh-my-pi/hashline` (OBSERVED via DeepWiki's source index
@@ -10,12 +10,12 @@
 //! Deliberate v1 divergences from upstream (documented, not accidental):
 //! - STRICT applier, no boundary repair (no echo-dropping, delimiter balance,
 //!   or indentation recovery). Prompt packs teach exactness instead. Upstream
-//!   parity gap, recorded in plan-chunk4.
-//! - No `N*` syntactic-block ops (needs tree-sitter — Epic L). The parser
+//!   parity gap.
+//! - No `N*` syntactic-block ops (needs tree-sitter). The parser
 //!   recognizes the form and returns `Unsupported`, never a mis-apply.
-//! - No seen-lines guard yet (needs the read ledger — session store, Epic C).
+//! - No seen-lines guard yet (needs the read ledger — session store).
 //! - Registers (`CUT ... @name` / `PUT >N @name`) work IN-patch only.
-//!   Cross-patch registers need session state (Epic E).
+//!   Cross-patch registers need session state.
 //! - Tag hash is SHA-256 (first 4 hex as the TAG, full hex as the binding).
 //!   Collision handling is therefore exact-hash comparison, strictly stronger
 //!   than upstream's prefer-most-recent.
@@ -105,7 +105,7 @@ pub enum Op {
 pub enum HashlineError {
     #[error("parse error at patch line {line}: {msg}")]
     Parse { line: usize, msg: String },
-    #[error("unsupported op (needs Epic L tree-sitter): {0}")]
+    #[error("unsupported op (needs tree-sitter support): {0}")]
     Unsupported(String),
     #[error("stale tag for '{path}': expected #{tag} but content changed")]
     StaleTag { path: String, tag: String },

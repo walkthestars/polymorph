@@ -1,9 +1,9 @@
-//! Write-through enforcement tests (Epic L, chunk 94: L2).
+//! Write-through enforcement tests.
 //!
 //! Writes and edits route through the language server where one runs
 //! (diagnostic pull, inform-only); without a server the write stands with
 //! a once-per-language fallback notice; breakage evicts and never fails
-//! the write (D4). Needs a Python 3 interpreter for the live-server test
+//! the write. Needs a Python 3 interpreter for the live-server test
 //! (same LOUD-skip resolver as the fixture suites); the fallback/skip
 //! tests run anywhere.
 
@@ -80,7 +80,7 @@ async fn post_write_check_records_diagnostics() {
     );
 }
 
-/// Pool records diagnostic messages per URI (L4 gutter feed): one write
+/// Pool records diagnostic messages per URI (gutter feed): one write
 /// through the fixture leaves exactly its message under the file's URI.
 #[tokio::test]
 async fn pool_records_messages_per_uri() {
@@ -110,7 +110,7 @@ async fn pool_records_messages_per_uri() {
     let (uri, messages) = recorded.iter().next().unwrap();
     assert!(uri.ends_with("a.rs"), "{uri}");
     assert_eq!(messages, &vec!["probe-diagnostic".to_string()]);
-    // Docket #3: the same record keeps the wire line (1-based) + severity.
+    // The same record keeps the wire line (1-based) + severity.
     let details = r.lsp_diagnostic_details().await;
     assert_eq!(
         details[uri],
@@ -199,7 +199,7 @@ fn wire_entry(
     }
 }
 
-/// Wire matrix (L3): one entry × four fixture languages consults four
+/// Wire matrix: one entry × four fixture languages consults four
 /// writes (a diagnostics notice each); an unregistered fifth falls back.
 /// Real-server coverage rides host availability (stated gap — no language
 /// server is installed here).

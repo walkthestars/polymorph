@@ -1,4 +1,4 @@
-//! Figment-based configuration (Epic A2).
+//! Figment-based configuration.
 //!
 //! Precedence, lowest to highest: user config < project config < env < CLI.
 //! Later figment merges win, so merge in that order.
@@ -29,34 +29,34 @@ pub struct PolymorphConfig {
     /// First entry is tried first; on 429 the next entry is tried.
     #[serde(default)]
     pub roles: BTreeMap<String, Vec<String>>,
-    /// Role name → reasoning-effort level (`low`/`medium`/`high`, Epic J
-    /// chunk 83). Absent = unset (ambient). Parsed strictly at use
+    /// Role name → reasoning-effort level (`low`/`medium`/`high`).
+    /// Absent = unset (ambient). Parsed strictly at use
     /// (unknown names fail the turn naming the valid set); explicit-model
     /// singles (`--model`) stay raw by design.
     #[serde(default)]
     pub effort: BTreeMap<String, String>,
-    /// Path-scoped chain pins (Epic D1b). Longest `path_prefix` wins;
+    /// Path-scoped chain pins. Longest `path_prefix` wins;
     /// a pin with `role: None` applies to every role.
     #[serde(default)]
     pub pins: Vec<PathPin>,
-    /// MCP servers (Epic H, chunk 54): spawned over stdio on first tool
+    /// MCP servers: spawned over stdio on first tool
     /// call (lazy). Children inherit the process env (no secrets in config
     /// — env names only, `api_key_cmd` pattern; never logged).
     #[serde(default)]
     pub mcp_servers: Vec<McpServerEntry>,
-    /// Script hooks (Epic J1, chunk 87): `[[hooks]]` entries validated at
+    /// Script hooks: `[[hooks]]` entries validated at
     /// attach (`pre`/`post`/`stop` + command + optional timeout). Empty =
     /// in-process handlers only (all pre-87 behavior unchanged).
     #[serde(default)]
     pub hooks: Vec<HookEntry>,
-    /// Language servers (Epic L, chunk 95): `[[lsp_servers]]` entries
+    /// Language servers: `[[lsp_servers]]` entries
     /// validated at attach (non-empty id/cmd + at least one language).
     /// Spawned over stdio on first write for a registered language (lazy).
     /// Children inherit the process env (no secrets in config — commands
     /// only, never logged).
     #[serde(default)]
     pub lsp_servers: Vec<LspServerEntry>,
-    /// Debug adapters (Epic M, chunk 104): `[[dap_adapters]]` entries
+    /// Debug adapters: `[[dap_adapters]]` entries
     /// validated at attach (non-empty id/cmd + at least one language).
     /// Sessions spawn fresh per use (debugger sessions are inherently
     /// single-shot — unlike LSP there is no long-lived shared server).
@@ -65,25 +65,25 @@ pub struct PolymorphConfig {
     /// API-level until M3 shows a config consumer — stated gap).
     #[serde(default)]
     pub dap_adapters: Vec<DapAdapterEntry>,
-    /// RenderDoc binary (Epic N, chunk 112): single `[renderdoc]` table
+    /// RenderDoc binary: single `[renderdoc]` table
     /// (exactly one binary exists — no per-language pool like LSP/DAP).
     /// Absent table = `renderdoccmd` on PATH (fail-soft at wire time).
     /// Children inherit the process env (no secrets in config — commands
     /// only, never logged).
     #[serde(default)]
     pub renderdoc: RenderdocConfig,
-    /// Web backend (Epic P, chunk 119): single `[web]` table (the
+    /// Web backend: single `[web]` table (the
     /// `[renderdoc]` shape — exactly one serica server exists).
     /// Absent table = localhost defaults below (fail-soft at call time:
     /// tools error naming `base_url`, startup never fails).
     #[serde(default)]
     pub web: WebConfig,
-    /// Watching reviewer (Epic S, chunk 126): single `[advisor]` table.
+    /// Watching reviewer: single `[advisor]` table.
     /// Absent = disabled (advisor doubles turn spend — off unless the
     /// project opts in; runner behavior byte-identical when off).
     #[serde(default)]
     pub advisor: AdvisorConfig,
-    /// Agent execution parameters (Chunk 154): single `[agent]` table.
+    /// Agent execution parameters: single `[agent]` table.
     #[serde(default)]
     pub agent: AgentConfig,
 }
@@ -95,22 +95,22 @@ pub struct ProviderEntry {
     #[serde(default)]
     pub base_url: String,
     /// Env var naming the key (also the sink var for `api_key_cmd`/pool
-    /// injection in Epic D1d: the resolved value is exported under this name
+    /// injection: the resolved value is exported under this name
     /// for the genai call only, process-local, never logged).
     #[serde(default)]
     pub api_key_env: Option<String>,
-    /// Additional env-var key sources for round-robin (Epic D1c).
+    /// Additional env-var key sources for round-robin.
     #[serde(default)]
     pub api_key_envs: Vec<String>,
     #[serde(default)]
     pub api_key_cmd: Option<String>,
-    /// Exact model names served by this provider (Epic D1c/D1d mapping).
+    /// Exact model names served by this provider.
     /// Unmapped models keep the pre-D ambient-env behavior (no regression).
     #[serde(default)]
     pub models: Vec<String>,
 }
 
-/// One MCP server (Epic H): a child command speaking MCP over stdio.
+/// One MCP server: a child command speaking MCP over stdio.
 ///
 /// ```toml
 /// [[mcp_servers]]
@@ -128,8 +128,8 @@ pub struct McpServerEntry {
     pub args: Vec<String>,
 }
 
-/// One language server (Epic L): a child command speaking LSP over stdio
-/// for the listed languages (chunk-91 `language_of` names).
+/// One language server: a child command speaking LSP over stdio
+/// for the listed languages (`language_of` names).
 ///
 /// ```toml
 /// [[lsp_servers]]
@@ -149,7 +149,7 @@ pub struct LspServerEntry {
     pub languages: Vec<String>,
 }
 
-/// One `[[dap_adapters]]` entry (Epic M, chunk 104): mirrors
+/// One `[[dap_adapters]]` entry: mirrors
 /// [`LspServerEntry`] exactly (same validation, same leniency layers).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DapAdapterEntry {
@@ -163,7 +163,7 @@ pub struct DapAdapterEntry {
     pub languages: Vec<String>,
 }
 
-/// RenderDoc binary (Epic N, chunk 112): a single `[renderdoc]` table.
+/// RenderDoc binary: a single `[renderdoc]` table.
 ///
 /// ```toml
 /// [renderdoc]
@@ -187,7 +187,7 @@ fn default_renderdoc_cmd() -> String {
     "renderdoccmd".to_string()
 }
 
-/// Web backend (Epic P, chunk 119): a single `[web]` table pointing at
+/// Web backend: a single `[web]` table pointing at
 /// a local serica server (HTTP process boundary — serica is AGPL, never
 /// a crate dep; binaries live host-side, the lsp-servers.md precedent).
 ///
@@ -221,7 +221,7 @@ fn default_web_timeout_secs() -> u64 {
     30
 }
 
-/// Watching reviewer (Epic S, chunk 126): a single `[advisor]` table.
+/// Watching reviewer: a single `[advisor]` table.
 ///
 /// ```toml
 /// [advisor]
@@ -233,7 +233,7 @@ pub struct AdvisorConfig {
     pub enabled: bool,
 }
 
-/// Agent execution settings (Chunk 154): a single `[agent]` table.
+/// Agent execution settings: a single `[agent]` table.
 ///
 /// ```toml
 /// [agent]
@@ -256,13 +256,13 @@ pub struct AdvisorConfig {
 pub struct AgentConfig {
     #[serde(default = "default_max_tool_rounds")]
     pub max_tool_rounds: u32,
-    /// Opt-in LSP error gate (docket #3): when true, `review run`/`drive`
+    /// Opt-in LSP error gate: when true, `review run`/`drive`
     /// with `--tools` turn a passing verdict into a fail while the last fix
     /// turn left error-severity LSP diagnostics on files it mutated
-    /// (`--lsp-error-gate` enables it per run). Off = warn-only (chunk 99).
+    /// (`--lsp-error-gate` enables it per run). Off = warn-only.
     #[serde(default)]
     pub lsp_error_gate: bool,
-    /// Verify-command gate (docket #2): operator commands `review run`/
+    /// Verify-command gate: operator commands `review run`/
     /// `drive` run in order in the drive's workdir after every fix turn
     /// (stopping at the first failure), outside the tool Gate. Any failure
     /// reaches the reviewer as evidence and turns a passing verdict into a
@@ -273,41 +273,41 @@ pub struct AgentConfig {
     /// overrides). Expiry kills the process tree and counts as a failure.
     #[serde(default = "default_verify_timeout_secs")]
     pub verify_timeout_secs: u64,
-    /// Verification bonus tool rounds past `max_tool_rounds` (docket #7):
+    /// Verification bonus tool rounds past `max_tool_rounds`:
     /// granted one at a time, only while the previous round made progress
     /// (a successful write/edit, or a command that ran after an
     /// unverified mutation). 0 = none. The one-shot pending-mutation bonus
     /// is separate and unaffected.
     #[serde(default = "default_max_bonus_tool_rounds")]
     pub max_bonus_tool_rounds: u32,
-    /// CREATE-job seed (docket #7): when the artifact file is missing and
+    /// CREATE-job seed: when the artifact file is missing and
     /// no content was given, `review run`/`drive` answer round 1 with the
     /// harness-authored creation finding instead of a reviewer call
-    /// (`--no-create-seed` turns it off per run). False = the chunk-166
+    /// (`--no-create-seed` turns it off per run). False = the
     /// review-first round 1 on CREATE jobs too.
     #[serde(default = "default_create_seed")]
     pub create_seed: bool,
     /// What a non-passing in-place `review drive` (and TUI drive) does with
-    /// the files its fixer's `write`/`edit` calls changed (docket #8):
+    /// the files its fixer's `write`/`edit` calls changed:
     /// `"rollback"` restores them (conflict-safe, archived under
     /// `.polymorph/attempts/`), `"keep"` leaves the tree as the drive left
     /// it. `--on-fail` overrides per run; `review run` keeps unless asked.
     #[serde(default = "default_drive_on_fail")]
     pub drive_on_fail: String,
-    /// Per-stream inline limit of the fixer's `bash` output, bytes (docket
-    /// #9): a larger stream is written in full to
+    /// Per-stream inline limit of the fixer's `bash` output, bytes:
+    /// a larger stream is written in full to
     /// `.polymorph/tool-output/` as it is read and reaches the model as a
     /// digest (head, tail, diagnostic lines, every gap named). 0 = off
     /// (every stream inline, unbounded).
     #[serde(default = "default_tool_output_inline_bytes")]
     pub tool_output_inline_bytes: usize,
-    /// Spill files kept per workdir (docket #9): older ones are deleted
+    /// Spill files kept per workdir: older ones are deleted
     /// when a new one is written (only harness-named files in
     /// `.polymorph/tool-output/`).
     #[serde(default = "default_tool_output_keep_files")]
     pub tool_output_keep_files: usize,
     /// Budget for the tool results a fix turn re-sends every round, bytes
-    /// (docket #9): past it, the oldest results outside the latest
+    /// Past it, the oldest results outside the latest
     /// `tool_history_keep_rounds` rounds become stubs pointing at a saved
     /// copy (or, for `read`, at the file). 0 = off.
     #[serde(default = "default_tool_history_budget_bytes")]
@@ -315,7 +315,7 @@ pub struct AgentConfig {
     /// Latest tool rounds whose results are never compacted (at least 1).
     #[serde(default = "default_tool_history_keep_rounds")]
     pub tool_history_keep_rounds: u32,
-    /// Read-only reviewer tools (docket #4): when true, `review run`/`drive`
+    /// Read-only reviewer tools: when true, `review run`/`drive`
     /// reviewers may `read`/`grep`/`glob` the drive's workdir (plus the
     /// `lsp_*` lookups when LSP servers are wired) before their verdict,
     /// and findings on files they neither saw in the brief nor inspected
@@ -403,7 +403,7 @@ impl Default for AgentConfig {
 }
 
 /// One `[[hooks]]` entry: event point + shell command + optional timeout
-/// (Epic J1, chunk 87). Validated by tools (`validate_entry`) at attach,
+/// . Validated by tools (`validate_entry`) at attach,
 /// never trusted raw.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HookEntry {
@@ -415,7 +415,7 @@ pub struct HookEntry {
     pub timeout_secs: Option<u64>,
 }
 
-/// One path-scoped chain override (Epic D1b).
+/// One path-scoped chain override.
 ///
 /// ```toml
 /// [[pins]]
@@ -497,7 +497,7 @@ pub fn default_paths() -> (PathBuf, PathBuf) {
     )
 }
 
-/// CLI-layer overrides (highest precedence — Epic D1f). Only `Some` fields
+/// CLI-layer overrides (highest precedence). Only `Some` fields
 /// apply; `None` leaves the merged file+env value untouched.
 #[derive(Debug, Clone, Default)]
 pub struct CliOverrides {
@@ -598,7 +598,7 @@ pub fn resolve_api_key(entry: &ProviderEntry) -> anyhow::Result<Option<String>> 
     Ok(None)
 }
 
-/// Pin lookup (Epic D1b): longest matching `path_prefix` for (path, role).
+/// Pin lookup: longest matching `path_prefix` for (path, role).
 /// A pin with `role: None` matches every role; role strings are the
 /// lowercase `Role` variant name (same convention as `chain_for_role`).
 /// Pins with an empty prefix or empty chain never match (an empty prefix
@@ -617,7 +617,7 @@ pub fn pin_for<'a>(pins: &'a [PathPin], path: &str, role: crate::Role) -> Option
         .map(|p| &p.chain)
 }
 
-/// Model→provider mapping (Epic D1c/D1d): exact model-name match against
+/// Model→provider mapping: exact model-name match against
 /// each entry's `models` list. Unmapped models keep ambient behavior.
 pub fn find_provider_for<'a>(
     providers: &'a [ProviderEntry],
@@ -654,7 +654,7 @@ pub fn qualify_model(providers: &[ProviderEntry], model: &str) -> String {
     model.to_string()
 }
 
-/// All usable key values for a provider (Epic D1c): `api_key_cmd` output if
+/// All usable key values for a provider: `api_key_cmd` output if
 /// configured (single value), else every set non-empty var in `api_key_envs`
 /// plus the legacy single `api_key_env`, deduplicated, order-preserved.
 /// Empty vec = no key material configured (caller keeps ambient behavior).
@@ -675,7 +675,7 @@ pub fn resolve_all_api_keys(entry: &ProviderEntry) -> anyhow::Result<Vec<String>
     Ok(keys)
 }
 
-/// Round-robin credential pool over one provider's resolved keys (Epic D1c).
+/// Round-robin credential pool over one provider's resolved keys.
 /// The caller takes [`CredentialPool::next`] per attempt, so consecutive
 /// attempts (429 rotation, or successive turns sharing the pool) spread load.
 /// Holds values in memory only; Debug is redacted (never print keys).
@@ -751,7 +751,7 @@ mod tests {
         assert!(err.to_string().contains("config load failed"));
     }
 
-    /// RAII guard for a process env var (Epic D1f): restores on drop so a
+    /// RAII guard for a process env var: restores on drop so a
     /// panic mid-matrix cannot leak state into other tests. All precedence
     /// cases live in ONE test fn because tests share one process env.
     struct EnvGuard {
@@ -788,7 +788,7 @@ mod tests {
         let cli_t = CliOverrides { debug: Some(true) };
         let cli_f = CliOverrides { debug: Some(false) };
 
-        // user < project (the Chunk-2 case, preserved)
+        // user < project (preserved)
         assert!(load(&user_f, &proj_t).unwrap().options.debug);
         // project < env
         {
@@ -1066,7 +1066,7 @@ mod tests {
 
     #[test]
     fn web_config_defaults_and_override() {
-        // Chunk 119: single [web] table (renderdoc shape); absent section
+        // Single [web] table (renderdoc shape); absent section
         // = localhost defaults (progressive — tools fail-soft at call).
         let dir = tempfile::tempdir().unwrap();
         let cfg_file = write_toml(
@@ -1085,7 +1085,7 @@ mod tests {
 
     #[test]
     fn advisor_config_defaults_off_and_overrides() {
-        // Chunk 126: absent section = disabled (spend-safe default).
+        // Absent section = disabled (spend-safe default).
         let dir = tempfile::tempdir().unwrap();
         let cfg_file = write_toml(&dir, "c.toml", "[advisor]\nenabled = true\n");
         let missing = Path::new("/nonexistent/config.toml");
@@ -1097,7 +1097,7 @@ mod tests {
 
     #[test]
     fn agent_config_defaults_and_override() {
-        // Chunk 154: [agent] max_tool_rounds defaults to 8 and can be overridden.
+        // [agent] max_tool_rounds defaults to 8 and can be overridden.
         let dir = tempfile::tempdir().unwrap();
         let cfg_file = write_toml(&dir, "c.toml", "[agent]\nmax_tool_rounds = 14\n");
         let missing = Path::new("/nonexistent/config.toml");
@@ -1105,14 +1105,14 @@ mod tests {
         assert_eq!(cfg.agent.max_tool_rounds, 14);
         let bare = load_with_cli(missing, missing, &CliOverrides::default()).unwrap();
         assert_eq!(bare.agent.max_tool_rounds, 30);
-        // Docket #3: the LSP error gate is off unless the table says so.
+        // The LSP error gate is off unless the table says so.
         assert!(!cfg.agent.lsp_error_gate);
         assert!(!bare.agent.lsp_error_gate);
         let gated = write_toml(&dir, "g.toml", "[agent]\nlsp_error_gate = true\n");
         let cfg = load_with_cli(missing, &gated, &CliOverrides::default()).unwrap();
         assert!(cfg.agent.lsp_error_gate);
         assert_eq!(cfg.agent.max_tool_rounds, 30);
-        // Docket #2: the verify gate is off (no commands) by default.
+        // The verify gate is off (no commands) by default.
         assert!(bare.agent.verify_cmds.is_empty());
         assert_eq!(bare.agent.verify_timeout_secs, 600);
         let verified = write_toml(
@@ -1127,7 +1127,7 @@ verify_timeout_secs = 90
         assert_eq!(cfg.agent.verify_cmds, ["cargo build", "cargo test"]);
         assert_eq!(cfg.agent.verify_timeout_secs, 90);
         assert!(!cfg.agent.lsp_error_gate);
-        // Docket #7: bounded verification bonus + CREATE seed on by default.
+        // Bounded verification bonus + CREATE seed on by default.
         assert_eq!(bare.agent.max_bonus_tool_rounds, 3);
         assert!(bare.agent.create_seed);
         let tuned = write_toml(
@@ -1142,12 +1142,12 @@ create_seed = false
         assert_eq!(cfg.agent.max_bonus_tool_rounds, 0);
         assert!(!cfg.agent.create_seed);
         assert_eq!(cfg.agent.max_tool_rounds, 30);
-        // Docket #8: failed drives roll back unless the table says keep.
+        // Failed drives roll back unless the table says keep.
         assert_eq!(bare.agent.drive_on_fail, "rollback");
         let kept = write_toml(&dir, "k.toml", "[agent]\ndrive_on_fail = \"keep\"\n");
         let cfg = load_with_cli(missing, &kept, &CliOverrides::default()).unwrap();
         assert_eq!(cfg.agent.drive_on_fail, "keep");
-        // Docket #9: output spilling and history compaction on by default.
+        // Output spilling and history compaction on by default.
         assert_eq!(bare.agent.tool_output_inline_bytes, 16 * 1024);
         assert_eq!(bare.agent.tool_output_keep_files, 200);
         assert_eq!(bare.agent.tool_history_budget_bytes, 256 * 1024);
@@ -1167,7 +1167,7 @@ tool_history_keep_rounds = 3
         assert_eq!(cfg.agent.tool_output_keep_files, 50);
         assert_eq!(cfg.agent.tool_history_budget_bytes, 65536);
         assert_eq!(cfg.agent.tool_history_keep_rounds, 3);
-        // Docket #4: reviewer tools off by default, a small round budget.
+        // Reviewer tools off by default, a small round budget.
         assert!(!bare.agent.reviewer_tools);
         assert_eq!(bare.agent.reviewer_tool_rounds, 4);
         let reviewing = write_toml(
@@ -1190,7 +1190,7 @@ reviewer_tool_rounds = 2
 
     #[test]
     fn mcp_servers_parse_with_defaults() {
-        // Chunk 54: servers are plain data (id/cmd/args); absent section
+        // Servers are plain data (id/cmd/args); absent section
         // defaults to empty (MCP stays off unless configured — progressive,
         // Zechner shape).
         let dir = tempfile::tempdir().unwrap();
@@ -1211,7 +1211,7 @@ reviewer_tool_rounds = 2
 
     #[test]
     fn lsp_servers_parse_with_defaults() {
-        // Chunk 95: same progressive shape as MCP (absent section =
+        // Same progressive shape as MCP (absent section =
         // empty = LSP off), plus the language list L2's pool keys on.
         let dir = tempfile::tempdir().unwrap();
         let cfg_file = write_toml(

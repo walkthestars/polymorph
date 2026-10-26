@@ -1,4 +1,4 @@
-//! Registry-level LSP tool tests (chunk 100, L-actuation 3A).
+//! Registry-level LSP tool tests.
 //!
 //! The fixture probe server (`fixtures/lsp_probe_server.py`) is enrolled
 //! through the PRODUCTION path (`add_lsp_server` → lazy spawn on first

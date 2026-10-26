@@ -1,4 +1,4 @@
-//! TUI drive mode — offline contract (Chunk 139, post-v1.0 feature).
+//! TUI drive mode — offline contract.
 //!
 //! The fire-and-forget circuit's surface half: build-intent classification
 //! ([`classify_intent`]), the [`Driver`] contract emitting [`DriveEvent`]s,
@@ -57,7 +57,7 @@ pub enum LoopIntent {
 }
 
 /// Route one prompt line (case-insensitive, whole-word verbs reuse the
-/// `classify_intent` gate — learned intent stays refused, c22 class).
+/// `classify_intent` gate — learned intent stays refused).
 /// Spend-safe by construction: empty review targets and bare keywords
 /// fall back to Chat (cheap), never into a billed loop.
 pub fn classify_loop(prompt: &str) -> LoopIntent {
@@ -112,8 +112,8 @@ pub fn classify_loop(prompt: &str) -> LoopIntent {
     }
 }
 
-/// Pre-gate classification (D5: dumb-deliberate keyword set, listed here
-/// and under test — learned intent is the refused c22 class).
+/// Pre-gate classification (dumb-deliberate keyword set, listed here
+/// and under test — learned intent stays refused).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IntentClass {
     Build,
@@ -220,7 +220,7 @@ pub enum DriveEvent {
         /// (an unparseable round; the reason is bounded, one line).
         invalid: Option<String>,
         /// `Some("create"|"start")` when a harness seed answered the round
-        /// instead of a reviewer call (docket #7).
+        /// instead of a reviewer call.
         synthesized: Option<String>,
     },
     Finding {
@@ -286,7 +286,7 @@ impl Driver for NoDriver {
     }
 }
 
-/// Status-line budget (`round 2/8 · tools 5/32` — D4 always-displayed).
+/// Status-line budget (`round 2/8 · tools 5/32` always-displayed).
 pub fn budget_line(
     rounds_used: usize,
     rounds_max: usize,
@@ -639,7 +639,7 @@ mod tests {
 
     #[test]
     fn driver_contract_feeds_app() {
-        // Chunk 143: the `Driver` seam is exercised headless — scripted
+        // The `Driver` seam is exercised headless — scripted
         // vec in, same vec out, then through the pure feed.
         let driver = ScriptedDriver {
             events: scripted_drive(),

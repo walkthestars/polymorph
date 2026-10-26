@@ -1,16 +1,16 @@
-//! Spawn/steer/stop bus (Epic E1a/b/d/f).
+//! Spawn/steer/stop bus.
 //!
 //! The bus owns child LIFECYCLE, never child MINDS: each turn is executed by
-//! a pluggable [`TurnRunner`] (Epic F wires the real tools+LLM loop; tests
-//! and `delegate run` use fakes). This seam is the E↔F contract.
+//! a pluggable [`TurnRunner`] (wires the real tools+LLM loop; tests
+//! and `delegate run` use fakes).
 //!
-//! Rules (0-master §2.3 + roadmap):
+//! Rules:
 //! - Fresh context per child: the runner gets ONLY `brief` + steer messages.
 //! - Steerable mid-run (mpsc, delivered next turn, resets stall).
 //! - Stoppable via [`CancellationToken`](tokio_util::sync::CancellationToken)
 //!   (uniform async pattern). Runners MUST observe `ctx.cancel` — the bus
 //!   never kills a hung runner any other way.
-//! - NO wall-clock kills (master): budgets are turns/tool-calls/stall.
+//! - NO wall-clock kills: budgets are turns/tool-calls/stall.
 //!   `wall_secs` is recorded for observability only.
 //! - Flat by default: `spawn` refuses `depth > max_depth` (default 1).
 
@@ -70,7 +70,7 @@ impl TurnOutput {
     }
 }
 
-/// One turn of child thought. Implementors: Epic F (real loop), tests,
+/// One turn of child thought. Implementors: the live tools+LLM loop, tests,
 /// `delegate run` demos. Must be prompt: observe `ctx.cancel`.
 #[async_trait]
 pub trait TurnRunner: Send + Sync {
@@ -129,7 +129,7 @@ pub struct ChildOutcome {
     pub tool_calls: u64,
     /// Observed only — never a stop condition (master rule).
     pub wall_secs: f64,
-    /// Kept worktree for merge-back (Epic G, chunk 43): `Some` exactly when
+    /// Kept worktree for merge-back: `Some` exactly when
     /// the child ran `keep_worktree` (the guard survived instead of
     /// auto-removing). `None` everywhere else — callers must not infer
     /// mergeability from anything else.
@@ -434,7 +434,7 @@ async fn drive(
         t0,
     )
     .await;
-    // Kept handoff (chunk 43): commit Branch+Completed trees deterministically,
+    // Kept handoff: commit Branch+Completed trees deterministically,
     // then hand path/branch/repo to the caller. Commit trouble warns and
     // flags `committed: false` (merge_back refuses dirty trees) — the
     // Completed result itself is never rewritten.

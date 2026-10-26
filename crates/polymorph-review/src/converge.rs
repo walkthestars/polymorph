@@ -1,10 +1,10 @@
-//! Convergence state machine (Epic F1b).
+//! Convergence state machine.
 //!
 //! Tracks recurring findings across reviewer rounds: a finding that survives
 //! `LoopConfig::surviving_finding_escalation` CONSECUTIVE failed rounds
-//! escalates to the user instead of converging to a worse artifact (0-master
-//! §2.6 refinement #3 — reviewers without enforced disagreement agree too
-//! easily). Termination is on clean verdict or `max_iterations`.
+//! escalates to the user instead of converging to a worse artifact
+//! (reviewers without enforced disagreement agree too easily). Termination is
+//! on clean verdict or `max_iterations`.
 //!
 //! Identity is exact-after-trim on (file, line, issue): predictable and
 //! documented. A reworded repeat resets its count — accepted limit (NOTES).

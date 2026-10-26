@@ -1,7 +1,7 @@
-//! Model catalog (Epic D1e).
+//! Model catalog.
 //!
 //! Discovery source is models.dev (the open OpenRouter+capability registry
-//! per 0-master Odds & Ends — reuse, don't maintain our own). The catalog is
+//! — reuse, don't maintain our own). The catalog is
 //! best-effort and offline-first:
 //!
 //! - [`Catalog::fallback`]: pinned snapshot compiled in via `include_str!`

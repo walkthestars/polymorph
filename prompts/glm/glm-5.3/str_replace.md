@@ -1,4 +1,4 @@
-# GLM-5.3 str_replace prompt — anchored substitution (Epic F5j/Chunk 28)
+# GLM-5.3 str_replace prompt — anchored substitution
 
 > File edits use anchored old/new substitution ONLY. Never emit hashline,
 > diff -u, or whole-file rewrites for edits.

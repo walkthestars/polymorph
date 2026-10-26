@@ -1,4 +1,4 @@
-//! Adapter matrix smoke (chunk 104, M2): scripted breakpoint + watch +
+//! Adapter matrix smoke: scripted breakpoint + watch +
 //! evaluate per adapter through the production clients. ONE generic
 //! driver over `DapSession` — rows differ only in construction (stdio
 //! vs TCP) and launch arguments. Every row loud-skips when its adapter
@@ -7,7 +7,7 @@
 
 use polymorph_tools::dap::{DapClient, DapSession, DapSpec, DapTcpClient};
 
-/// Headed/TCP gate (chunk 117): the dlv row binds a TCP listener (the
+/// Headed/TCP gate: the dlv row binds a TCP listener (the
 /// firewall-prompt suspect) — default `cargo test` skips. Set
 /// `POLYMORPH_HEADED=1` to run; skips return green (counts unchanged).
 fn headed_enabled() -> bool {
@@ -233,7 +233,7 @@ async fn matrix_rust_codelldb_break_watch_eval() {
 }
 
 fn resolve_netcoredbg() -> Option<String> {
-    // Chunk 106: Samsung netcoredbg (MIT) replaces vsdbg (VS-only
+    // Samsung netcoredbg (MIT) replaces vsdbg (VS-only
     // license) as the C# row — same stdio DAP posture, no handshake.
     if let Ok(p) = std::env::var("DAP_NETCOREDBG") {
         if !p.trim().is_empty() {
@@ -313,7 +313,7 @@ async fn matrix_csharp_netcoredbg_break_watch_eval() {
         .next()
         .unwrap();
     // netcoredbg --interpreter=vscode speaks DAP over stdio with no
-    // license handshake (chunk 106 — the vsdbg row's two blockers are
+    // license handshake (the vsdbg row's two blockers are
     // both gone: MIT binary + standard session flow via drive_break_eval).
     let mut client = DapClient::spawn(&DapSpec {
         cmd: dbg,

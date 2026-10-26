@@ -1,8 +1,8 @@
-//! Verdict text boundary (Epic F1a).
+//! Verdict text boundary.
 //!
 //! LLMs emit text; the loop runs on [`polymorph_core::Verdict`]. This module
 //! is the ONLY text→verdict path: strict `serde_json` object parse, then
-//! semantic validation. Prose is refused, never scraped (0-master §2.6:
+//! semantic validation. Prose is refused, never scraped
 //! deterministic verdict shape — never parse prose).
 //!
 //! Field VALUES are read tolerantly where the intent is unambiguous (live
@@ -16,7 +16,7 @@
 use polymorph_core::{Finding, Severity, Verdict, VerdictKind};
 
 /// Why verdict text was rejected. Every variant names the fault so the
-/// caller (F2's LLM reviewer, `review check`) can report it exactly.
+/// caller (the LLM reviewer, `review check`) can report it exactly.
 #[derive(Debug, Clone, PartialEq)]
 pub enum VerdictError {
     /// Blank/whitespace-only input.
@@ -498,7 +498,7 @@ mod tests {
 
     #[test]
     fn core_verdict_json_round_trips_through_parser() {
-        // What core serializes, the boundary accepts (single shape, §2.6).
+        // What core serializes, the boundary accepts (single shape).
         let v = Verdict {
             verdict: VerdictKind::Fail,
             findings: vec![Finding {

@@ -1,43 +1,42 @@
-# Prompt-pack manifest (Epic A6 + F5 — ENFORCED, not a placeholder)
+# Prompt-pack manifest
 #
 # This file pins sha256 of every pack file. CI FAILS on drift (unlisted file,
 # missing file, or hash mismatch). To change a prompt:
 #   1. Edit prompts/{model}/{role}.md
-#   2. Update the sha256 below (Epic D automates this via `polymorph config`)
-#   3. Commit BOTH the .md and this manifest (F5 eval gate runs on the pair).
+#   2. Update the sha256 below
+#   3. Commit BOTH the .md and this manifest (the eval gate runs on the pair).
 # Deprecation policy: never delete a pack file in the same PR that changes
 # behavior — deprecate (rename to *.deprecated.md, keep hash row) for one
-# milestone, then remove.
-# Hashes recorded 2026-09-06 (chunk 1 scaffold prompts).
+# release, then remove.
 
 [packs.glm-glm-5-3-edit]
 path = "prompts/glm/glm-5.3/edit.md"
-sha256 = "007776c88ca1952107528cca88a809a739e7c18bb0407f925915a85681a907f5"
+sha256 = "c9652f56ecd9af9b8711642c91c23198dbcfd09f3c7ab795d4453e22c94eb305"
 
 [packs.glm-glm-5-3-act]
 path = "prompts/glm/glm-5.3/act.md"
-sha256 = "36da5b4a0f502505c6dbc2b8cb268b7f7b2d73481ba9f7aa2d44d50d08b07ac7"
+sha256 = "8fe951510586313380db4b7159b32b7502f80595c611708c1dcdceba83f1c0bf"
 
 [packs.glm-glm-5-3-review]
 path = "prompts/glm/glm-5.3/review.md"
-sha256 = "1f60c1847c9809d70d8f28b5ad9022e83f0ca85f47ae8f9f6b6b86a82b22507c"
+sha256 = "aa534b424e2413fb5e55494e903d34fa4da239c7423bd2bda1e578d333f48e06"
 
 [packs.muse-muse-spark-1-3-review]
 path = "prompts/muse/muse-spark-1.3/review.md"
-sha256 = "c59eeaaa9aeaa40a8a81b9bc52bf9cc76691fd7f4b4e660d727eb5e02ecad15d"
+sha256 = "b6ea13ab7c097867bd0fff49d1d92e99cdea40a812692338daa673f68f7864fb"
 
 [packs.glm-glm-5-3-plan]
 path = "prompts/glm/glm-5.3/plan.md"
-sha256 = "8a827f4b2392e6d2288ef51431512766347ad3ec0439f14b64ed9071746a26ad"
+sha256 = "81c8d096d98f27036ab0a576cc2e4483ba4f787ec9000ac209d4b40e5704eb17"
 
 [packs.glm-glm-5-3-str-replace]
 path = "prompts/glm/glm-5.3/str_replace.md"
-sha256 = "0150c15ab28f10379f1512b98e5ed1c2a399b50126163a2a8641428444571058"
+sha256 = "b46f584d6113ac09800a7a6bc88f15785853338c1e61113e03b99f5076b692fa"
 
 [packs.deepseek-deepseek-v4-1-flash-act]
 path = "prompts/deepseek/deepseek-v4.1-flash/act.md"
-sha256 = "0f83506f363a402541c30c68c858fed29f8f5b71756d4533856732885fb80e1c"
+sha256 = "6204b0068f5e3f46b447c14baf2388074ce0430f6085172d43787cb68fed1d76"
 
 [packs.deepseek-deepseek-v4-1-flash-edit]
 path = "prompts/deepseek/deepseek-v4.1-flash/edit.md"
-sha256 = "56b5c7f5e356cb4e9a87419f2e88766dcf8dd386a6f37d5a202938b2df0985d9"
+sha256 = "1a35cb3f8063d12055833968c6535e8019d906e53393631947c60b4f607574e4"

@@ -1,13 +1,13 @@
-//! str_replace baseline scorer (Chunk 28, design `plan-chunk27.md`).
+//! str_replace baseline scorer.
 //!
-//! The rival arm for the TBM-05 delta: anchored old/new substitution
+//! The rival arm for the hashline delta: anchored old/new substitution
 //! against the SAME `EvalCase` / `Scoreboard` / `gate` / `CaseOutcome` as
 //! the hashline scorer. The ONLY moving variables between arms are format
 //! pack + extractor/applier — setup and byte-compare ride the shared
 //! helpers in [`super::eval`] (`write_initial_files`, `check_workspace`),
 //! factored, not copied.
 //!
-//! Contract (normative, spike-proven in chunk 27 then deleted):
+//! Contract (normative, spike-proven then deleted):
 //! ```text
 //! [edit a.txt]
 //! <<<
@@ -399,10 +399,10 @@ pub fn score_str_case(case: &EvalCase, root: &Path) -> CaseReport {
     }
 }
 
-/// Render the user prompt for a str_replace eval turn (chunk 28): the
+/// Render the user prompt for a str_replace eval turn: the
 /// instruction plus each workspace file WITHOUT tags (tags are meaningless
 /// without snapshots — showing them would leak hashline concepts into the
-/// baseline, design §1). Shape mirrors `render_eval_prompt`.
+/// baseline). Shape mirrors `render_eval_prompt`.
 ///
 /// ```text
 /// TASK: <instruction>

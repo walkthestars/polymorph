@@ -173,7 +173,7 @@ fn parse_op_line(lines: &[&str], i: usize) -> Result<(Op, bool), HashlineError> 
 }
 
 /// `PUT <target>:` targets: `<N` (insert before), `>N` (insert after),
-/// `N` / `N<sep>M` (replace). `N*` is recognized but Unsupported (Epic L).
+/// `N` / `N<sep>M` (replace). `N*` is recognized but Unsupported.
 fn parse_put_target(target: &str, i: usize) -> Result<Op, HashlineError> {
     let err = |msg: String| HashlineError::Parse { line: i + 1, msg };
     if let Some(n) = target.strip_prefix('<') {
@@ -192,7 +192,7 @@ fn parse_put_target(target: &str, i: usize) -> Result<Op, HashlineError> {
     }
     if target.ends_with('*') {
         return Err(HashlineError::Unsupported(format!(
-            "syntactic-block op `{target}` needs tree-sitter (Epic L)"
+            "syntactic-block op `{target}` needs tree-sitter support"
         )));
     }
     let (start, end) = parse_range(target, i).map_err(|_| {
@@ -236,13 +236,13 @@ fn parse_line_no(s: &str, i: usize) -> Result<u32, HashlineError> {
 }
 
 /// Range `N` / `N<sep>M` with separators `.=`, `=`, `-`, `..`, `…`.
-/// `N*` is recognized but Unsupported (Epic L tree-sitter).
+/// `N*` is recognized but Unsupported (tree-sitter).
 fn parse_range(s: &str, i: usize) -> Result<(u32, u32), HashlineError> {
     let err = |msg: String| HashlineError::Parse { line: i + 1, msg };
     let s = s.trim();
     if s.ends_with('*') {
         return Err(HashlineError::Unsupported(format!(
-            "syntactic-block range `{s}` needs tree-sitter (Epic L)"
+            "syntactic-block range `{s}` needs tree-sitter support"
         )));
     }
     // Longest separators first so `..` / `.=` win over `=` / `-` / `.`.

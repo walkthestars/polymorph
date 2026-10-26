@@ -1,11 +1,11 @@
-//! PLAN.md artifact (Epic G, chunk 46).
+//! PLAN.md artifact.
 //!
 //! The human- and model-readable plan file: the planner writes it, the
-//! reviewer reviews it, the executor rewrites it (0-master plan-mode shape —
-//! observable, editable, versioned, never a black-box transcript). Render and
+//! reviewer reviews it, the executor rewrites it (observable, editable,
+//! versioned, never a black-box transcript). Render and
 //! parse are strict inverses: `parse(render(g)) == g` is tested, and parse
-//! faults name the line (F5c precedent — corrupt files are hard errors).
-//! Chunk 48 adds [`apply_section`]: executor rewrite fragments written back
+//! faults name the line (precedent — corrupt files are hard errors).
+//! [`apply_section`] writes executor rewrite fragments back
 //! into the graph under the same strictness.
 
 use crate::graph::{Task, TaskGraph, TaskStatus};
@@ -34,7 +34,7 @@ pub fn render(title: &str, graph: &TaskGraph) -> String {
     out
 }
 
-/// Render one task's section (the per-task review artifact the chunk-47
+/// Render one task's section (the per-task review artifact the
 /// driver shows the reviewer — same bytes as in the full file).
 pub fn render_section(task: &Task) -> String {
     let mut out = format!("\n## [{}] {}\n", task.id, task.title);
@@ -53,7 +53,7 @@ pub fn render_section(task: &Task) -> String {
 }
 
 /// Parse PLAN.md back into a graph. Sections in any file order (forward refs
-/// allowed — validation runs whole-graph at the end, traps-#23); duplicate
+/// allowed — validation runs whole-graph at the end); duplicate
 /// sections, unknown statuses, and malformed headers are hard errors naming
 /// the line. A missing title is refused, never defaulted.
 pub fn parse(text: &str) -> Result<(String, TaskGraph), PlanError> {
@@ -72,7 +72,7 @@ pub fn parse(text: &str) -> Result<(String, TaskGraph), PlanError> {
         let mut task = Task::new(sec.id.clone(), sec.name.clone(), String::new(), Vec::new());
         task.status = status;
         // Bypass add_task (it refuses forward deps); edges land in pass two
-        // and whole-graph validate() judges them — traps-#23.
+        // and whole-graph validate() judges them.
         graph.push_unchecked(task);
     }
     for sec in &sections {
@@ -88,7 +88,7 @@ pub fn parse(text: &str) -> Result<(String, TaskGraph), PlanError> {
     Ok((title, graph))
 }
 
-/// Write one executor rewrite fragment back into the graph (chunk 48).
+/// Write one executor rewrite fragment back into the graph.
 /// Strict contract, atomic outcome:
 /// - The fragment must hold EXACTLY one section and it must be this task's
 ///   (extra sections = hallucinated scope, refused naming the extra id).
@@ -133,7 +133,7 @@ pub fn apply_section(
             return Err(bad(sec.line, "empty dep entry"));
         }
     }
-    // Atomic: patch a clone, validate whole, commit only on success (B4).
+    // Atomic: patch a clone, validate whole, commit only on success.
     let mut next = graph.clone();
     let task = next.get_mut(task_id).expect("validated present above");
     task.title = sec.name.clone();
@@ -161,7 +161,7 @@ fn section_status(sec: &RawSection) -> Result<TaskStatus, PlanError> {
 }
 
 /// Line loop shared by parse() and apply_section(): shape in, raw sections
-/// out, whole-graph validation later (traps-#23 — the loop judges shape,
+/// out, whole-graph validation later (the loop judges shape,
 /// never graph).
 fn split_sections(text: &str) -> Result<(Option<String>, Vec<RawSection>), PlanError> {
     let mut title: Option<String> = None;
@@ -419,9 +419,9 @@ mod tests {
 
     #[test]
     fn pack_example_applies_clean_prose_refused() {
-        // Chunk-49 pack↔applier agreement: the `plan.md` example shape
+        // Pack↔applier agreement: the `plan.md` example shape
         // must apply (or the pack teaches a shape the applier refuses),
-        // and the c48 prose failure must still refuse.
+        // and the prose failure must still refuse.
         let mut g = TaskGraph::new();
         g.add_task(Task::new("a", "First", "old\n", vec![]))
             .unwrap();
@@ -430,7 +430,7 @@ mod tests {
         apply_section(&mut g, "a", example).unwrap();
         assert_eq!(g.get("a").unwrap().title, "First step");
         assert_eq!(g.get("a").unwrap().criteria, "ship it, tested\n");
-        // c48 live refusal shape: prose without a section header.
+        // Live refusal shape: prose without a section header.
         assert!(apply_section(&mut g, "a", "looks good, ship it\n").is_err());
         // Fenced section is prose to the applier (no bare `## [id]` line).
         assert!(apply_section(&mut g, "a", "```\n## [a] X\n```\n").is_err());

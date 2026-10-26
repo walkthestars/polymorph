@@ -1,4 +1,4 @@
-//! Tracing setup (Epic C4/C4b): stderr ANSI layer for humans + JSON
+//! Tracing setup: stderr ANSI layer for humans + JSON
 //! daily-rolling file layer for forensics, secrets never logged.
 //!
 //! The secrecy guarantee is STRUCTURAL (key material never enters an event)
@@ -110,7 +110,7 @@ mod tests {
 
     #[test]
     fn secrets_never_logged() {
-        // GREP-GUARD (Epic C4): no tracing-macro call site may mention
+        // GREP-GUARD: no tracing-macro call site may mention
         // api_key material. Walks every workspace .rs file (excluding target/
         // and this guard's own needle construction).
         // NOTE: the needle is built with concat! so this very line does not

@@ -1,11 +1,11 @@
-//! `polymorph-acp` — Full Deck epic I (see docs/architecture.md).
+//! `polymorph-acp` — Agent Client Protocol (ACP) server over stdio.
 //!
-//! Chunk 58 (design): stdio-first v1 agent settled (see docs/plan-chunk58.md).
-//! Chunk 59 (substrate): `agent` module — initialize/new/prompt-echo over
-//! `Channel::duplex`, no prod callers yet (CLI serve rides c60).
+//! v1 surface: initialize / new session / prompt.
+//! `agent` module — initialize/new/prompt-echo over
+//! `Channel::duplex`, no production callers yet.
 
 pub mod agent;
-/// Text-only live loop binding (docket 63b, chunk 67): brief render +
+/// Text-only live loop binding: brief render +
 /// injected-runner drive + live act-turn pieces. Wire stays in `agent`.
 pub mod session_loop;
 

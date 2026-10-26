@@ -1,4 +1,4 @@
-//! Tool-call hooks (Epic J1, chunk 79): PreToolUse / PostToolUse / Stop.
+//! Tool-call hooks: PreToolUse / PostToolUse / Stop.
 //!
 //! In-process handler registry consulted at the `Registry::call` boundary
 //! (pre → resolve → per-tool gate → execute → post). Hooks are an
@@ -97,9 +97,9 @@ impl HookRegistry {
     }
 }
 
-/// One ask-user question (Epic J1, chunk 89): which tool wants to run and
+/// One ask-user question: which tool wants to run and
 /// the handler-supplied question. Owned throughout; the prompter answers
-/// Allow/Deny — there is deliberately NO third sync variant (D1: the sync
+/// Allow/Deny — there is deliberately NO third sync variant (the sync
 /// boundary never blocks on a human).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PromptRequest {
@@ -109,15 +109,15 @@ pub struct PromptRequest {
 
 /// Interactive prompter: answers one question asynchronously. Implemented
 /// by surfaces with a human (TUI modal); headless loops attach none and
-/// fail closed (D2). The `Debug` bound keeps `Registry`'s derive working.
+/// fail closed. The `Debug` bound keeps `Registry`'s derive working.
 #[async_trait::async_trait]
 pub trait Prompter: Send + Sync + std::fmt::Debug {
     async fn ask(&self, req: PromptRequest) -> HookDecision;
 
-    /// Structured pick (Epic Q, chunk 122): choose among options.
+    /// Structured pick: choose among options.
     /// Default body dismisses (backward compatible — pre-122
     /// implementors keep compiling; surfaces override when they can
-    /// render a picker, TUI/ACP arms docketed as Q-followup).
+    /// render a picker; the TUI and ACP surfaces can override).
     async fn pick(&self, req: PickRequest) -> PickOutcome {
         let _ = req;
         PickOutcome::Dismissed {
@@ -126,11 +126,11 @@ pub trait Prompter: Send + Sync + std::fmt::Debug {
     }
 }
 
-/// Cap on options per pick (Epic Q, chunk 122): overlay space + model
-/// discipline (chunk-98 caps precedent); TUI slice inherits it.
+/// Cap on options per pick: overlay space + model
+/// discipline (caps precedent); TUI slice inherits it.
 pub const MAX_ASK_OPTIONS: usize = 8;
 
-/// One pickable option (Epic Q, chunk 122): a stable label the model
+/// One pickable option: a stable label the model
 /// gets back verbatim, an optional hint for the human, at most one
 /// `recommended` per request (validated at the tool, not here).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -140,7 +140,7 @@ pub struct PickOption {
     pub recommended: bool,
 }
 
-/// One structured pick question (Epic Q, chunk 122): owned throughout.
+/// One structured pick question: owned throughout.
 /// `multi` allows several labels; `allow_other` admits free text.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PickRequest {
@@ -151,7 +151,7 @@ pub struct PickRequest {
     pub allow_other: bool,
 }
 
-/// Structured pick outcome (Epic Q, chunk 122): labels (stable under
+/// Structured pick outcome: labels (stable under
 /// renderer reorder — never indices), free text, or dismissal.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PickOutcome {
@@ -161,11 +161,11 @@ pub enum PickOutcome {
 }
 
 /// One ask hook: returns the question to put to the user, or `None` to
-/// pass. Consulted in registration order; the first question wins (D1).
+/// pass. Consulted in registration order; the first question wins.
 type AskHandler = Box<dyn Fn(&str, &serde_json::Value) -> Option<String> + Send + Sync>;
 
 /// Ask-user table + optional prompter. Empty = never asks (all pre-89
-/// behavior unchanged); fires without a prompter = fail-closed Deny (D2).
+/// behavior unchanged); fires without a prompter = fail-closed Deny.
 #[derive(Default)]
 pub struct AskRegistry {
     handlers: Vec<AskHandler>,
@@ -193,7 +193,7 @@ impl AskRegistry {
     }
 
     /// Attach the interactive prompter (runtime-attached like `add_hook`,
-    /// never via `[[hooks]]` config — scripts cannot Ask, D5).
+    /// never via `[[hooks]]` config — scripts cannot Ask).
     pub fn set_prompter(&mut self, prompter: std::sync::Arc<dyn Prompter>) {
         self.prompter = Some(prompter);
     }
@@ -219,7 +219,7 @@ impl AskRegistry {
         }
     }
 
-    /// Resolve one question through the prompter, or fail closed (D2).
+    /// Resolve one question through the prompter, or fail closed.
     pub async fn resolve(&self, tool: &str, question: String) -> HookDecision {
         match &self.prompter {
             Some(prompter) => {

@@ -1,5 +1,5 @@
-# B6 seeded edit corpus (Epic B6) — the deterministic basis of the omp-style
-# edit benchmark and the M3 eval scoreboard (see docs/eval-b6.md).
+# Seeded edit corpus — the deterministic basis of the omp-style
+# edit benchmark and the eval scoreboard.
 #
 # Schema per [[task]] (ORDER MATTERS in TOML: `patch` is a task-level key, so
 # it must precede the `[task.files]` sub-table header — keys after a [table]
@@ -10,13 +10,13 @@
 #   [task.files]: initial workspace files (UTF-8; \r\n and \uFEFF expressible).
 #   corrupt_tag_for = "path": rotate the minted tag's first hex digit (+1 mod
 #     16) before substitution — a DETERMINISTIC stale tag (no 1/65536 luck).
-#   instruction: natural-language task text for the F5 sweep (Epic F5d+).
+#   instruction: natural-language task text for the eval sweep.
 #     Task-level key like patch (must precede `[task.files]`). Names the
 #     operation AND the exact content in plain words — NEVER hashline syntax
 #     (no `[PATH#TAG]` / PUT / CUT / REM / MV keywords): the model must solve
 #     the task, not copy a patch. Rejection tasks carry none (they skip
 #     before the field is read). Absent `instruction` falls back to
-#     `description` (custom corpora; the B6 live-disk test forbids relying
+#     `description` (custom corpora; the live-disk test forbids relying
 #     on the fallback for these 15).
 #   [task.expect.files]: EXACT final workspace state (absent path = must not
 #     exist; byte-exact comparison). XOR with:

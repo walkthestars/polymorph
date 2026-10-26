@@ -1,10 +1,10 @@
-//! `polymorph-acp::agent` — I build 2 wiring (Full Deck, chunk 60).
+//! `polymorph-acp::agent` — the ACP agent wiring.
 //!
 //! Minimal v1 ACP agent: initialize → new session → prompt echo + EndTurn,
 //! mirrored into the session store (best-effort) and served over stdio by
 //! `polymorph acp`. Tested over `Channel::duplex` (no subprocess, no editor)
 //! plus a stdio smoke at verify time. Tool-call gating rides the tool loop
-//! (chunk 58 D5 conditions on Registry calls — the echo agent makes none).
+//! (conditions on Registry calls — the echo agent makes none).
 
 use std::sync::{
     atomic::{AtomicU64, Ordering},
@@ -52,14 +52,14 @@ impl Shared {
         }
     }
 
-    /// Attach the live text loop (chunk 67): prompts drive model turns.
+    /// Attach the live text loop: prompts drive model turns.
     #[must_use]
     pub fn with_live(mut self, live: crate::session_loop::LiveTextLoop) -> Self {
         self.live = Some(Arc::new(live));
         self
     }
 
-    /// Attach the live tool loop (chunk 63c): prompts drive model→tools
+    /// Attach the live tool loop: prompts drive model→tools
     /// turns. Takes precedence over the text loop when both attach.
     #[must_use]
     pub fn with_tools(mut self, tools: crate::session_loop::LiveToolLoop) -> Self {
@@ -146,7 +146,7 @@ impl Shared {
 static SESSION_SEQ: AtomicU64 = AtomicU64::new(1);
 
 /// Build the initialize response: echo the client version, advertise
-/// load + resume (chunk 65 — both bound to the store mirror below).
+/// load + resume (both bound to the store mirror below).
 /// Modes/auth still undeclared — invented caps would lie to Zed.
 #[must_use]
 pub fn initialize_response(version: ProtocolVersion) -> InitializeResponse {
@@ -184,7 +184,7 @@ pub fn echo_text(prompt: &[ContentBlock]) -> String {
     out
 }
 
-/// Build the prompt response: always `EndTurn` at c59 (no tools, no refusal).
+/// Build the prompt response: always `EndTurn` (no tools, no refusal).
 #[must_use]
 pub fn prompt_end_turn() -> PromptResponse {
     PromptResponse::new(StopReason::EndTurn)
@@ -200,7 +200,7 @@ pub fn echo_notification(session_id: SessionId, text: String) -> SessionNotifica
 /// Serve the minimal agent over any transport with a store mirror. Runs
 /// until peer closes. Handlers: initialize (version echo) + session/new
 /// (unique id + mirror) + prompt (mirror + echo notification + EndTurn).
-/// Never sends permission requests (chunk 58 D5 deny-first is vacuous here
+/// Never sends permission requests (deny-first is vacuous here
 /// — nothing to approve).
 pub async fn serve_on(
     transport: impl agent_client_protocol::ConnectTo<Agent> + 'static,
@@ -231,7 +231,7 @@ pub async fn serve_on(
         .on_receive_request(
             async move |req: PromptRequest, responder, connection| {
                 let text = echo_text(&req.prompt);
-                // Driver precedence (chunks 67 → 63c): tools > text > echo.
+                // Driver precedence: tools > text > echo.
                 // Echo (no loop attached) keeps tests/offline key-free.
                 let answer: anyhow::Result<String> = if let Some(tools) =
                     shared_prompt.tools.clone()
@@ -401,7 +401,7 @@ mod tests {
     fn constructors_echo_version_and_end_turn() {
         let init = super::initialize_response(ProtocolVersion::V1);
         assert_eq!(init.protocol_version, ProtocolVersion::V1);
-        // Caps pin: load + resume advertised (chunk 65 handlers below).
+        // Caps pin: load + resume advertised (handlers below).
         assert!(init.agent_capabilities.load_session);
         assert!(init
             .agent_capabilities
@@ -597,7 +597,7 @@ mod tests {
     /// A garbage line is TOLERATED (skipped by the transport) and EOF still
     /// shuts down cleanly — observed SDK semantics, better than teardown:
     /// one corrupt line never kills the session. Timeout-guarded so hangs
-    /// become reds (chunk-57 divergence precedent).
+    /// become reds (divergence precedent).
     #[tokio::test]
     async fn malformed_line_is_tolerated_eof_still_clean() {
         use futures::{SinkExt as _, StreamExt as _};

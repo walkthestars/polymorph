@@ -1,4 +1,4 @@
-//! Atomic-split planner (Chunks 127–128, Epic T).
+//! Atomic-split planner.
 //!
 //! Pure planning over CLI-shaped text plus ONE spawn edge:
 //! [`plan_commits`] (offline: status + diff strings in, ordered groups
@@ -352,8 +352,8 @@ pub fn plan_commits(
     order_groups(groups, deps)
 }
 
-/// One `git -C <repo> <args>` call: piped stdio (never inherit —
-/// traps #4), stderr folded into the error. Paths only, no secrets
+/// One `git -C <repo> <args>` call: piped stdio (never inherit),
+/// stderr folded into the error. Paths only, no secrets
 /// exist here (mirrors `delegate::worktree::git`; not imported —
 /// delegate is not a tools dep, stated).
 async fn git_out(repo: &Path, args: &[&str]) -> anyhow::Result<String> {

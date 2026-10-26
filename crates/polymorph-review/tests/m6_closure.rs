@@ -1,4 +1,4 @@
-//! M6 closure matrix (chunk 70): seeded reviewer→executor runs over the
+//! M6 closure matrix: seeded reviewer→executor runs over the
 //! public [`polymorph_review`] API proving convergence AND every escalation
 //! kind terminates with a typed reason. No LLM, no subprocess — scripted
 //! fakes through the F1 `Reviewer`/`Executor` seam (offline by construction).

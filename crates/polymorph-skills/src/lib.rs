@@ -1,4 +1,4 @@
-//! `polymorph-skills` — Agent Skills (agentskills.io) conformance (J2b).
+//! `polymorph-skills` — Agent Skills (agentskills.io) conformance.
 //!
 //! Implements the spec's progressive disclosure in three levels:
 //! 1. metadata (`SkillMeta`: name + description, frontmatter only),

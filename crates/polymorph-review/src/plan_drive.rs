@@ -1,9 +1,9 @@
-//! Plan-mode DAG driver (Epic G, chunk 47).
+//! Plan-mode DAG driver.
 //!
-//! Cashes in the chunk-46 substrate: drives [`run_loop`] per ready task in
+//! Drives [`run_loop`] per ready task in
 //! dependency order over PLAN.md sections, marks tasks Done/Failed, and
-//! exposes the chunk-42 D4 merge sequence. `run_loop` itself is untouched
-//! (F1 core never changes for a consumer — the F1/F2 seam precedent).
+//! exposes the merge sequence. `run_loop` itself is untouched
+//! (the core loop never changes for a consumer).
 //!
 //! Policies (explicit, tested):
 //! - One task per drive step: snapshot [`TaskGraph::ready`], drive each in
@@ -12,14 +12,14 @@
 //! - Escalated tasks mark Failed and the drive CONTINUES with siblings
 //!   (independent work proceeds); dependents stay blocked structurally
 //!   (their deps never all reach Done) and land in `unfinished`.
-//! - [`drive_plan`] ignores executor rewrites (chunk-47 contract, locked by
+//! - [`drive_plan`] ignores executor rewrites (contract, locked by
 //!   test); [`drive_plan_with_writeback`] applies them via
 //!   [`apply_section`](polymorph_tasks::plan::apply_section) — strict shape,
 //!   atomic, status never applied (the verdict owns lifecycle). Apply
 //!   failures keep the old text and mark the task Failed (never
 //!   half-applied, never guessed).
 //! - [`PlanDriveReport::merge_sequence`] orders Done tasks for merging; the
-//!   MERGER stops at the first conflict (no partial merges, chunk-42 D4) —
+//!   MERGER stops at the first conflict (no partial merges) —
 //!   stopping is caller policy, ordering is this driver's.
 
 use async_trait::async_trait;
@@ -56,8 +56,8 @@ pub struct PlanDriveReport {
 /// Drive a plan graph to quiescence: while tasks are ready, review each
 /// task's PLAN.md section and mark it Done (Passed) or Failed (Escalated).
 /// Hand-built graphs are validated first (fail-fast — cycles from disk die
-/// here, never mid-drive). Executor rewrites are IGNORED (chunk-47
-/// contract — see [`drive_plan_with_writeback`] for the applying twin).
+/// here, never mid-drive). Executor rewrites are IGNORED (see
+/// [`drive_plan_with_writeback`] for the applying twin).
 pub async fn drive_plan<R: Reviewer, E: Executor>(
     cfg: &polymorph_core::LoopConfig,
     plan_title: &str,
@@ -103,7 +103,7 @@ pub async fn drive_plan_with_writeback<R: Reviewer, E: Executor>(
 
 /// Display words for one driven task: derived from the FINAL graph status,
 /// not the loop outcome — a task that passes review but whose rewrite is
-/// refused ends Failed, and the board must say so (chunk-48 live catch:
+/// refused ends Failed, and the board must say so (live catch:
 /// printing the loop verdict here reported Done for a Failed task). Pure
 /// fn, unit-tested (callers print these verbatim).
 pub fn task_words(status: TaskStatus, outcome: &Outcome) -> String {
@@ -552,7 +552,7 @@ mod tests {
 
     #[tokio::test]
     async fn task_words_reports_final_status_not_loop_verdict() {
-        // Chunk-48 live catch: Passed + refused rewrite ends Failed — the
+        // Passed + refused rewrite ends Failed — the
         // words must say Failed-writeback, never Done.
         assert_eq!(
             task_words(TaskStatus::Done, &Outcome::Passed { rounds: 2 }),
@@ -599,7 +599,7 @@ mod tests {
 
     #[tokio::test]
     async fn plain_drive_ignores_rewrites() {
-        // Chunk-47 contract, locked: without write-back the executor's
+        // Contract, locked: without write-back the executor's
         // rewrite never touches the graph, even when well-formed and
         // actually produced (fail-then-pass forces the fix turn to run).
         let mut g = TaskGraph::new();

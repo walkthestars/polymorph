@@ -1,15 +1,15 @@
-//! `tools::renderdoc` — RenderDoc capture facade (Epic N, chunk 112).
+//! `tools::renderdoc` — RenderDoc capture facade.
 //!
 //! Graphics debuggers are NOT protocol-shaped (capture-replay, not
-//! request/response — 0-master §2.5): there is no session client here,
-//! only a `renderdoccmd` CLI facade (the ADR-007 git-CLI precedent) plus
+//! request/response): there is no session client here,
+//! only a `renderdoccmd` CLI facade (the same shape as the git CLI) plus
 //! thin headless helpers. Binaries live host-side, never vendored (the
 //! lsp-servers.md precedent; roster: `docs/renderdoc.md`).
 //!
 //! Capture needs a PRESENTING sample (headless/offscreen apps capture
 //! nothing — upstream gap, not our deficit) and OpenGL ≥3.2 core
 //! (legacy contexts are refused by RenderDoc itself — caught live in
-//! chunk 112). Never gate on `IsFrameCapturing` right after a trigger
+//! live). Never gate on `IsFrameCapturing` right after a trigger
 //! (reads 0 pre-present); `.rdc` existence is the proof.
 
 use anyhow::Context as _;
@@ -190,7 +190,7 @@ pub async fn thumb(
     Ok(())
 }
 
-/// Shipped query driver (chunk 113, N1b): embedded at compile time so
+/// Shipped query driver: embedded at compile time so
 /// installed binaries never resolve script paths at runtime.
 const RDOC_QUERY_PY: &str = include_str!("renderdoc_query.py");
 
@@ -198,7 +198,7 @@ const RDOC_QUERY_PY: &str = include_str!("renderdoc_query.py");
 /// takes seconds here; headroom for slow GPUs — stated, not measured).
 pub const SCRIPT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
-/// Cap for echoed-back draw lists (transcript hygiene — the chunk-98
+/// Cap for echoed-back draw lists (transcript hygiene — the
 /// caps precedent; huge captures must not flood context).
 pub const MAX_DRAW_EVENTS: usize = 2000;
 

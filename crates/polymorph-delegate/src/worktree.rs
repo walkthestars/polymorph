@@ -1,9 +1,10 @@
-//! Worktree isolation (Epic E1e, ADR-007 git CLI).
+//! Worktree isolation, implemented over the `git` CLI.
 //!
 //! Each child works in its own `git worktree` so siblings never share a
-//! working tree ("no merge conflicts between siblings" — 0-master §2.2).
+//! working tree ("no merge conflicts between siblings").
 //! Implemented over `git` CLI via `tokio::process` (porcelain completeness,
-//! zero unsafe). Merge-back of branches is Epic F/G — here: create (detached
+//! zero unsafe). Merge-back of branches lives in the review crate — here:
+//! create (detached
 //! or branch), consuming `remove`, and `prune_orphans` for leaked trees.
 //!
 //! Orphan criterion: a `.polymorph-child` marker file WE wrote inside the
@@ -171,8 +172,8 @@ fn remove_blocking(repo: &Path, path: &Path) -> anyhow::Result<()> {
     fallback.and(pruned)
 }
 
-/// A kept child worktree handed back to the caller for merge-back (Epic G,
-/// chunk-43 design `plan-chunk42.md` D5). `Worktree::remove` is teardown;
+/// A kept child worktree handed back to the caller for merge-back.
+/// `Worktree::remove` is teardown;
 /// this is handoff: the caller owns `merge_back` or `discard`, and the
 /// outcome records whether the bus committed the tree.
 #[derive(Debug)]
@@ -307,8 +308,8 @@ pub async fn commit_all(workdir: &Path, message: &str) -> anyhow::Result<bool> {
     Ok(false)
 }
 
-/// Merge a kept Branch worktree back into its repo and clean up (chunk-43
-/// design D3/D4). Consuming: success reports, conflict aborts + cleans up
+/// Merge a kept Branch worktree back into its repo and clean up.
+/// Consuming: success reports, conflict aborts + cleans up
 /// and names the files — the caller escalates, never auto-resolves.
 /// Pre-checks (fail-fast, nothing touched): branch present, worktree
 /// clean, repo clean.
@@ -351,7 +352,7 @@ pub async fn merge_back(kept: KeptWorktree, message: &str) -> Result<MergeReport
         // No unmerged paths ⇒ the merge died for a non-conflict reason
         // (locked index, unreadable tree, missing branch). Report the Git
         // fault verbatim: an empty `Conflict` would blame the child's
-        // content for a plumbing failure (chunk-43: never mislabel).
+        // content for a plumbing failure (never mislabel).
         if files.is_empty() {
             return Err(MergeError::Git(merge_err.to_string()));
         }
@@ -359,7 +360,7 @@ pub async fn merge_back(kept: KeptWorktree, message: &str) -> Result<MergeReport
     }
     // Empty diff (child changed nothing durable): a squash that stages
     // nothing is a clean no-op, not an error — report HEAD with no files
-    // (chunk-43 live catch: a failed fix otherwise mislabels as a Git fault).
+    // (live catch: a failed fix otherwise mislabels as a Git fault).
     if status_short(&kept.repo)
         .await
         .map_err(|e| MergeError::Git(e.to_string()))?
@@ -555,7 +556,7 @@ pub async fn is_git_repo(path: &Path) -> bool {
     git(path, &["rev-parse", "--git-dir"]).await.is_ok()
 }
 
-/// One `git -C <repo> <args>` call: piped stdio (never inherit — traps #4),
+/// One `git -C <repo> <args>` call: piped stdio (never inherit),
 /// stderr folded into the error (paths only, no secrets exist here).
 async fn git(repo: &Path, args: &[&str]) -> anyhow::Result<String> {
     let out = tokio::process::Command::new("git")
@@ -570,7 +571,7 @@ async fn git(repo: &Path, args: &[&str]) -> anyhow::Result<String> {
         .map_err(|e| anyhow::anyhow!("cannot spawn git: {e}"))?;
     if !out.status.success() {
         // Both streams: git reports "nothing to commit" on stdout, so
-        // stderr-only errors mislead (chunk-43 merge_back diagnosis).
+        // stderr-only errors mislead (merge_back diagnosis).
         anyhow::bail!(
             "git {} failed ({}): {} {}",
             args.join(" "),
@@ -612,7 +613,7 @@ mod tests {
         };
         run(&["init", "-b", "main"]);
         // Byte-deterministic fixtures: the operator's global `autocrlf`
-        // otherwise round-trips working-tree bytes (chunk-43 CRLF catch).
+        // otherwise round-trips working-tree bytes (CRLF catch).
         run(&["config", "core.autocrlf", "false"]);
         std::fs::write(repo.join("f.txt"), "v1\n").unwrap();
         run(&["add", "."]);
@@ -805,7 +806,7 @@ mod tests {
         // init_repo sets NO user identity: the fallback must carry these
         // temp-only commits (operator gitconfig untouched by construction).
         // init_repo sets NO identity: blank the LOCAL user so any ambient
-        // global identity cannot leak in (env is process-global — traps #30
+        // global identity cannot leak in (env is process-global
         // forbids env tricks; a local empty value wins scoping honestly).
         // `-c` fallback flags outrank it at commit time.
         let dir = tempfile::tempdir().unwrap();
@@ -898,7 +899,7 @@ mod tests {
         let repo = init_repo(dir.path()).await;
         // Both branches fork from the SAME base BEFORE either merges —
         // sequential merge-then-fork goes linear and never conflicts
-        // (chunk-43 test-shape catch).
+        // (test-shape catch).
         let mut kept_a = None;
         let mut kept_b = None;
         for (id, content, slot) in [("a1", "A\n", &mut kept_a), ("b1", "B\n", &mut kept_b)] {
@@ -941,7 +942,7 @@ mod tests {
 
     #[tokio::test]
     async fn merge_back_empty_diff_is_a_clean_noop() {
-        // Chunk-43 live catch: a child that changed nothing durable
+        // A child that changed nothing durable
         // (failed fix, clean tree) must not mislabel as a Git fault.
         let dir = tempfile::tempdir().unwrap();
         let repo = init_repo(dir.path()).await;

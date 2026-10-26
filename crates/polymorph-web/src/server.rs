@@ -1,4 +1,4 @@
-//! Minimal REST + SSE server (Chunk 135, Epic W — LAST EPIC).
+//! Minimal REST + SSE server.
 //!
 //! Sessions CRUD + bounded-replay SSE over a strict-minimal HTTP/1.1
 //! subset on a tokio `TcpListener`: exact `HTTP/1.1` version, single

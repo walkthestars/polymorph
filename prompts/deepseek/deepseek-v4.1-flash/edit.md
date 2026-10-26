@@ -1,4 +1,4 @@
-# DeepSeek V4.1 Flash edit prompt — hashline format (Epic B4)
+# DeepSeek V4.1 Flash edit prompt — hashline format
 
 > File edits use the hashline patch language ONLY. Never emit str_replace,
 > diff -u, or whole-file rewrites for edits.

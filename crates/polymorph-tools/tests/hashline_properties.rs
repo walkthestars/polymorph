@@ -1,5 +1,6 @@
-//! Hashline property matrix (Epic B4/B4b, unit form — true kill -9 fuzzing is
-//! TBM-16). Deterministic xorshift64* (fixed seed): 300 iterations, no network,
+//! Hashline property matrix (unit form — true kill -9 fuzzing is not
+//! covered here). Deterministic xorshift64* (fixed seed): 300 iterations, no
+//! network,
 //! no timing dependence.
 //!
 //! Per iteration, three properties:

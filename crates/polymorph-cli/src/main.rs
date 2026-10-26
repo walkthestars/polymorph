@@ -1,13 +1,11 @@
-//! `polymorph` CLI — clap 4 derive tree (Epic A4).
+//! `polymorph` CLI — clap 4 derive tree.
 //!
-//! Design §4 (0-master.md):
+//! Entrypoints:
 //!   polymorph → TUI interactive mode (default)
 //!   polymorph exec <prompt> → headless single-turn
 //!   polymorph acp → ACP stdio server
-//!   polymorph serve → REST API server (Epic W)
+//!   polymorph serve → REST API server
 //!   polymorph sessions / config / providers / models / update-catalog
-//!
-//! Chunk 1: tree parses + dispatches to stubs. Real loop wiring is A3/Epic B.
 
 use clap::{Args, CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
@@ -15,11 +13,7 @@ use clap_complete::{generate, Shell};
 mod tracing_setup;
 
 #[derive(Debug, Parser)]
-#[command(
-    name = "polymorph",
-    version,
-    about = "Rust-native AI coding agent (Full Deck)"
-)]
+#[command(name = "polymorph", version, about = "Rust-native AI coding agent")]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
@@ -33,12 +27,12 @@ struct Cli {
     db: Option<std::path::PathBuf>,
 
     /// Force `options.debug` on (highest config precedence: beats env/files).
-    /// Absent = leave the merged file+env value untouched (Epic D1f).
+    /// Absent = leave the merged file+env value untouched.
     #[arg(long, global = true, action = clap::ArgAction::SetTrue)]
     debug: bool,
 
     /// TUI chrome theme (default: `default`). Parsed before terminal
-    /// takeover — unknown names refuse fast, never mid-screen (chunk 84).
+    /// takeover — unknown names refuse fast, never mid-screen.
     #[arg(long, global = true)]
     theme: Option<String>,
 }
@@ -76,44 +70,44 @@ enum Commands {
         #[arg(long, default_value = "prompts/glm/glm-5.3/act.md")]
         act_pack: std::path::PathBuf,
     },
-    /// REST API server (Epic W: sessions CRUD + SSE streaming).
+    /// REST API server (sessions CRUD + SSE streaming).
     Serve {
         /// Port to listen on.
         #[arg(long, default_value_t = 8420)]
         port: u16,
     },
-    /// Session management (Epic C).
+    /// Session management.
     Sessions {
         #[command(subcommand)]
         cmd: SessionsCmd,
     },
-    /// Config management (Epic D).
+    /// Config management.
     Config {
         #[command(subcommand)]
         cmd: ConfigCmd,
     },
-    /// Provider management (Epic D).
+    /// Provider management.
     Providers {
         #[command(subcommand)]
         cmd: ProvidersCmd,
     },
-    /// Model catalog (Epic D).
+    /// Model catalog.
     Models {
         #[command(subcommand)]
         cmd: ModelsCmd,
     },
-    /// Subagent fan-out demo (Epic E: echo runners, no LLM).
+    /// Subagent fan-out demo (echo runners, no LLM).
     Delegate {
         #[command(subcommand)]
         cmd: DelegateCmd,
     },
-    /// Reviewer-loop demos and verdict checks (Epic F: scripted, no LLM).
+    /// Reviewer-loop demos and verdict checks (scripted, no LLM).
     Review {
         #[command(subcommand)]
         cmd: ReviewCmd,
     },
     /// Model-output eval: run one live turn against an expected end state
-    /// (Epic F5b: key-gated single attempt, scored by the F5a scorer).
+    /// (key-gated single attempt, scored by the F5a scorer).
     Eval {
         #[command(subcommand)]
         cmd: EvalCmd,
@@ -175,7 +169,7 @@ enum DelegateCmd {
 #[derive(Debug, Subcommand)]
 enum ReviewCmd {
     /// Run the reviewer loop over scripted reviewer/executor doubles.
-    /// No LLM: proves verdict + convergence + mode wiring (Epic F1d).
+    /// No LLM: proves verdict + convergence + mode wiring.
     Demo {
         /// Loop mode: plan (critique a plan) or act (critique an artifact).
         #[arg(long, default_value = "plan")]
@@ -190,9 +184,9 @@ enum ReviewCmd {
         path: std::path::PathBuf,
     },
     /// Run the live reviewer loop over LLM turns (needs key). Both modes live
-    /// (F2b-part2): plan critiques a plan document, act critiques an artifact.
+    /// Plan critiques a plan document, act critiques an artifact.
     /// Reviewer + fixer are Bus children; executor rewrites TEXT in memory
-    /// (no tool calls yet — F3; the artifact file is read-only input, never
+    /// (no tool calls yet; the artifact file is read-only input, never
     /// written back).
     Run {
         #[command(flatten)]
@@ -211,7 +205,7 @@ enum ReviewCmd {
         events_json: Option<std::path::PathBuf>,
     },
     /// Run the SAME seeded case through two live reviewer arms and compare
-    /// (F4b: same-model vs diverse, TBM-15 live half). Arm A reviews on
+    /// (same-model vs diverse). Arm A reviews on
     /// `--review-model-a`, arm B on `--review-model-b`; both fixers share
     /// the mode executor chain text-only (no `--tools`: the reviewer is the
     /// isolated variable, and spend stays bounded). Needs key, like `run`.
@@ -220,8 +214,8 @@ enum ReviewCmd {
         args: Box<ReviewEvalAbArgs>,
     },
     /// Run the admitted agent-bench corpus task-by-task through the live
-    /// loop and/or single-shot arms and score hidden tests (F6: bench
-    /// runner; first TBM-06 live datum). Each task runs in a pid-scoped
+    /// loop and/or single-shot arms and score hidden tests (bench
+    /// runner). Each task runs in a pid-scoped
     /// temp copy (InPlace-on-copies — no merge-back exists yet, so worktree
     /// fixes would evaporate before scoring). Needs key, like `run`.
     Bench {
@@ -240,9 +234,9 @@ enum ReviewCmd {
         min_rate: f64,
     },
     /// Show a PLAN.md file as a task board (parse + validate; exit 1 names
-    /// the fault with its line). Offline, no key (Epic G surfacing).
+    /// the fault with its line). Offline, no key (surfacing).
     /// With `--session`, the board shows the session's saved plan graph
-    /// (chunk 51; title still comes from the file, checkpoint precedent)
+    /// (title still comes from the file, checkpoint precedent)
     /// falling back to the file when the session holds no plan.
     PlanShow {
         /// Path to the PLAN.md file (read-only; always parsed for the title).
@@ -253,7 +247,7 @@ enum ReviewCmd {
         session: Option<String>,
     },
     /// Drive a PLAN.md file through per-task reviewer loops with executor
-    /// write-back (Epic G drive slice, chunk 48). Text-only plan fixer;
+    /// write-back (drive slice). Text-only plan fixer;
     /// needs key, like `run`. Never overwrites the input (`--out` REQUIRED
     /// for the updated PLAN.md); `--checkpoint` JSON resumes/saves run
     /// state (opt-in). Exit 0 on a completed drive (the report judges, run
@@ -278,7 +272,7 @@ struct ReviewRunArgs {
     /// the first member of the artifact set.
     #[arg(long, required_unless_present_any = ["artifact_files", "diff"])]
     artifact_file: Option<std::path::PathBuf>,
-    /// Multi-file artifact set (docket #5), repeatable: a path, or a glob
+    /// Multi-file artifact set, repeatable: a path, or a glob
     /// (`*?[{`; matched against workdir-relative paths, gitignore-aware,
     /// re-expanded every round) graded together with `--artifact-file`
     /// and `--diff` files under one ARTIFACT FILES UNDER REVIEW section,
@@ -286,7 +280,7 @@ struct ReviewRunArgs {
     /// refuses the run. With `--repo`, read from the drive's worktree.
     #[arg(long = "artifact-files", value_name = "PATH|GLOB")]
     artifact_files: Vec<String>,
-    /// Worktree-diff review (docket #5): grade every file the workdir
+    /// Worktree-diff review: grade every file the workdir
     /// changed vs a git base (default HEAD) — modified, added, deleted,
     /// untracked-not-ignored — re-read after each fix turn, so files the
     /// fixer touches join the set. Small files in full, large ones as a
@@ -340,14 +334,14 @@ struct ReviewRunArgs {
     /// rounds follow while each round still mutates or verifies.
     #[arg(long, default_value_t = 30)]
     max_tool_rounds: u32,
-    /// Opt-in LSP error gate (docket #3; needs `--tools` and a configured
+    /// Opt-in LSP error gate (needs `--tools` and a configured
     /// `[[lsp_servers]]` entry): a passing verdict becomes a fail while
     /// the last fix turn left error-severity LSP diagnostics on files it
     /// mutated. Also enabled by `[agent] lsp_error_gate = true`. Off by
-    /// default: diagnostics stay evidence + warn-only (chunk 99).
+    /// default: diagnostics stay evidence + warn-only.
     #[arg(long, action = clap::ArgAction::SetTrue)]
     lsp_error_gate: bool,
-    /// Read-only reviewer tools (docket #4): the reviewer may `read`/
+    /// Read-only reviewer tools: the reviewer may `read`/
     /// `grep`/`glob` the drive's workdir (plus `lsp_hover`/`lsp_definition`
     /// /`lsp_references` when `[[lsp_servers]]` are configured) for up to
     /// `[agent] reviewer_tool_rounds` (default 4) tool rounds, then answers
@@ -359,7 +353,7 @@ struct ReviewRunArgs {
     /// one text turn.
     #[arg(long, action = clap::ArgAction::SetTrue)]
     reviewer_tools: bool,
-    /// Harness verify command (docket #2), repeatable: after every fix
+    /// Harness verify command, repeatable: after every fix
     /// turn the harness runs each in order in the drive's workdir (stopping
     /// at the first failure) via the platform shell, BEFORE the reviewer.
     /// Results reach the reviewer as evidence; a nonzero exit, timeout or
@@ -372,7 +366,7 @@ struct ReviewRunArgs {
     /// `[agent] verify_timeout_secs`, 600). Expiry kills the process tree.
     #[arg(long, value_name = "SECS")]
     verify_timeout_secs: Option<u64>,
-    /// Ask the reviewer in round 1 of a CREATE job too (docket #7 opt-out).
+    /// Ask the reviewer in round 1 of a CREATE job too (opt-out).
     /// By default, when the artifact file is missing and no content was
     /// given, the harness answers round 1 with the creation finding the
     /// reviewer is prescribed to emit (no reviewer call; the round still
@@ -383,7 +377,7 @@ struct ReviewRunArgs {
     #[arg(long, action = clap::ArgAction::SetTrue)]
     no_create_seed: bool,
     /// What a non-passing in-place run does with the files the fixer's
-    /// `write`/`edit` calls changed (docket #8; `--tools`, not `--repo`):
+    /// `write`/`edit` calls changed (`--tools`, not `--repo`):
     /// `rollback` restores each to its pre-drive bytes (deleting files and
     /// empty dirs the drive created) unless someone changed it after the
     /// drive's last write (a reported conflict, left as-is), archiving the
@@ -397,7 +391,7 @@ struct ReviewRunArgs {
     on_fail: Option<String>,
 }
 
-/// `review eval-ab` flags (boxed into the variant: chunk-12
+/// `review eval-ab` flags (boxed into the variant:
 /// `large_enum_variant` precedent — nesting alone never shrinks variants).
 #[derive(Debug, Args)]
 struct ReviewEvalAbArgs {
@@ -429,7 +423,7 @@ struct ReviewEvalAbArgs {
     #[arg(long, default_value = "prompts/glm/glm-5.3/plan.md")]
     plan_pack: std::path::PathBuf,
     /// Reviewer model for arm A (bare names qualify through claiming
-    /// entries, chunk-13 `qualify_model`; qualified specs pass through).
+    /// entries via `qualify_model`; qualified specs pass through).
     #[arg(long)]
     review_model_a: String,
     /// Reviewer model for arm B (same resolution as --review-model-a).
@@ -443,7 +437,7 @@ struct ReviewEvalAbArgs {
     max_rounds: u32,
 }
 
-/// `review bench` flags (boxed into the variant: chunk-12
+/// `review bench` flags (boxed into the variant:
 /// `large_enum_variant` precedent — nesting alone never shrinks variants).
 #[derive(Debug, Args)]
 struct ReviewPlanArgs {
@@ -460,7 +454,7 @@ struct ReviewPlanArgs {
     /// the end state there when the drive completes.
     #[arg(long)]
     checkpoint: Option<std::path::PathBuf>,
-    /// Session id for plan persistence (chunk 51): resume the graph from
+    /// Session id for plan persistence: resume the graph from
     /// the session store when no checkpoint file applies, and save the end
     /// state there when the drive completes. Checkpoint files keep working.
     #[arg(long)]
@@ -476,7 +470,7 @@ struct ReviewPlanArgs {
     plan_pack: std::path::PathBuf,
 }
 
-/// `review bench` flags (boxed into the variant: chunk-12
+/// `review bench` flags (boxed into the variant:
 /// `large_enum_variant` precedent — nesting alone never shrinks variants).
 #[derive(Debug, Args)]
 struct ReviewBenchArgs {
@@ -519,34 +513,34 @@ struct ReviewBenchArgs {
     /// shell-phrasing vs systematic tool failure). Stamped on records.
     #[arg(long, default_value = "scoped-v1")]
     tool_profile: String,
-    /// Tools-off axis (chunk 41): run the SINGLE arm with no tools
+    /// Tools-off axis: run the SINGLE arm with no tools
     /// (text-only control — prices tooling with review held constant).
     /// Requires `--arm single` (loop never sees this flag); records stamp
     /// `{profile}+single-notools` so boards stay attributable.
     #[arg(long, action = clap::ArgAction::SetTrue)]
     single_no_tools: bool,
-    /// Loop-worktree mode (chunk 44): run the LOOP fixer in per-turn kept
+    /// Loop-worktree mode: run the LOOP fixer in per-turn kept
     /// Branch worktrees merged back into the case repo (prices isolation
     /// with tools held constant). Requires a loop arm (`--arm loop` or
     /// `both`); records stamp `{profile}+loop-worktree` so boards stay
-    /// attributable. Default off (InPlace loop — c39-c43 boards comparable).
+    /// attributable. Default off (InPlace loop — boards comparable).
     #[arg(long, action = clap::ArgAction::SetTrue)]
     loop_worktree: bool,
-    /// Preamble ablation (chunk 45): `full` (default, chunk-39 block) |
+    /// Preamble ablation: `full` (default) |
     /// `minimal` (fence-ban-only — prices the example + op-shape lines).
     /// Records stamp `{profile}+preamble-min` so boards stay attributable.
     #[arg(long, default_value = "full")]
     preamble: String,
 }
 
-/// `eval` subcommands (Epic F5b/F5c). `run` is the only live one (needs
+/// `eval` subcommands. `run` is the only live one (needs
 /// key); `check` replays `--record` JSONs offline (CI gate, no key).
 #[derive(Debug, Subcommand)]
 enum EvalCmd {
     /// Run one live model turn against an expected end state and score it.
     /// Single attempt on `--model` (exec-override precedent: qualified +
     /// injected, no fallback — fallback would blur attribution). One case
-    /// per invocation; batching is Chunk 21's sweep (later).
+    /// per invocation; batching is a later sweep.
     Run {
         #[command(flatten)]
         args: Box<EvalRunArgs>,
@@ -569,7 +563,7 @@ enum EvalCmd {
     },
 }
 
-/// `eval run` flags (boxed into the variant: chunk-12 `large_enum_variant`
+/// `eval run` flags (boxed into the variant: `large_enum_variant`
 /// precedent — nesting alone never shrinks variants).
 #[derive(Debug, Args)]
 struct EvalRunArgs {
@@ -583,14 +577,14 @@ struct EvalRunArgs {
     #[arg(long)]
     expected: std::path::PathBuf,
     /// Subject model (REQUIRED: eval must name its subject; no chain default).
-    /// Bare names qualify through claiming entries (chunk-13 path).
+    /// Bare names qualify through claiming entries (path).
     #[arg(long)]
     model: String,
     /// System-pack file (default: glm-5.3 edit pack, read-only).
     #[arg(long, default_value = "prompts/glm/glm-5.3/edit.md")]
     system_pack: std::path::PathBuf,
     /// Eval format arm (default `hashline`): `str-replace` scores the
-    /// baseline rival through its own pack + scorer (chunk 28; the TBM-05
+    /// baseline rival through its own pack + scorer (the
     /// delta). The default `--system-pack` follows this flag unless
     /// overridden explicitly (see `resolve_system_pack`).
     #[arg(long, default_value = "hashline")]
@@ -601,7 +595,7 @@ struct EvalRunArgs {
     record: Option<std::path::PathBuf>,
 }
 
-/// `eval check` flags (boxed into the variant: chunk-12 `large_enum_variant`
+/// `eval check` flags (boxed into the variant: `large_enum_variant`
 /// precedent — nesting alone never shrinks variants).
 #[derive(Debug, Args)]
 struct EvalCheckArgs {
@@ -616,7 +610,7 @@ struct EvalCheckArgs {
     min_rate: f64,
 }
 
-/// `eval sweep` flags (boxed into the variant: chunk-12 `large_enum_variant`
+/// `eval sweep` flags (boxed into the variant: `large_enum_variant`
 /// precedent — nesting alone never shrinks variants).
 #[derive(Debug, Args)]
 struct EvalSweepArgs {
@@ -627,7 +621,7 @@ struct EvalSweepArgs {
     )]
     corpus: std::path::PathBuf,
     /// Subject model (REQUIRED: eval must name its subject; no chain default).
-    /// Bare names qualify through claiming entries (chunk-13 path).
+    /// Bare names qualify through claiming entries (path).
     #[arg(long)]
     model: String,
     /// Record dir (REQUIRED: a sweep that leaves no CI artifact failed its
@@ -652,7 +646,7 @@ struct EvalSweepArgs {
     /// final attempts, first-attempt board prints separately (pass@k).
     #[arg(long, default_value_t = 2)]
     max_attempts: u32,
-    /// Repeat the whole matrix N times (default 1 = chunk-24 behavior).
+    /// Repeat the whole matrix N times (default 1).
     /// Run N records into `<record>/run-N/` (each replayable by `check`
     /// as-is); per-task pass rates + pooled board print at the end.
     #[arg(long, default_value_t = 1)]
@@ -689,7 +683,7 @@ async fn async_main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // Split logging (Epic C4): in TUI mode (bare `polymorph`), stderr layer is disabled
+    // Split logging: in TUI mode (bare `polymorph`), stderr layer is disabled
     // so background crate warnings never corrupt the raw alternate terminal screen.
     // In CLI modes, stderr ANSI prints for humans; JSON rolling file logs for forensics.
     let (subscriber, _log_guards) =
@@ -698,14 +692,14 @@ async fn async_main() -> anyhow::Result<()> {
 
     // Hoisted before the by-value `cli.command` match: afterwards `cli` is
     // partially moved, so whole-`cli` borrows must not appear in the arms
-    // (traps #5: clone-then-move; disjoint field use like `cli.db` stays fine).
+    // (clone-then-move; disjoint field use like `cli.db` stays fine).
     let overrides = cli_overrides(&cli);
     match cli.command {
         None => {
-            // Bare invocation enters the TUI (Epic J; V descoped in ADR-009).
+            // Bare invocation enters the TUI (V descoped in).
             let (user_path, project_path) = polymorph_core::config::default_paths();
             let cfg = polymorph_core::config::load_with_cli(&user_path, &project_path, &overrides)?;
-            // Full agentic floor (chunk 148): every TUI turn wields the V1
+            // Full agentic floor: every TUI turn wields the V1
             // tools behind the operator-owned Gate. Fail-closed (bad hooks
             // refuse startup rather than silently disarming).
             let mut responder = LlmResponder::from_config(&cfg, None);
@@ -787,7 +781,7 @@ async fn async_main() -> anyhow::Result<()> {
     }
 }
 
-/// CLI-layer overrides from global flags (Epic D1f): only `Some` fields win.
+/// CLI-layer overrides from global flags: only `Some` fields win.
 fn cli_overrides(cli: &Cli) -> polymorph_core::config::CliOverrides {
     polymorph_core::config::CliOverrides {
         debug: cli.debug.then_some(true),
@@ -799,7 +793,7 @@ fn default_db_path() -> std::path::PathBuf {
     std::path::PathBuf::from(".polymorph").join("sessions.db")
 }
 
-/// `acp`: serve the v1 ACP agent over stdio (Epic I, chunk 60).
+/// `acp`: serve the v1 ACP agent over stdio.
 /// Opens (creating parents) the session DB for the store mirror, then serves
 /// until the editor disconnects (stdin EOF → clean `Ok`). Transport failures
 /// name the peer side; DB-open failures follow the sessions error pattern.
@@ -817,10 +811,10 @@ async fn run_acp(
         // but state the invariant where the boundary is crossed.
         anyhow::anyhow!("cannot open session DB {}: {e}", db.display())
     })?;
-    // Live loops (chunks 67 → 63c): the CLI recipe verbatim — config
+    // Live loops: the CLI recipe verbatim — config
     // chains + act pack, fresh conversation per turn (loop-owned).
     // Failures bail LOUD at startup (a keyless/packless serve must never
-    // silently echo — the c60 echo stays test-only via `Shared::new`).
+    // silently echo — the echo agent stays test-only via `Shared::new`).
     let (user_path, project_path) = polymorph_core::config::default_paths();
     let cfg = polymorph_core::config::load_with_cli(&user_path, &project_path, overrides)?;
     let system = polymorph_review::load_pack(act_pack)
@@ -836,7 +830,7 @@ async fn run_acp(
         system: system.clone(),
     };
     // Tool scope for `--tools`: the full V1 floor (+ fail-soft MCP),
-    // Gate-enforced per call (review-run mirror, chunk-66 D2).
+    // Gate-enforced per call (review-run mirror).
     let tools_loop = if tools {
         let mut registry = polymorph_tools::registry::v1_registry();
         registry.set_output_spill(output_spill(&cfg.agent));
@@ -862,7 +856,7 @@ async fn run_acp(
         .map_err(|e| anyhow::anyhow!("acp serve ended with transport error: {e}"))
 }
 
-/// `sessions`: list / switch / delete against the real store (Epic C).
+/// `sessions`: list / switch / delete against the real store.
 /// Output is human-table on stdout; errors name the missing id.
 async fn run_sessions(cmd: SessionsCmd, db: &std::path::Path) -> anyhow::Result<()> {
     use polymorph_core::sessions::Store;
@@ -886,7 +880,7 @@ async fn run_sessions(cmd: SessionsCmd, db: &std::path::Path) -> anyhow::Result<
         }
         SessionsCmd::Create { title } => {
             // Creation only (no auto-switch): switch explicitly, same
-            // separation the TUI picker observes (chunk 77).
+            // separation the TUI picker observes.
             let session = store.create_session(&title).await?;
             println!("created {}  {}", session.id, session.title);
             Ok(())
@@ -904,7 +898,7 @@ async fn run_sessions(cmd: SessionsCmd, db: &std::path::Path) -> anyhow::Result<
     }
 }
 
-/// `config`: show the merged config / set one agent-editable key (Epic D2).
+/// `config`: show the merged config / set one agent-editable key.
 /// Pure helpers (`render_config`, `apply_config_set`) take explicit paths
 /// so tests run against tempdirs; this wrapper supplies default paths.
 fn run_config(
@@ -936,7 +930,7 @@ fn render_config(
     toml::to_string(&cfg).map_err(|e| anyhow::anyhow!("cannot render config: {e}"))
 }
 
-/// Keys the agent may edit via `config set` (Epic D2, config.md rule 3).
+/// Keys the agent may edit via `config set` (config.md rule 3).
 /// `providers.*` and `pins` need file edits (multi-field shapes — refused
 /// here with this help rather than half-written).
 const CONFIG_SET_HELP: &str = "supported keys: options.debug (true|false), \
@@ -944,7 +938,7 @@ const CONFIG_SET_HELP: &str = "supported keys: options.debug (true|false), \
     permissions.allow / permissions.deny (comma-separated; empty clears). \
     providers.* and pins need file edits.";
 
-/// Pure TOML edit (Epic D2): apply one `key = value` to `existing_toml`.
+/// Pure TOML edit: apply one `key = value` to `existing_toml`.
 /// Rewrites the file's TOML (comments are NOT preserved — documented: the
 /// agent path optimizes for machine-roundtrip, humans keep comments by
 /// editing the file directly).
@@ -1040,7 +1034,7 @@ fn apply_config_set(
     ))
 }
 
-/// `providers`: list what is configured (Epic D). Names and key SOURCE names
+/// `providers`: list what is configured. Names and key SOURCE names
 /// only — key VALUES never appear here (grep-guard companion: this function
 /// holds no secret, only field names).
 fn run_providers(
@@ -1053,7 +1047,7 @@ fn run_providers(
             Ok(())
         }
         ProvidersCmd::Add { name } => anyhow::bail!(
-            "`providers add {name}` is not guided in Chunk 7: provider entries are \
+            "`providers add {name}` is not guided: provider entries are \
             multi-field ([[providers]] id/base_url/models/key sources) and a skeleton \
             would misroute. Add the entry to the project config file by hand, or set \
             chains/keys via `config set` (roles.<role>, never key values)."
@@ -1124,7 +1118,7 @@ fn catalog_cache_path() -> std::path::PathBuf {
         .unwrap_or_else(|| std::path::PathBuf::from("models.dev.json"))
 }
 
-/// `update-catalog`: fetch models.dev → write cache (Epic D1e). Network
+/// `update-catalog`: fetch models.dev → write cache. Network
 /// failure names the URL; an unrecognized shape refuses to clobber.
 async fn run_update_catalog(url: Option<&str>) -> anyhow::Result<()> {
     let url = url.unwrap_or(polymorph_llm::catalog::MODELS_DEV_URL);
@@ -1138,7 +1132,7 @@ async fn run_update_catalog(url: Option<&str>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// `delegate run`: fan-out demo over echo runners (Epic E1g). One process,
+/// `delegate run`: fan-out demo over echo runners. One process,
 /// one bus, no LLM, no daemon: N children run 2 echo turns each, outcomes
 /// print as typed results. With `--repo`, each child gets a REAL detached
 /// git worktree under a pid-scoped temp parent (auto-removed).
@@ -1207,7 +1201,7 @@ async fn run_delegate(cmd: DelegateCmd) -> anyhow::Result<()> {
     }
 }
 
-/// `review demo|check|run` (Epic F1d + F2a). Scripted demo + verdict-file
+/// `review demo|check|run`. Scripted demo + verdict-file
 /// checker + the live ACT-mode loop over Bus-backed LLM children.
 async fn run_review(
     cmd: ReviewCmd,
@@ -1425,7 +1419,7 @@ async fn run_review(
     }
 }
 
-/// `review bench`: live resolve-rate runner (Epic F6). Drives each admitted
+/// `review bench`: live resolve-rate runner. Drives each admitted
 /// corpus task through the selected arms in pid-scoped temp copies and scores
 /// the hidden suite after every case. Loop arm mirrors `run_review_live`
 /// construction (Bus stack, tools on, act mode); single arm is one Act spawn
@@ -1464,8 +1458,8 @@ async fn run_bench_live(
     if loop_worktree && !arms.contains(&BenchArm::Loop) {
         anyhow::bail!("--loop-worktree needs `--arm loop` or `both` (got `--arm {arm}`)");
     }
-    // Preamble ablation (chunk 45): unknown values bail pre-spend like the
-    // profile rule above (F5d precedent).
+    // Preamble ablation: unknown values bail pre-spend like the
+    // profile rule above (precedent).
     let minimal_preamble = polymorph_review::parse_preamble(&preamble)?;
     let shell_rule = polymorph_review::profile_shell_rule(&tool_profile)?;
     let corpus_text = std::fs::read_to_string(&corpus)
@@ -1487,26 +1481,26 @@ async fn run_bench_live(
         std::time::Duration::from_secs(300),
     )));
     let bus = std::sync::Arc::new(polymorph_delegate::Bus::flat());
-    // MCP deliberately NOT wired here (chunk 55): the bench measures the
+    // MCP deliberately NOT wired here: the bench measures the
     // fixed V1 floor — apparatus changes would void every prior board.
-    // Docket #9 bounding stays off (apparatus stability, the docket #7
+    // Output bounding stays off (apparatus stability, the
     // bonus precedent): bench boards keep the unbounded tool results.
     let registry = {
         let mut r = polymorph_tools::registry::v1_registry();
         r.set_output_spill(polymorph_tools::output::SpillConfig::off());
         Arc::new(r)
     };
-    // Bench-owned Gate (plan-chunk36 §1): per-task fixture-scoped rules built
+    // Bench-owned Gate: per-task fixture-scoped rules built
     // from the manifest — operator config is READ for its denies only, never
-    // written. The default-profile run (c35) is the documented baseline.
+    // written. The default-profile run is the documented baseline.
     let operator_denies = cfg.permissions.deny.clone();
     let tool_names: Vec<String> = registry.names().iter().map(|s| s.to_string()).collect();
-    // Tools-off axis (chunk 41): loop-invariant single-arm tool list (empty
+    // Tools-off axis: loop-invariant single-arm tool list (empty
     // under the flag) — the loop arm always keeps the full list.
     let single_tools = polymorph_review::single_tool_list(single_no_tools, &tool_names);
     std::fs::create_dir_all(&record)
         .map_err(|e| anyhow::anyhow!("cannot create {}: {e}", record.display()))?;
-    // Pid- + sequence-scoped work parent (traps #47: pid alone races
+    // Pid- + sequence-scoped work parent (pid alone races
     // in-process callers); one subdir per task, removed with the parent on
     // EVERY exit via the guard below.
     static BENCH_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -1538,8 +1532,8 @@ async fn run_bench_live(
             max_tool_rounds,
             polymorph_review::select_preamble(minimal_preamble),
         );
-        // Apparatus stability: the bench keeps chunk 154's single
-        // verification bonus (docket #7 scaling stays off its boards).
+        // Apparatus stability: the bench keeps a single
+        // verification bonus (scaling stays off its boards).
         fixer.max_bonus_tool_rounds = 1;
         fixer.history = polymorph_review::ToolHistoryBudget::off();
         Arc::new(fixer)
@@ -1554,11 +1548,11 @@ async fn run_bench_live(
             let dir = parent.join(format!("{}-{}", task.id, bench_arm.as_str()));
             std::fs::create_dir_all(&dir)
                 .map_err(|e| anyhow::anyhow!("cannot create {}: {e}", dir.display()))?;
-            // Chunk 43: the single/tools-on arm materializes a repo and works
+            // The single/tools-on arm materializes a repo and works
             // a merged Branch worktree (merge-back live); loop + tools-off
             // arms stay on plain copies (comparability + no tools to merge).
-            // Chunk 44: `--loop-worktree` graduates the loop arm the same way
-            // (repo + per-turn kept Branch merges); default off keeps c39-c43
+            // `--loop-worktree` graduates the loop arm the same way
+            // (repo + per-turn kept Branch merges); default off keeps prior
             // boards comparable.
             let single_worktree = matches!(bench_arm, BenchArm::Single) && !single_no_tools;
             let loop_repo = matches!(bench_arm, BenchArm::Loop) && loop_worktree;
@@ -1631,7 +1625,7 @@ async fn run_bench_live(
                         workdir: polymorph_delegate::WorkdirSpec::InPlace(dir.clone()),
                         tools: tool_names.clone(),
                         tool_outcomes: outcomes.clone(),
-                        // Chunk 44: opt-in per-turn Branch merges (repo is a
+                        // Opt-in per-turn Branch merges (repo is a
                         // `materialize_repo` repo exactly when `loop_repo`;
                         // reviewer stays InPlace — only fix turns merge).
                         merge: if loop_repo {
@@ -1643,7 +1637,7 @@ async fn run_bench_live(
                         } else {
                             None
                         },
-                        // Bench boards must not move under the chunk-110 loop
+                        // Bench boards must not move under the loop
                         // change (apparatus stability) — stays None.
                         artifact_path: None,
                         peripherals: None,
@@ -1683,7 +1677,7 @@ async fn run_bench_live(
                     )
                 }
                 BenchArm::Single => {
-                    // Chunk 43: tools-on single works a kept Branch worktree
+                    // Tools-on single works a kept Branch worktree
                     // (merged before scoring); tools-off stays InPlace.
                     let workdir = if single_worktree {
                         polymorph_delegate::WorkdirSpec::Worktree {
@@ -1724,7 +1718,7 @@ async fn run_bench_live(
                             );
                         }
                     }
-                    // Merge-back (chunk 43): a kept tree merges into the
+                    // Merge-back: a kept tree merges into the
                     // case repo BEFORE scoring (single child → conflict
                     // impossible; any merge trouble scores the tree as-is,
                     // loudly, like stopped/failed children above).
@@ -1778,11 +1772,11 @@ async fn run_bench_live(
                 task: task.id.clone(),
                 arm: bench_arm.as_str().to_string(),
                 profile: {
-                    // Runner/axis stamps compose (chunk 43/44), then the chunk-45
+                    // Runner/axis stamps compose, then the
                     // preamble suffix rides outermost — all replay-opaque.
                     let base = match bench_arm {
-                        // Chunk 43: worktree-merged singles stamp the runner;
-                        // tools-off singles keep the axis stamp; chunk 44: loop
+                        // Worktree-merged singles stamp the runner;
+                        // tools-off singles keep the axis stamp; loop
                         // worktrees stamp theirs; plain loop keeps the base.
                         BenchArm::Single if single_no_tools => {
                             polymorph_review::single_record_profile(&tool_profile, true)
@@ -1818,7 +1812,7 @@ async fn run_bench_live(
             );
         }
     }
-    // Board + delta + strict gate (F5d precedent: variance must hurt).
+    // Board + delta + strict gate (precedent: variance must hurt).
     // Profile stamped on every line: boards attribute to the selected profile.
     println!("profile: {tool_profile}");
     let mut reds: Vec<String> = Vec::new();
@@ -1926,9 +1920,9 @@ fn run_bench_check(path: std::path::PathBuf, min_rate: f64) -> anyhow::Result<()
 }
 
 /// `review plan show`: parse + validate a PLAN.md file and print the board
-/// (Epic G surfacing, chunk 48). Offline, no key. Parse faults exit 1
-/// naming the line (the fault text already does — F5c precedent).
-/// Plan source for show/drive (chunk 51): checkpoint wins when present
+/// (surfacing). Offline, no key. Parse faults exit 1
+/// naming the line (the fault text already does precedent).
+/// Plan source for show/drive: checkpoint wins when present
 /// (resume), else the session store when `--session` names a session with
 /// a saved plan, else the PLAN.md file. The title ALWAYS comes from the
 /// file (checkpoint precedent — the file is the human artifact, the store
@@ -2013,7 +2007,7 @@ async fn run_plan_show(
 }
 
 /// `review plan drive`: drive a PLAN.md file through per-task reviewer loops
-/// with executor write-back (Epic G drive slice live, chunk 48). Text-only
+/// with executor write-back (drive slice live). Text-only
 /// plan fixer (tools orthogonal — bounded first drive); InPlace cwd workdir
 /// (no files touched: the PLAN.md itself is only read, `--out` written).
 /// Checkpoint resumes when it exists (opt-in file, never implicit). Needs
@@ -2033,7 +2027,7 @@ async fn run_plan_drive(
 ) -> anyhow::Result<()> {
     use polymorph_review::{BusReviewer, FixTurnRunner, LlmTarget, ReviewTurnRunner};
     use std::sync::Arc;
-    // Source graph: checkpoint > session store > PLAN.md file (chunk 51
+    // Source graph: checkpoint > session store > PLAN.md file
     // resolver — the file always supplies the title, checkpoint precedent;
     // drive initializes its slot, show stays read-only). Every boundary
     // validates — corrupt state is a hard error naming the fault, never a
@@ -2140,7 +2134,7 @@ async fn run_plan_drive(
     Ok(())
 }
 
-/// `review run`: live plan/act loop (Epic F2a + F2b + F3b). Bus-backed LLM
+/// `review run`: live plan/act loop. Bus-backed LLM
 /// reviewer + fixer children over the D1-managed role chains; needs provider
 /// auth (the same ambient/injected keys as `exec`). Reviewer always rides
 /// Review and stays tool-free; the fixer rides Act in act mode, Plan in plan
@@ -2152,7 +2146,7 @@ async fn run_plan_drive(
 /// back = G). Spend guards: `--max-rounds`
 /// caps LLM rounds (each round = 1 review turn + ≤1 fix turn);
 /// `--max-tool-rounds` caps model→tools→results feeds per fix turn.
-/// Live-loop parts shared by `run` and `drive` (chunk 141 extraction:
+/// Live-loop parts shared by `run` and `drive` (extraction:
 /// mechanical move of `run_review_live`'s wiring — behavior identical).
 struct LiveLoopParts {
     reviewer: polymorph_review::HarnessGateReviewer<polymorph_review::BusReviewer>,
@@ -2163,13 +2157,13 @@ struct LiveLoopParts {
     artifact: String,
     mode: polymorph_review::LoopMode,
     wt_parent: std::path::PathBuf,
-    /// Round-1 CREATE/START seed (docket #7): `Some` replaces the round-1
+    /// Round-1 CREATE/START seed: `Some` replaces the round-1
     /// reviewer call with the harness-authored finding.
     seed: Option<polymorph_review::RoundSeed>,
-    /// Restore ledger of a rollback run (docket #8): `Some` only for
+    /// Restore ledger of a rollback run: `Some` only for
     /// in-place `--tools` runs whose `--on-fail` resolves to rollback.
     restore: Option<std::sync::Arc<polymorph_review::RestoreLedger>>,
-    /// The tool reviewer (docket #4): `Some` only with reviewer tools on;
+    /// The tool reviewer: `Some` only with reviewer tools on;
     /// its per-call reports annotate the board and `--events-json`.
     review_tools: Option<std::sync::Arc<polymorph_review::ToolReviewTurnRunner>>,
     /// The `--repo` drive worktree: `Some` for the whole drive, removed by
@@ -2193,7 +2187,7 @@ impl LiveLoopParts {
         }
         scrub_worktree_parent(&self.wt_parent);
     }
-    /// The tool reviewer's per-call reports so far (docket #4; empty with
+    /// The tool reviewer's per-call reports so far (empty with
     /// reviewer tools off).
     fn review_reports(&self) -> Vec<polymorph_review::ReviewToolReport> {
         self.review_tools
@@ -2217,7 +2211,7 @@ impl LiveLoopParts {
         .await
     }
 
-    /// [`Self::run`] under the docket-#8 rollback guard: a pass keeps every
+    /// [`Self::run`] under the rollback guard: a pass keeps every
     /// edit, any other outcome rolls back (`Some` report), and so does a
     /// panic or a dropped future (the guard's drop). `cli`: Ctrl-C drops the
     /// in-flight turn, rolls back, prints the summary and errors; a TUI
@@ -2289,7 +2283,7 @@ impl Drop for LiveLoopParts {
     }
 }
 
-/// `[agent]` output bounding of a registry's `bash` tool (docket #9).
+/// `[agent]` output bounding of a registry's `bash` tool.
 fn output_spill(
     agent: &polymorph_core::config::AgentConfig,
 ) -> polymorph_tools::output::SpillConfig {
@@ -2299,7 +2293,7 @@ fn output_spill(
     }
 }
 
-/// `[agent]` tool-history budget of a fixer (docket #9).
+/// `[agent]` tool-history budget of a fixer.
 fn tool_history(
     agent: &polymorph_core::config::AgentConfig,
 ) -> polymorph_review::ToolHistoryBudget {
@@ -2309,7 +2303,7 @@ fn tool_history(
     }
 }
 
-/// Which command builds the loop (docket #8): drives default to `[agent]
+/// Which command builds the loop: drives default to `[agent]
 /// drive_on_fail` and hide their own `--events-json` ledger from fixer
 /// scans; `review run` keeps a failed attempt unless `--on-fail` asks.
 #[derive(Debug, Default, Clone, Copy)]
@@ -2371,7 +2365,7 @@ async fn prepare_live_loop(
     } = args;
     let mode = polymorph_review::LoopMode::parse(mode)
         .ok_or_else(|| anyhow::anyhow!("unknown mode {mode:?} (plan|act)"))?;
-    // Docket #5: `--artifact-files` / `--diff` grade a set (with
+    // `--artifact-files` / `--diff` grade a set (with
     // `--artifact-file` as its first member); neither = the single-file
     // path below, byte for byte.
     let artifact_set = live_artifact_set(artifact_file.as_deref(), artifact_files, diff.as_deref());
@@ -2432,7 +2426,7 @@ async fn prepare_live_loop(
         Some(tree) => tree.path().to_path_buf(),
         None => std::env::current_dir()?,
     });
-    // LSP error gate (docket #3): flag or `[agent]` toggle, fixer-side
+    // LSP error gate: flag or `[agent]` toggle, fixer-side
     // record + reviewer-side veto. Only `--tools` fixers consult LSP, so
     // without it the gate would never fire — say so instead of arming it.
     let lsp_gate = if *lsp_error_gate || cfg.agent.lsp_error_gate {
@@ -2445,7 +2439,7 @@ async fn prepare_live_loop(
     } else {
         None
     };
-    // Verify-command gate (docket #2): a non-empty flag list replaces the
+    // Verify-command gate: a non-empty flag list replaces the
     // `[agent]` list. Blank commands and a zero timeout bail pre-spend
     // (`cmd /C ""` would "pass" while verifying nothing).
     let verify_cmds = if verify_cmd.is_empty() {
@@ -2468,12 +2462,12 @@ async fn prepare_live_loop(
             &verify_cmds,
         ))
     });
-    // Reviewer tools (docket #4): flag or `[agent]` toggle.
+    // Reviewer tools: flag or `[agent]` toggle.
     let reviewer_tools = *reviewer_tools || cfg.agent.reviewer_tools;
     if reviewer_tools && cfg.agent.reviewer_tool_rounds == 0 {
         anyhow::bail!("[agent] reviewer_tool_rounds must be at least 1");
     }
-    // Docket #5: the set's first rendering is the round-1 artifact; git
+    // The set's first rendering is the round-1 artifact; git
     // and glob faults refuse the run here, before any spend.
     let (artifact, set_seed) = match (&artifact_set, &workdir) {
         (Some(set), polymorph_delegate::WorkdirSpec::InPlace(dir)) => {
@@ -2499,7 +2493,7 @@ async fn prepare_live_loop(
         // Set CREATE rule: every member a missing declared path, no diff.
         None => set_seed.filter(|_| !opted_out),
     };
-    // Rollback ledger (docket #8): only where a failed drive can leave
+    // Rollback ledger: only where a failed drive can leave
     // edits behind — the operator's tree and a fixer with file tools
     // (text-only fixers never write; a `--repo` drive tree is discarded
     // whole, so the operator's tree has nothing to roll back).
@@ -2523,7 +2517,7 @@ async fn prepare_live_loop(
     };
     // Tool scope for `--tools`: the full V1 floor, Gate-enforced per call.
     // Text-only (default) records an empty scope, as before.
-    // MCP servers (chunk 55): enrolled from config when `--tools` is on —
+    // MCP servers: enrolled from config when `--tools` is on —
     // fail-soft per server, names join the model allowlist, the unchanged
     // Gate still enforces every call.
     let mut registry = polymorph_tools::registry::v1_registry();
@@ -2533,37 +2527,37 @@ async fn prepare_live_loop(
     if *tools {
         tool_names
             .extend(polymorph_tools::mcp::wire_mcp_servers(&mut registry, &cfg.mcp_servers).await);
-        // LSP servers (chunk 95 + full-roster config): enrolled from
+        // LSP servers (+ full-roster config): enrolled from
         // `[[lsp_servers]]` when `--tools` is on — fail-soft per entry
         // (warn + continue), lazy spawn on first write. Bench stays
         // unwired (apparatus stability, the MCP-stated reason).
         lsp_languages = polymorph_tools::lsp::wire_lsp_servers(&registry, &cfg.lsp_servers).await;
-        // DAP adapters (chunk 108): enrolled from config when `--tools`
+        // DAP adapters: enrolled from config when `--tools`
         // is on — fail-soft per entry (warn + continue), DAP tool names
         // are already in the V1 floor so only specs enroll here. Bench
         // deliberately stays unwired (apparatus stability); ACP serve
         // stays unwired (NOT here, stated). The unchanged Gate still
         // enforces every `dap_<op>:<program>` call.
         let _enrolled = polymorph_tools::dap::wire_dap_adapters(&registry, &cfg.dap_adapters).await;
-        // RenderDoc binary (chunk 112): single enroll from `[renderdoc]`,
+        // RenderDoc binary: single enroll from `[renderdoc]`,
         // fail-soft (warn past a bad path); the `rdoc_capture` name rides
         // the V1 floor already. Bench/ACP stay unwired (108 precedent).
         let _rdoc = polymorph_tools::renderdoc::wire_renderdoc(&registry, &cfg.renderdoc.cmd).await;
-        // Web backend (chunk 120, P1b): enroll `[web]` (fail-soft like
+        // Web backend: enroll `[web]` (fail-soft like
         // rdoc); the `web_search`/`web_extract` names ride the V1 floor
         // already. Bench/ACP stay unwired (108 precedent).
         let _web = polymorph_tools::web::wire_web(&registry, &cfg.web).await;
     } else if reviewer_tools {
-        // Docket #4: a tool reviewer's `lsp_*` lookups need the servers
+        // A tool reviewer's `lsp_*` lookups need the servers
         // even when the fixer is text-only (which never consults them).
         lsp_languages = polymorph_tools::lsp::wire_lsp_servers(&registry, &cfg.lsp_servers).await;
     }
-    // Script hooks (chunk 87): bad `[[hooks]]` config bails pre-spend
+    // Script hooks: bad `[[hooks]]` config bails pre-spend
     // (fail-closed — a typo'd hook never silently degrades to ambient).
     registry
         .apply_script_hooks(&cfg.hooks)
         .map_err(|e| anyhow::anyhow!("invalid [[hooks]] config: {e:#}"))?;
-    // Docket #8: the drive's own events ledger (any name — a rerun usually
+    // The drive's own events ledger (any name — a rerun usually
     // reuses the last run's path) never surfaces in fixer `grep`/`glob`.
     if let Some(path) = entry.events_json {
         let path = if path.is_absolute() {
@@ -2578,7 +2572,7 @@ async fn prepare_live_loop(
         registry.hide_from_scans(tree.path().join(polymorph_delegate::WORKTREE_MARKER));
     }
     let registry = std::sync::Arc::new(registry);
-    // Reviewer (docket #4): opt-in read-only tool loop over the shared
+    // Reviewer: opt-in read-only tool loop over the shared
     // registry (same LSP pool, spill policy, hooks and scan hiding); off =
     // the single text turn, byte-identical.
     let review_target = LlmTarget::Managed {
@@ -2643,7 +2637,7 @@ async fn prepare_live_loop(
         fixer.history = tool_history(&cfg.agent);
         fixer.command_changes = cfg.agent.command_change_max_files;
         fixer.restore = restore.clone();
-        // S advisor (chunk 126): project toggle (`[advisor] enabled`);
+        // S advisor: project toggle (`[advisor] enabled`);
         // off = pre-S behavior exactly (bench ablation below unwired).
         if cfg.advisor.enabled {
             fixer.advisor = Some(polymorph_review::AdvisorRunner::managed(
@@ -2666,7 +2660,7 @@ async fn prepare_live_loop(
                 router,
                 providers: cfg.providers.clone(),
                 state,
-                // Mode-routed (chunk-12 fix — was hardcoded Act, which sent
+                // Mode-routed (fix — was hardcoded Act, which sent
                 // plan-fix turns down the act chain): Plan in plan mode.
                 role: mode.executor_role(),
                 scope: scope.clone(),
@@ -2686,7 +2680,7 @@ async fn prepare_live_loop(
         }),
         None => runner,
     };
-    // Docket #8: after each whole turn (verify commands included), adopt
+    // After each whole turn (verify commands included), adopt
     // the tracked files' state, so command-made edits roll back too.
     let runner: Arc<dyn polymorph_delegate::TurnRunner> = match &restore {
         Some(ledger) => Arc::new(polymorph_review::RestoreRefreshRunner {
@@ -2702,14 +2696,14 @@ async fn prepare_live_loop(
         tools: if *tools { tool_names } else { Vec::new() },
         tool_outcomes: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
         merge: None,
-        // Empty-text fallback (chunk 110): the file always exists here
+        // Empty-text fallback: the file always exists here
         // (read at fn start), so grading file work on blank child text
         // is honest in every mode; non-empty text keeps exact behavior.
         artifact_path: artifact_file,
-        // Docket #1: the reviewer grades every file the fixer
+        // The reviewer grades every file the fixer
         // mutated, not only the artifact file.
         peripherals: Some(Default::default()),
-        // Docket #5: `Some` grades the whole set from disk each round.
+        // `Some` grades the whole set from disk each round.
         artifact_set,
     };
     let loop_cfg = polymorph_core::LoopConfig {
@@ -2813,7 +2807,7 @@ fn repo_relative(repo: &std::path::Path, raw: &str) -> anyhow::Result<String> {
     })
 }
 
-/// The review scope the set flags ask for (docket #5): `None` without
+/// The review scope the set flags ask for: `None` without
 /// `--artifact-files` and `--diff` (single-file mode, unchanged); else
 /// `--artifact-file` first, then each `--artifact-files` value, plus the
 /// diff base.
@@ -2836,10 +2830,9 @@ fn live_artifact_set(
     })
 }
 
-/// CREATE seed decision (docket #7): exactly when the reviewer brief would
+/// CREATE seed decision: exactly when the reviewer brief would
 /// carry the CREATE note (missing file, empty text) and the operator has
-/// not opted out. An existing file, even empty, stays review-first (the
-/// chunk-166 ruling).
+/// not opted out. An existing file, even empty, stays review-first.
 fn live_create_seed(
     opted_out: bool,
     workdir: &polymorph_delegate::WorkdirSpec,
@@ -2854,7 +2847,7 @@ fn live_create_seed(
 
 /// Print one loop board (the `run` dialect, verbatim — shared so `run`
 /// and `drive` cannot drift apart). `review_tools`: the tool reviewer's
-/// per-call reports (docket #4; empty = reviewer tools off, the board
+/// per-call reports (empty = reviewer tools off, the board
 /// byte-identical), each printed under the round it reviewed.
 fn print_loop_report(
     report: &polymorph_review::LoopReport,
@@ -2887,7 +2880,7 @@ fn print_loop_report(
     }
 }
 
-/// The tool reviewer report of each round (docket #4), in round order:
+/// The tool reviewer report of each round, in round order:
 /// one report per reviewer call, so they pair off with the rounds that
 /// called the reviewer (every round but a harness-seeded one), oldest
 /// first. `None` for seeded rounds and when reviewer tools are off.
@@ -2910,7 +2903,7 @@ fn reviewed_round_reports<'a>(
 }
 
 /// Attach each reviewed round's tool report to its `verdict` event as one
-/// additive `reviewer_tools` object (docket #4), so existing consumers
+/// additive `reviewer_tools` object, so existing consumers
 /// keep parsing; nothing changes with reviewer tools off.
 fn attach_review_tools(
     events: &mut serde_json::Value,
@@ -2931,7 +2924,7 @@ fn attach_review_tools(
 }
 
 /// Board/event marker of a round whose verdict was not a parsed model
-/// reply: a harness-seeded round (docket #7; names the seed rule, CREATE
+/// reply: a harness-seeded round (names the seed rule, CREATE
 /// or START) or an Invalid round (says why). Empty for every other round,
 /// so their boards and event files stay byte-identical.
 fn round_suffix(r: &polymorph_review::RoundRecord) -> String {
@@ -2964,7 +2957,7 @@ fn invalid_reason(r: &polymorph_review::RoundRecord) -> Option<String> {
 }
 
 /// Remove the pid worktree parent (empty by now — ignore errors). The bus
-/// auto-removes each worktree; this is the parent-dir half (F2b precedent).
+/// auto-removes each worktree; this is the parent-dir half (precedent).
 fn scrub_worktree_parent(wt_parent: &std::path::Path) {
     let _ = std::fs::remove_dir(wt_parent);
 }
@@ -3088,7 +3081,7 @@ async fn run_review_live(
     Ok(())
 }
 
-/// Rollback summary lines on the board (docket #8; nothing when the run
+/// Rollback summary lines on the board (nothing when the run
 /// kept its tree).
 fn print_rollback(rollback: Option<&polymorph_review::RollbackReport>) {
     for line in rollback.map(|r| r.summary_lines()).unwrap_or_default() {
@@ -3096,7 +3089,7 @@ fn print_rollback(rollback: Option<&polymorph_review::RollbackReport>) {
     }
 }
 
-/// Attach the rollback report to the terminal `halted` event (docket #8):
+/// Attach the rollback report to the terminal `halted` event:
 /// one additive `rollback` key, so existing consumers keep parsing.
 fn attach_rollback(events: &mut serde_json::Value, rollback: &polymorph_review::RollbackReport) {
     let halted = events.as_array_mut().and_then(|evs| {
@@ -3112,7 +3105,7 @@ fn attach_rollback(events: &mut serde_json::Value, rollback: &polymorph_review::
 
 /// `review drive`: goal-as-text in (no ingestion — softened charter),
 /// `DriveEvent` vec JSON out (TUI machine seam), human board on stdout.
-/// DAG pre-pass and merge-back explicitly out (docketed next slices).
+/// DAG pre-pass and merge-back are explicitly out of scope here.
 async fn run_review_drive(
     args: Box<ReviewRunArgs>,
     events_json: Option<std::path::PathBuf>,
@@ -3187,8 +3180,8 @@ async fn run_review_drive(
 }
 
 /// `review eval-ab`: the SAME seeded case through two live reviewer arms
-/// (Epic F4b, TBM-15 live half). Arm A reviews on `review_model_a`, arm B
-/// on `review_model_b` (both qualified through claiming entries, chunk 13;
+/// Arm A reviews on `review_model_a`, arm B
+/// on `review_model_b` (both qualified through claiming entries;
 /// qualified specs pass through untouched). Both fixers share the mode
 /// executor chain text-only — the reviewer model is the isolated variable.
 /// One process, one bus, one shared fallback state (cooldowns shared, same
@@ -3303,7 +3296,7 @@ async fn run_review_eval_ab(
         tools: Vec::new(),
         tool_outcomes: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
         merge: None,
-        // eval-ab boards stay comparable — stays None (chunk-110 scope).
+        // eval-ab boards stay comparable — stays None (scope).
         artifact_path: None,
         peripherals: None,
         artifact_set: None,
@@ -3315,7 +3308,7 @@ async fn run_review_eval_ab(
         tools: Vec::new(),
         tool_outcomes: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
         merge: None,
-        // eval-ab boards stay comparable — stays None (chunk-110 scope).
+        // eval-ab boards stay comparable — stays None (scope).
         artifact_path: None,
         peripherals: None,
         artifact_set: None,
@@ -3357,7 +3350,7 @@ async fn run_review_eval_ab(
 }
 
 /// `eval run`: one live model turn scored against an expected end state
-/// (Epic F5b). Reads `--input`, mints its tag over normalized text (the
+/// . Reads `--input`, mints its tag over normalized text (the
 /// same convention the scorer verifies), renders the F5a prompt, runs ONE
 /// turn on `--model` (qualified + injected, no fallback), scores with the
 /// F5a scorer in a pid-scoped case dir (auto-removed), prints the outcome,
@@ -3505,7 +3498,7 @@ fn run_eval_check(path: std::path::PathBuf, min_rate: f64) -> anyhow::Result<()>
     // stays dev-only); one subdir per recording, whole parent auto-removed
     // at the end. The sequence suffix keeps concurrent in-process runs
     // (tests) off each other's tempdirs — pid alone collides across
-    // threads of one process (chunk-28 lesson: two `check` tests raced on
+    // threads of one process (lesson: two `check` tests raced on
     // one parent and the loser's setup writes failed).
     static CHECK_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let seq = CHECK_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -3520,7 +3513,7 @@ fn run_eval_check(path: std::path::PathBuf, min_rate: f64) -> anyhow::Result<()>
         for file in &files {
             let text = std::fs::read_to_string(file)
                 .map_err(|e| anyhow::anyhow!("cannot read {}: {e}", file.display()))?;
-            // Per-record arm dispatch (chunk 28): each recording declares
+            // Per-record arm dispatch: each recording declares
             // its scorer via the `format` stamp (absent = hashline, so
             // every legacy recording replays unchanged). Scoring under the
             // non-stamped arm would forge data — the loader refuses
@@ -3560,7 +3553,7 @@ fn run_eval_check(path: std::path::PathBuf, min_rate: f64) -> anyhow::Result<()>
     }
 }
 
-/// Default system packs per eval format arm (Chunk 28): `--format` selects
+/// Default system packs per eval format arm: `--format` selects
 /// the default unless `--system-pack` is explicitly overridden (resolved by
 /// `resolve_system_pack` — an explicit non-default path always wins).
 const DEFAULT_HASHLINE_PACK: &str = "prompts/glm/glm-5.3/edit.md";
@@ -3587,7 +3580,7 @@ fn resolve_system_pack(
 /// rename all expressible; the loader still reads legacy string shapes).
 /// `attempts` is provenance like `outcome` (the scorer re-derives, the
 /// loader ignores it — pinned by test). `format` stamps the scoring arm
-/// (chunk 28); `check` dispatches per record through
+/// ; `check` dispatches per record through
 /// `load_recording_with_format`. Shared by `run` (single-element arrays,
 /// 1 attempt) and `sweep` so `check` replays both with zero cases.
 #[allow(clippy::too_many_arguments)]
@@ -3616,7 +3609,7 @@ fn recording_json(
     })
 }
 
-/// Retry feedback for one scored attempt (Epic F5g, pure for tests):
+/// Retry feedback for one scored attempt (pure for tests):
 /// `None` stops (Pass — terminal success); `Some(text)` retries with the
 /// text appended to the next attempt's prompt. Non-leakage by
 /// construction: Extract/Apply displays name faults/paths (never expected
@@ -3639,7 +3632,7 @@ fn retry_feedback(outcome: &polymorph_tools::CaseOutcome) -> Option<String> {
     }
 }
 
-/// Retry feedback for the str_replace arm (Chunk 28): the SAME shape as
+/// Retry feedback for the str_replace arm: the SAME shape as
 /// `retry_feedback` (attempt parity, design rule 3) with the arm's nouns.
 /// Same non-leakage contract: fault text verbatim, mismatch constant.
 fn retry_feedback_str(outcome: &polymorph_tools::CaseOutcome) -> Option<String> {
@@ -3658,7 +3651,7 @@ fn retry_feedback_str(outcome: &polymorph_tools::CaseOutcome) -> Option<String> 
     }
 }
 
-/// One parsed B6 corpus task (Epic F5d sweep input). `files`/`expected`
+/// One parsed B6 corpus task (sweep input). `files`/`expected`
 /// sorted by name; `expect_error` carries the rejection variant when the
 /// corpus declares one (those tasks skip — byte-compare cannot score a
 /// rejection, and a live turn mints live tags so it could never reproduce
@@ -3761,7 +3754,7 @@ struct SweepCase {
 /// silently: every skip prints with its class at runtime). Only
 /// rejection tasks skip — byte-compare cannot score a rejection, and a
 /// live turn mints live tags so it could never reproduce the stale setup.
-/// Under the str_replace arm (chunk 28, D1) two more shapes skip NAMED:
+/// Under the str_replace arm two more shapes skip NAMED:
 /// whole-file deletion (empty `expected`) and rename/create (file-name
 /// sets differ) — substitution has no form for either, so forcing them
 /// would measure the contract gap, not the format.
@@ -3830,7 +3823,7 @@ fn select_only(
     }
 }
 
-/// Per-task pass tally over repeated run boards (Epic F5h, pure for
+/// Per-task pass tally over repeated run boards (pure for
 /// tests): `(id, passed, total)` sorted by id. Boards may differ in
 /// membership only if `--only` changed between runs (never in one sweep
 /// — same cases every run); unknown ids merge by name regardless.
@@ -3852,11 +3845,11 @@ fn stability_table(boards: &[polymorph_tools::Scoreboard]) -> Vec<(String, usize
         .collect()
 }
 
-/// Sweep the corpus live (Epic F5d): one turn per scorable case on
-/// `--model` (qualified + injected, no fallback — chunk-19 attribution
+/// Sweep the corpus live: one turn per scorable case on
+/// `--model` (qualified + injected, no fallback — attribution
 /// precedent), scored in pid-parent/run-N/case-id/attempt-M subdirs, one
 /// recording per case per run for `eval check`. Skips print named (never
-/// silent). `--runs N` repeats the matrix (F5h); pooled board gated.
+/// silent). `--runs N` repeats the matrix; pooled board gated.
 /// Red gate bails non-zero. No Ctrl-C wiring (short bounded calls —
 /// review-live precedent, stated not hidden).
 async fn run_eval_sweep(
@@ -3909,12 +3902,12 @@ async fn run_eval_sweep(
     std::fs::create_dir_all(&record)
         .map_err(|e| anyhow::anyhow!("cannot create {}: {e}", record.display()))?;
     // Pid-scoped parent (check precedent); the guard removes it on EVERY
-    // exit including mid-loop live bails (chunk-20 audit lesson).
+    // exit including mid-loop live bails (audit lesson).
     let parent = std::env::temp_dir().join(format!("polymorph-eval-sweep-{}", std::process::id()));
     std::fs::create_dir_all(&parent)
         .map_err(|e| anyhow::anyhow!("cannot create {}: {e}", parent.display()))?;
     let _guard = RemoveOnDrop(parent.clone());
-    // Matrix repeats (F5h): same cases every run; one client + fallback
+    // Matrix repeats: same cases every run; one client + fallback
     // state for the whole invocation (cooldowns shared, as within a run).
     let mut run_boards: Vec<polymorph_tools::Scoreboard> = Vec::new();
     let mut run_firsts: Vec<usize> = Vec::new();
@@ -3931,7 +3924,7 @@ async fn run_eval_sweep(
         let mut first_passed: usize = 0;
         for case in &cases {
             // Arm-specific prompt: hashline mints one live tag per file
-            // (F3b read-tag-mint precedent — identical tags across
+            // (read-tag-mint precedent — identical tags across
             // attempts); str_replace shows plain files (no tags exist in
             // that arm — showing them would leak hashline concepts).
             let base_prompt = match format {
@@ -4078,7 +4071,7 @@ async fn run_eval_sweep(
 }
 
 /// Removes a temp dir on drop — EVERY exit runs it, including `?` bails
-/// (chunk-20 audit lesson: removal after the fallible section strands on
+/// (audit lesson: removal after the fallible section strands on
 /// early returns; the closure wrap fixed sync code but cannot carry async
 /// borrows out of its body, so the guard owns the path instead).
 struct RemoveOnDrop(std::path::PathBuf);
@@ -4124,11 +4117,11 @@ async fn run_eval(
     }
 }
 
-/// `exec`: single streamed turn over the `default` role chain (Epic A3).
+/// `exec`: single streamed turn over the `default` role chain.
 ///
-/// Chunk 7 (Epic D): turns run managed — path scope selects D1b pins, the
-/// provider mapped to each model donates one pool key (D1c/D1d injection),
-/// 429s cool down per model with restore (D1a). `--model` is the operator's
+/// Turns run managed — path scope selects D1b pins, the
+/// provider mapped to each model donates one pool key (injection),
+/// 429s cool down per model with restore. `--model` is the operator's
 /// manual override: single attempt, injection still applies, no fallback.
 ///
 /// Ctrl-C cancels the token: the stream fold returns its partial text with
@@ -4136,7 +4129,7 @@ async fn run_eval(
 /// cancelled future), and the process exits 130 (conventional SIGINT).
 /// stdout carries ONLY model deltas so `exec` composes in pipes; diagnostics
 /// go to stderr via tracing.
-/// Resolve the `--theme` flag (chunk 84): absent = default theme; unknown
+/// Resolve the `--theme` flag: absent = default theme; unknown
 /// names fail HERE (before terminal takeover — a bad name must never strand
 /// the user's screen in raw mode). Pure, unit-tested.
 fn resolve_theme(name: Option<&str>) -> anyhow::Result<polymorph_tui::Theme> {
@@ -4146,7 +4139,7 @@ fn resolve_theme(name: Option<&str>) -> anyhow::Result<polymorph_tui::Theme> {
     }
 }
 
-/// Model-turn responder for the TUI (chunk 76): collecting sink over the
+/// Model-turn responder for the TUI: collecting sink over the
 /// managed Default-role chain — the `run_exec` path, minus stdout printing.
 /// Config is built once; each turn gets a fresh client + fallback state
 /// (the one-invocation-one-state precedent from `run_exec`).
@@ -4158,7 +4151,7 @@ struct LlmResponder {
     tools: Option<TuiTools>,
 }
 
-/// Agentic tool wiring for TUI chat turns (chunk 148): the full V1 floor
+/// Agentic tool wiring for TUI chat turns: the full V1 floor
 /// plus enrolled backends behind the operator-owned Gate. When absent the
 /// responder stays on today's text-only path (tests, headless callers).
 /// The tools value is built once at startup.
@@ -4167,9 +4160,9 @@ struct TuiTools {
     gate: polymorph_tools::Gate,
     tool_names: Vec<String>,
     max_tool_rounds: u32,
-    /// `[agent] max_bonus_tool_rounds` (docket #7).
+    /// `[agent] max_bonus_tool_rounds`.
     max_bonus_tool_rounds: u32,
-    /// `[agent] tool_history_*` (docket #9).
+    /// `[agent] tool_history_*`.
     history: polymorph_review::ToolHistoryBudget,
     /// `[agent] command_change_max_files` (0 = off).
     command_changes: usize,
@@ -4183,7 +4176,7 @@ const VISION_SYSTEM: &str =
 Read all visible UI text, errors, and structure precisely; quote labels verbatim. \
 Say what is on screen first, then answer. If the image is unreadable, say so instead of guessing.";
 
-/// Workspace context header for TUI turns (chunk 147 + 149): injects the launch
+/// Workspace context header for TUI turns: injects the launch
 /// directory plus a capped top-level listing so "about the workspace" has
 /// ground truth, with honest capabilities (tools enabled when attached).
 fn workspace_context(dir: &std::path::Path, has_tools: bool) -> String {
@@ -4194,7 +4187,7 @@ fn workspace_context(dir: &std::path::Path, has_tools: bool) -> String {
         for entry in rd.flatten() {
             let mut name = entry.file_name().to_string_lossy().into_owned();
             let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
-            // Docket #8: harness state (`.polymorph/`, drive ledgers) is
+            // Harness state (`.polymorph/`, drive ledgers) is
             // not workspace ground truth.
             if polymorph_tools::fs::is_harness_state(&entry.path(), is_dir) {
                 continue;
@@ -4237,9 +4230,9 @@ impl LlmResponder {
         }
     }
 
-    /// Attach the full agentic floor (chunk 148): V1 registry with backends
+    /// Attach the full agentic floor: V1 registry with backends
     /// and script hooks plus the Gate, the review `--tools` recipe ported 1:1.
-    /// Bad hooks fail closed per the chunk-87 norm while backends stay
+    /// Bad hooks fail closed while backends stay
     /// fail-soft per entry. Call once at TUI startup.
     async fn attach_tools(
         &mut self,
@@ -4760,7 +4753,7 @@ Return a concise review with: Verdict: PASS or FAIL, findings if any, and next s
     }
 }
 
-/// Session-store backend for the TUI picker (chunk 77): open-per-call,
+/// Session-store backend for the TUI picker: open-per-call,
 /// mirroring `run_sessions` (no shared handles cross the TUI boundary).
 struct StoreBackend {
     db: std::path::PathBuf,
@@ -4868,7 +4861,7 @@ impl polymorph_tui::drive::Driver for LiveDriver {
         let args = ReviewRunArgs {
             goal,
             artifact_file: Some(artifact_file.clone()),
-            // Single-file drives (docket #5 sets are CLI-only for now).
+            // Single-file drives (sets are CLI-only for now).
             artifact_files: Vec::new(),
             diff: None,
             criteria: String::new(),
@@ -5155,8 +5148,8 @@ impl polymorph_tui::SessionBackend for StoreBackend {
     }
 }
 
-/// Worktree snapshot for the TUI diff pane (chunk 78): short-status plus
-/// diffstat via the git CLI facade (ADR-007). Read-only, fail-soft off-repo
+/// Worktree snapshot for the TUI diff pane: short-status plus
+/// diffstat via the git CLI facade. Read-only, fail-soft off-repo
 /// (the pane renders the refusal as a snapshot, never a crash).
 struct GitDiff;
 
@@ -5184,7 +5177,7 @@ impl polymorph_tui::DiffBackend for GitDiff {
     }
 }
 
-/// Plan-file snapshot for the TUI tasks pane (chunk 78): `./PLAN.md`
+/// Plan-file snapshot for the TUI tasks pane: `./PLAN.md`
 /// parsed with the existing `plan::parse` (the plan_drive artifact).
 /// Missing file = empty snapshot (honest note in the pane, never an error).
 struct PlanFile {
@@ -5318,7 +5311,7 @@ mod tests {
 
     #[test]
     fn workspace_context_lists_top_level_with_dirs_marked() {
-        // Chunk 147 + 149: honest capability ground truth.
+        // Honest capability ground truth.
         let tmp = tempfile::tempdir().unwrap();
         std::fs::write(tmp.path().join("Cargo.toml"), "[x]").unwrap();
         std::fs::create_dir(tmp.path().join("crates")).unwrap();
@@ -5335,7 +5328,7 @@ mod tests {
 
     #[test]
     fn workspace_context_hides_harness_state() {
-        // Docket #8: `.polymorph/` and drive ledgers are not ground truth;
+        // `.polymorph/` and drive ledgers are not ground truth;
         // a project file sharing the ledger suffix still lists.
         let tmp = tempfile::tempdir().unwrap();
         std::fs::create_dir(tmp.path().join(".polymorph")).unwrap();
@@ -5360,7 +5353,7 @@ mod tests {
 
     #[test]
     fn tui_floor_carries_all_v1_tools() {
-        // Chunk 148: "all tools" is the V1 floor, not a subset.
+        // "all tools" is the V1 floor, not a subset.
         let registry = polymorph_tools::registry::v1_registry();
         assert_eq!(registry.len(), 23);
         for name in ["read", "write", "edit", "grep", "glob", "bash"] {
@@ -5370,7 +5363,7 @@ mod tests {
 
     #[test]
     fn tui_gate_denies_on_the_exact_call_path() {
-        // Chunk 148: the Gate enforces every call the agentic turn makes
+        // The Gate enforces every call the agentic turn makes
         // (`registry.call` + `ToolCallContext`, the `execute_tool` shape).
         let tmp = tempfile::tempdir().unwrap();
         std::fs::write(tmp.path().join("note.txt"), "hello").unwrap();
@@ -5397,7 +5390,7 @@ mod tests {
 
     #[test]
     fn fresh_responder_is_text_only_until_attached() {
-        // Chunk 148: `from_config` stays text-only; tools arrive only via
+        // `from_config` stays text-only; tools arrive only via
         // `attach_tools` (tests + headless callers never gain turns).
         let cfg = polymorph_core::config::PolymorphConfig::default();
         let responder = LlmResponder::from_config(&cfg, None);
@@ -5741,7 +5734,7 @@ mod tests {
             assert!(Cli::try_parse_from(&argv).is_ok(), "{argv:?}");
         }
         // `review run` flags reach the parsed tree with values (F2b-part1:
-        // parse layer; managed-target assembly stays live-proven, chunk-10
+        // parse layer; managed-target assembly stays live-proven
         // precedent — stated, not hidden).
         let cli = Cli::try_parse_from([
             "polymorph",
@@ -5767,7 +5760,7 @@ mod tests {
             }
             other => panic!("unexpected parse: {other:?}"),
         }
-        // Plan mode parses with its pack flag (F2b-part2 — both modes live).
+        // Plan mode parses with its pack flag (both modes live).
         let cli = Cli::try_parse_from([
             "polymorph",
             "review",
@@ -5789,13 +5782,13 @@ mod tests {
                     args.plan_pack,
                     std::path::PathBuf::from("prompts/glm/glm-5.3/plan.md")
                 );
-                // Tools default OFF with 30 feed rounds (F3b opt-in).
+                // Tools default OFF with 30 feed rounds (opt-in).
                 assert!(!args.tools);
                 assert_eq!(args.max_tool_rounds, 30);
             }
             other => panic!("unexpected parse: {other:?}"),
         }
-        // `--tools --max-tool-rounds` parse (F3b flag).
+        // `--tools --max-tool-rounds` parse (flag).
         let cli = Cli::try_parse_from([
             "polymorph",
             "review",
@@ -5818,8 +5811,8 @@ mod tests {
             }
             other => panic!("unexpected parse: {other:?}"),
         }
-        // `eval-ab` flags reach the tree with values (F4b: parse layer;
-        // arm-router assembly + live pair stay live-proven, chunk-10
+        // `eval-ab` flags reach the tree with values (parse layer;
+        // arm-router assembly + live pair stay live-proven
         // precedent — stated, not hidden).
         let cli = Cli::try_parse_from([
             "polymorph",
@@ -5874,8 +5867,8 @@ mod tests {
             }
             other => panic!("unexpected parse: {other:?}"),
         }
-        // `eval run` flags reach the tree with values (F5b: parse layer;
-        // live turn + scoring stay live-proven, chunk-10 precedent).
+        // `eval run` flags reach the tree with values (parse layer;
+        // live turn + scoring stay live-proven).
         let cli = Cli::try_parse_from([
             "polymorph",
             "eval",
@@ -5976,7 +5969,7 @@ mod tests {
             }
             other => panic!("unexpected parse: {other:?}"),
         }
-        // `--format str-replace` reaches the tree (chunk 28 baseline arm).
+        // `--format str-replace` reaches the tree (baseline arm).
         let cli = Cli::try_parse_from([
             "polymorph",
             "eval",
@@ -6044,7 +6037,7 @@ mod tests {
             }
             other => panic!("unexpected parse: {other:?}"),
         }
-        // `--runs 3` parses (multi-run aggregation, F5h).
+        // `--runs 3` parses (multi-run aggregation).
         let cli = Cli::try_parse_from([
             "polymorph",
             "eval",
@@ -6081,7 +6074,7 @@ mod tests {
             }) => assert_eq!(args.max_attempts, 1),
             other => panic!("unexpected parse: {other:?}"),
         }
-        // Global --debug reaches the parsed tree (D1f CLI layer).
+        // Global --debug reaches the parsed tree (CLI layer).
         let cli = Cli::try_parse_from(["polymorph", "--debug", "exec", "hi"]).unwrap();
         assert!(cli.debug);
         assert!(cli_overrides(&cli).debug == Some(true));
@@ -6094,7 +6087,7 @@ mod tests {
     fn eval_check_rescores_recordings_offline() {
         // F5c replay without spend: hand-written recordings (NOT model
         // runs) through the real loader + scorer + gate. Tags mint exactly
-        // like score_case's setup (traps #20: normalized, terminator-free).
+        // like score_case's setup (normalized, terminator-free).
         use polymorph_tools::hashline::{apply::normalize, SnapshotStore};
         let live_tag = {
             let mut store = SnapshotStore::new();
@@ -6143,8 +6136,8 @@ mod tests {
         std::fs::remove_file(dir.path().join("broken.eval.json")).unwrap();
         // Missing path, empty dir, and stray-only dir all refuse.
         // No temp survives ANY exit (corrupt bail included — the fix):
-        // scan for the pid-prefixed parents (sequence-suffixed since
-        // chunk 28, so match by prefix, not exact name).
+        // scan for the pid-prefixed parents (sequence-suffixed, so match
+        // by prefix, not exact name).
         let prefix = format!("polymorph-eval-check-{}", std::process::id());
         let strays: Vec<_> = std::fs::read_dir(std::env::temp_dir())
             .unwrap()
@@ -6209,7 +6202,7 @@ mod tests {
         assert_eq!(mv.expected, vec![("o.txt".to_string(), "d\n".to_string())]);
         assert_eq!(skips.len(), 1);
         assert!(skips[0].starts_with("rej:") && skips[0].contains("StaleTag"));
-        // Str_replace arm (D1): rem + mv skip NAMED, multi still scores.
+        // Str_replace arm: rem + mv skip NAMED, multi still scores.
         let (cases_s, skips_s) = sweep_plan(tasks, polymorph_tools::EvalFormat::StrReplace);
         assert_eq!(cases_s.len(), 2);
         assert!(cases_s.iter().any(|c| c.id == "good"));
@@ -6304,7 +6297,7 @@ mod tests {
 
     #[test]
     fn sweep_live_corpus_plans_thirteen_with_seven_named_skips_on_str_replace() {
-        // Arm-S live gate (D1): 13 scorable + 7 named skips (5 rejections
+        // Arm-S live gate: 13 scorable + 7 named skips (5 rejections
         // + rem-file + mv-file, which have no substitution form). Same
         // fixture, same instructions — only the arm moved.
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../");
@@ -6644,9 +6637,9 @@ mod tests {
 
     #[tokio::test]
     async fn plan_show_renders_board_and_refuses_faults() {
-        // Chunk 48 surfacing: a valid PLAN.md boards offline; missing and
+        // A valid PLAN.md boards offline; missing and
         // corrupt inputs fail naming the path/line (never silent, never
-        // partial). Chunk 51: the show path is async (session store); with
+        // partial). The show path is async (session store); with
         // no --session the DB is never touched (any path goes).
         let dir = tempfile::tempdir().unwrap();
         let db = dir.path().join("unused.db");
@@ -6670,7 +6663,7 @@ mod tests {
 
     #[tokio::test]
     async fn plan_source_prefers_checkpoint_then_session_then_file() {
-        // Chunk-51 resolver contract: checkpoint > session > file; title
+        // Checkpoint > session > file; title
         // always from the file; ghosts and corrupt rows are hard errors.
         use polymorph_core::sessions::Store;
         use polymorph_tasks::{Task, TaskGraph};
@@ -6796,8 +6789,8 @@ mod tests {
         assert!(run_sessions(SessionsCmd::Delete { id }, &db).await.is_err());
     }
 
-    /// Verify a prompt-pack manifest (Epic A6/F5 gate — the FIRST code
-    /// behind the `prompts.toml` ENFORCED header): every listed pack exists
+    /// Verify a prompt-pack manifest (the gate behind the
+    /// `prompts.toml` ENFORCED header): every listed pack exists
     /// with matching sha256, and every `.md` under the packs dir is listed
     /// (no shadow packs). Pure over injected read/list fns so fixtures prove
     /// both accept and reject directions; the live test runs it on disk.
@@ -6922,8 +6915,8 @@ mod tests {
 
     #[test]
     fn plan_pack_demands_bare_section() {
-        // Chunk-49 pin: the plan fixer must emit a bare `## [id]` section
-        // that `apply_section` accepts (c48 refused prose). Pin phrases,
+        // The plan fixer must emit a bare `## [id]` section
+        // that `apply_section` accepts (prose was refused). Pin phrases,
         // not the full file — prose may evolve, the contract may not.
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../");
         let text = std::fs::read_to_string(root.join("prompts/glm/glm-5.3/plan.md")).unwrap();
@@ -6944,7 +6937,7 @@ mod tests {
         }
     }
 
-    /// Scripted reviewer (F1 pattern, local copy): pops one verdict per
+    /// Scripted reviewer (pattern, local copy): pops one verdict per
     /// round; exhaustion panics (test bug, loud — loop.rs precedent).
     struct DriveReviewer {
         script:
@@ -7087,17 +7080,17 @@ mod tests {
             }) => {
                 assert_eq!(args.goal, "g");
                 assert_eq!(events_json.unwrap(), std::path::PathBuf::from("ev.json"));
-                // Docket #2: the verify gate is off unless asked for.
+                // The verify gate is off unless asked for.
                 assert!(args.verify_cmd.is_empty());
                 assert_eq!(args.verify_timeout_secs, None);
-                // Docket #8: no flag = the per-command default.
+                // No flag = the per-command default.
                 assert_eq!(args.on_fail, None);
             }
             other => panic!("wrong command: {other:?}"),
         }
     }
 
-    /// Docket #8: `--on-fail` takes exactly rollback|keep; the flag beats
+    /// `--on-fail` takes exactly rollback|keep; the flag beats
     /// config, drives default to `[agent] drive_on_fail`, `run` keeps.
     #[test]
     fn on_fail_flag_and_defaults() {
@@ -7150,7 +7143,7 @@ mod tests {
         assert!(err.contains("drive_on_fail"), "{err}");
     }
 
-    /// Docket #8: the rollback report rides the `halted` event as one
+    /// The rollback report rides the `halted` event as one
     /// additive key; other events and a passing file are untouched.
     #[test]
     fn rollback_attaches_to_the_halted_event_only() {
@@ -7181,7 +7174,7 @@ mod tests {
         assert!(v[1].get("rollback").is_none());
     }
 
-    /// Docket #2: `--verify-cmd` repeats in order (quotes and spaces kept
+    /// `--verify-cmd` repeats in order (quotes and spaces kept
     /// verbatim for the shell), `--verify-timeout-secs` is optional.
     #[test]
     fn verify_cmd_flags_parse_in_order() {
@@ -7215,7 +7208,7 @@ mod tests {
         }
     }
 
-    /// Docket #7: a seeded round's verdict event says it was
+    /// A seeded round's verdict event says it was
     /// harness-synthesized; unseeded drives keep byte-identical events.
     #[tokio::test]
     async fn drive_events_mark_synthesized_round_only() {
@@ -7325,7 +7318,7 @@ mod tests {
         assert_eq!(verdicts[1]["summary"], serde_json::json!("findings=1"));
     }
 
-    /// Docket #7: the seed follows the CREATE-note condition and both
+    /// The seed follows the CREATE-note condition and both
     /// opt-outs (`--no-create-seed`, `[agent] create_seed = false`).
     #[test]
     fn live_create_seed_follows_create_condition_and_opt_out() {
@@ -7375,7 +7368,7 @@ mod tests {
         }
     }
 
-    /// Docket #5: `--artifact-files` repeats, `--diff` takes an optional
+    /// `--artifact-files` repeats, `--diff` takes an optional
     /// base (HEAD when bare), and either one makes `--artifact-file`
     /// optional; with none of the three the run is refused by clap.
     #[test]
@@ -7413,7 +7406,7 @@ mod tests {
         assert!(parse(&[]).is_err());
     }
 
-    /// Docket #5: no set flag → `None` (single-file path, byte for byte);
+    /// No set flag → `None` (single-file path, byte for byte);
     /// otherwise `--artifact-file` leads, then `--artifact-files` in order.
     #[test]
     fn live_artifact_set_orders_members() {
@@ -7427,7 +7420,7 @@ mod tests {
         assert_eq!(set.diff_base.as_deref(), Some("HEAD~1"));
     }
 
-    /// Docket #4: `--reviewer-tools` parses (off by default).
+    /// `--reviewer-tools` parses (off by default).
     #[test]
     fn reviewer_tools_flag_parses() {
         let parse = |extra: &[&str]| {
@@ -7679,7 +7672,7 @@ mod tests {
         let mut parts = prepare_live_loop(&args, &Default::default(), entry)
             .await
             .unwrap();
-        // Docket #8: the operator's tree is never written, so no ledger.
+        // The operator's tree is never written, so no ledger.
         assert!(parts.restore.is_none());
         let tree = parts.drive_tree.as_ref().unwrap().path().to_path_buf();
         assert!(tree.join("src/main.rs").exists());
@@ -7826,7 +7819,7 @@ mod tests {
         assert_eq!(operator_state(repo.path()), before);
     }
 
-    /// CREATE detection reads the drive tree (docket #7 under `--repo`): a
+    /// CREATE detection reads the drive tree (under `--repo`): a
     /// committed empty file stays review-first, a missing one seeds; an
     /// absolute path inside the repo re-spells repo-relative. A drive that
     /// errors out (here: dropped unfinished) still removes its tree.
@@ -7892,7 +7885,7 @@ mod tests {
         assert!(!parent.exists());
     }
 
-    /// Docket #4: tool reviewer reports pair off with the rounds that
+    /// Tool reviewer reports pair off with the rounds that
     /// called the reviewer (a seeded round has none) and ride the
     /// `verdict` events as one additive key; off, events are unchanged.
     #[tokio::test]

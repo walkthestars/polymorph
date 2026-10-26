@@ -1,4 +1,4 @@
-//! TUI themes (Epic J, chunk 80): named color sets over pane chrome.
+//! TUI themes: named color sets over pane chrome.
 //!
 //! Minimal by design: border + accent colors applied to block titles and
 //! borders in `App::draw`. Selection defaults to `default`; unknown names

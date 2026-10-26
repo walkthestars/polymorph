@@ -1,5 +1,5 @@
 //! Command change detection: what a fixer `bash`/`exec` call did to the
-//! workspace (follow-up to dockets #1, #3, #6 and #8).
+//! workspace.
 //!
 //! Only `write`/`edit` targets used to count as mutations, so a `sed -i`,
 //! a code generator, a formatter or an `mv` run through `bash` changed

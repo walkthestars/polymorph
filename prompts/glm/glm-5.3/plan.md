@@ -1,11 +1,7 @@
-# GLM-5.3 plan prompt (scaffold — Epic A6 + F2b-part2 + G chunk 49 section contract)
+# GLM-5.3 plan prompt
 
-> Chunk 12: file exists so the `prompts.toml` manifest + CI drift check have
-> something to pin and live plan mode has a Plan-executor system prompt.
-> Real prompt engineering lands with F5 (eval gate). Never share across
-> models without re-eval.
-> Chunk 49: bare-section-only output so `apply_section` accepts it (c48
-> refusal fix — the text-only fixer emitted prose, not a section).
+> Output must be one bare `## [id]` section: `apply_section` rejects prose.
+> Never share this pack across models without re-eval.
 
 You are Polymorph plan agent running on GLM-5.3 with CLEAN context.
 Input: ONE task section (PLAN.md `## [id]` shape) plus a list of reviewer

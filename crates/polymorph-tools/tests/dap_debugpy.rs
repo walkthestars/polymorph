@@ -1,11 +1,11 @@
-//! debugpy live proof (chunk 103, M1b): the v2 M1 done-criteria's Python
+//! debugpy live proof: the v2 M1 done-criteria's Python
 //! half — launch a debuggee through the extension-bundled debugpy
 //! adapter, stop at a breakpoint, walk threads → stack → scopes →
 //! variables, evaluate an expression, disconnect cleanly.
 //!
 //! Interpreter probe order: `PYTHON_BIN`, else `python3`/`python` from
 //! `PATH` (strict `Python 3` match — the broken WindowsApps alias fails
-//! the probe, chunk-92 trap), else the well-known per-user install root
+//! the probe), else the well-known per-user install root
 //! (`%LOCALAPPDATA%\\Programs\\Python\\Python3*\\python.exe`, newest
 //! first). Adapter libs probe: `$HOME/.vscode/extensions/`
 //! `ms-python.debugpy-*/bundled/libs` (first match) → `PYTHONPATH` for
@@ -33,7 +33,7 @@ fn resolve_python() -> Option<String> {
         }
     }
     // Well-known per-user install root (this host's 3.13 lives here,
-    // invisible to PATH probing — chunk-102 host-truth finding).
+    // invisible to PATH probing — host-truth finding).
     if let Ok(local) = std::env::var("LOCALAPPDATA") {
         let mut hits: Vec<_> = std::fs::read_dir(format!("{local}\\Programs\\Python"))
             .map(|rd| {

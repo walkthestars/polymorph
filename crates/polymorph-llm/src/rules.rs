@@ -1,4 +1,4 @@
-//! Stream rules (Epic R, chunk 123): regex misfire patterns that abort a
+//! Stream rules: regex misfire patterns that abort a
 //! model stream mid-flight and attach the rule's reminder for the retry
 //! (slice 2 re-issues the turn; this slice owns match + abort only).
 //!

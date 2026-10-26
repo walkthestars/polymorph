@@ -1,19 +1,19 @@
-//! `polymorph-tui` — Epic J interactive surface (see `docs/plan-chunk74.md`).
+//! `polymorph-tui` — interactive terminal surface.
 //!
-//! Chunk 75 (skeleton): `App` state machine + hello render + terminal wiring.
-//! Chunk 76 (chat): message log + input editing + `Responder` seam for model
+//! `App` state machine + hello render + terminal wiring.
+//! Message log + input editing + `Responder` seam for model
 //! turns.
-//! Chunk 77 (picker): C3 session picker over the `SessionBackend` seam (Tab
+//! C3 session picker over the `SessionBackend` seam (Tab
 //! toggles, arrows move, Enter switches). All tests are TTY-free: pure key
 //! handling, `FakeResponder`
 //! submit cycles, `TestBackend` buffer-exact rendering. The tracing
-//! subscriber-swap contract (D2) holds STRUCTURALLY — this crate never
+//! subscriber-swap contract holds STRUCTURALLY — this crate never
 //! touches the stderr/file layers, so the JSON ledger keeps recording
 //! while the alternate screen is up.
 
 use std::future::Future;
 
-/// TUI drive mode — offline contract (Chunk 139, post-v1.0 feature).
+/// TUI drive mode — offline contract.
 pub mod drive;
 
 pub mod theme;
@@ -34,8 +34,8 @@ pub fn crate_name() -> &'static str {
     "polymorph-tui"
 }
 
-/// Who said a chat line. Rendered as a `you:`/`model:` prefix (c76 dialect;
-/// richer cards land with the diff/task panes).
+/// Who said a chat line. Rendered as a `you:`/`model:` prefix (a first
+/// dialect; richer cards land with the diff/task panes).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
     User,
@@ -133,7 +133,7 @@ pub struct SessionSummary {
 }
 
 /// Session store access for the picker. Implemented by the CLI over `Store`;
-/// tests use `FakeSessions`. Chat turns stay fresh-conversation (c76 seam)
+/// tests use `FakeSessions`. Chat turns stay fresh-conversation
 /// — the picker manages the store's active session, it does NOT bind turns
 /// (queued follow-up, stated).
 pub trait SessionBackend {
@@ -162,7 +162,7 @@ pub trait SessionBackend {
     }
     /// Load persisted turns for one session (oldest-first, capped).
     /// The `session_id` rides along because the backend is db-scoped while
-    /// the App is session-scoped (c86 refinement of the c85 sketch).
+    /// the App is session-scoped.
     fn history(
         &self,
         session_id: &str,
@@ -191,14 +191,14 @@ pub trait SessionBackend {
 /// Picker selection state. `selected` is always clamped into `sessions`
 /// (empty list is safe: every action no-ops, `selected_id` is `None`).
 /// Visibility lives on `Overlay`, not here — one overlay at a time by
-/// construction (c78), never by cross-checking bools.
+/// construction, never by cross-checking bools.
 #[derive(Debug, Default)]
 pub struct PickerState {
     pub sessions: Vec<SessionSummary>,
     pub selected: usize,
 }
 
-/// Which pane is on screen. Exactly one — overlays never stack (c78 rule).
+/// Which pane is on screen. Exactly one — overlays never stack.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Overlay {
     #[default]
@@ -211,7 +211,7 @@ pub enum Overlay {
     Circuit,
 }
 
-/// Pure key-routing decision (chunk 146): the loop matches on this, so
+/// Pure key-routing decision: the loop matches on this, so
 /// every routing rule is headless-testable. Toggles fire from ANY overlay
 /// (loop precedence preserved); overlay-local keys only in their overlay;
 /// non-Press kinds are `Ignore` (the tent.txt Windows rule, moved in from
@@ -254,7 +254,7 @@ pub struct DiffSnapshot {
 }
 
 /// Worktree access for the diff pane. Implemented by the CLI over the git
-/// CLI facade (ADR-007); tests use `FakeDiff`.
+/// CLI facade; tests use `FakeDiff`.
 pub trait DiffBackend {
     fn snapshot(&self) -> impl Future<Output = anyhow::Result<DiffSnapshot>> + Send;
 }
@@ -305,7 +305,7 @@ pub trait GutterBackend {
 
 /// Empty gutter (bare-TUI placeholder): no shared pool exists on the bare
 /// path, so the pane honestly renders its empty note until the TUI shares
-/// a pool with a tool loop (the chunk-90 channel trigger — same shape).
+/// a pool with a tool loop (same shape as the channel trigger).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct EmptyGutter;
 
@@ -339,7 +339,7 @@ pub const HISTORY_LIMIT: usize = 50;
 /// the live loop agree without passing areas into the state machine.
 pub const PAGE_LINES: usize = 10;
 
-/// Pending ask-user question for the prompt overlay (chunk 89, D3):
+/// Pending ask-user question for the prompt overlay:
 /// which tool wants to run + the handler-supplied question. Binary v1 —
 /// no free-text reason entry (the decision + tool name are the record).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -446,10 +446,10 @@ impl Default for App {
 }
 
 impl App {
-    /// Pure key routing (chunk 146): overlay + code + modifiers + kind →
+    /// Pure key routing: overlay + code + modifiers + kind →
     /// intent. Mirrors the `run()` precedence arm-for-arm: toggles first
     /// (any overlay), then scroll, then overlay-local, then chat submit,
-    /// else type. Esc in chat clears non-empty input, quits on empty (R1).
+    /// else type. Esc in chat clears non-empty input, quits on empty.
     pub fn classify_key(&self, key: KeyEvent) -> KeyIntent {
         if !Self::is_press(&key) {
             return KeyIntent::Ignore;
@@ -559,7 +559,7 @@ impl App {
         }
     }
 
-    /// Clear the input line, keeping status and history (R1: Esc
+    /// Clear the input line, keeping status and history (Esc
     /// defocuses before it quits).
     pub fn clear_input(&mut self) {
         self.input.clear();
@@ -631,7 +631,7 @@ impl App {
 
     /// Record a failed turn WITHOUT killing the session (fail-soft: a bad
     /// key or a 429 must not strand the user in a dead TUI). Returns the
-    /// recorded text so the loop can persist the same line (c86: no format
+    /// recorded text so the loop can persist the same line (no format
     /// duplication between memory and store).
     pub fn push_error(&mut self, err: anyhow::Error) -> String {
         let text = format!("error: {err:#}");
@@ -656,8 +656,8 @@ impl App {
         self.overlay = Overlay::Chat;
     }
 
-    /// Open the ask-user prompt overlay (D3: exclusive, input preserved).
-    /// Overlays never stack (c78 rule) — the prompt takes precedence.
+    /// Open the ask-user prompt overlay (exclusive, input preserved).
+    /// Overlays never stack — the prompt takes precedence.
     pub fn open_prompt(&mut self, tool: String, question: String) {
         self.prompt = PromptState { tool, question };
         self.overlay = Overlay::Prompt;
@@ -666,7 +666,7 @@ impl App {
 
     /// Answer the pending prompt: records the decision in the status line
     /// and returns to chat. The caller owns the underlying tool verdict;
-    /// this only closes the surface (D3: session-only, no persistence).
+    /// this only closes the surface (session-only, no persistence).
     pub fn answer_prompt(&mut self, allow: bool) {
         let tool = self.prompt.tool.clone();
         self.status = if allow {
@@ -1302,9 +1302,9 @@ impl App {
     }
 }
 
-/// Startup bind (chunk 86): derive the active session from the list snapshot
-/// (D5 — no extra round-trip), load its history, fail-soft everything.
-/// No current session = unbound with the draw hint (never auto-create, D4).
+/// Startup bind: derive the active session from the list snapshot
+/// (no extra round-trip), load its history, fail-soft everything.
+/// No current session = unbound with the draw hint (never auto-create).
 async fn bind_initial(app: &mut App, sessions: &impl SessionBackend) {
     let list = match sessions.list().await {
         Ok(list) => list,
@@ -1470,8 +1470,7 @@ pub async fn run<'a>(
                                 }
                             }
                             KeyIntent::ToggleGutter => {
-                                // Gutter pane (methods tested; this arm is review-only,
-                                // the c86 precedent).
+                                // Gutter pane (methods tested; this arm is review-only).
                                 if app.overlay == Overlay::Gutter {
                                     app.close_overlay();
                                 } else {
@@ -1534,7 +1533,7 @@ pub async fn run<'a>(
                                 if let Some(id) = app.selected_id() {
                                     match sessions.switch(id.clone()).await {
                                         Ok(()) => {
-                                            // Session context follows the picker (D2):
+                                            // Session context follows the picker:
                                             // reload history into the log, fail-soft.
                                             // NOTE: picker opens FIRST, status LAST —
                                             // `open_picker` clears status, so confirming
@@ -2084,7 +2083,7 @@ mod tests {
     #[test]
     fn esc_quits_modifiers_ignored() {
         // Matches on code: Shift+Esc still quits (kind/modifiers never gate
-        // the Esc decision — the c75 correction, carried over).
+        // the Esc decision).
         let mut app = App::default();
         app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::SHIFT));
         assert!(app.should_quit);
@@ -2102,7 +2101,7 @@ mod tests {
 
     #[test]
     fn typing_backspace_q_types() {
-        // c75 behavior evolves: `q` types now (Esc/Ctrl-C quit instead).
+        // Quit behavior: `q` types now (Esc/Ctrl-C quit instead).
         let mut app = App::default();
         for c in ['h', 'i', 'q'] {
             app.handle_key(key(KeyCode::Char(c)));
@@ -2114,7 +2113,7 @@ mod tests {
 
     #[test]
     fn shift_uppercase_types_ctrl_char_ignored() {
-        // Chunk 143: uppercase `H` arrives SHIFT-modified on most
+        // Uppercase `H` arrives SHIFT-modified on most
         // terminals — it must type, while Ctrl-modified chars must not.
         let mut app = App::default();
         app.handle_key(KeyEvent::new(KeyCode::Char('H'), KeyModifiers::SHIFT));
@@ -2150,7 +2149,7 @@ mod tests {
 
     #[test]
     fn classify_key_routes_every_arm() {
-        // Chunk 146: the classifier reproduces the loop precedence.
+        // The classifier reproduces the loop precedence.
         use crossterm::event::{KeyEventKind, KeyEventState};
         let press = |code| KeyEvent {
             code,
@@ -2202,7 +2201,7 @@ mod tests {
             chat.classify_key(release(KeyCode::Char('a'))),
             KeyIntent::Ignore
         );
-        // Esc: empty quits, non-empty clears (R1).
+        // Esc: empty quits, non-empty clears.
         assert_eq!(chat.classify_key(press(KeyCode::Esc)), KeyIntent::Quit);
         let typing = App {
             input: "hi".to_string(),
@@ -2290,7 +2289,7 @@ mod tests {
 
     #[test]
     fn esc_clears_input_before_quit() {
-        // Chunk 146 R1: Esc defocuses first, quits second.
+        // Esc defocuses first, quits second.
         let mut app = App {
             input: "half".to_string(),
             ..Default::default()
@@ -2351,7 +2350,7 @@ mod tests {
 
     #[test]
     fn prompt_open_answer_close() {
-        // Exclusive overlay (c78 rule), input preserved, decision recorded.
+        // Exclusive overlay, input preserved, decision recorded.
         let mut app = App {
             input: "half-typed".to_string(),
             ..Default::default()
@@ -2390,7 +2389,7 @@ mod tests {
         assert_eq!(App::prompt_key(press(KeyCode::Esc)), Some(false));
         assert_eq!(App::prompt_key(press(KeyCode::Enter)), None);
         assert_eq!(App::prompt_key(press(KeyCode::Char('q'))), None);
-        // Chunk 143: uppercase answers arrive SHIFT-modified — same verdict.
+        // Uppercase answers arrive SHIFT-modified — same verdict.
         assert_eq!(App::prompt_key(shift_press(KeyCode::Char('Y'))), Some(true));
         assert_eq!(
             App::prompt_key(shift_press(KeyCode::Char('N'))),
@@ -2663,7 +2662,7 @@ mod tests {
 
     #[test]
     fn picker_empty_renders_guidance_not_bare_legend() {
-        // Chunk 144: an empty per-cwd DB rendered only the legend line.
+        // An empty per-cwd DB rendered only the legend line.
         let backend = TestBackend::new(40, 7);
         let mut terminal = Terminal::new(backend).unwrap();
         let mut app = App::default();
@@ -2681,7 +2680,7 @@ mod tests {
 
     #[test]
     fn bind_initial_leaves_resumed_note() {
-        // Chunk 144: silent binds read as "whose session is this".
+        // Silent binds read as "whose session is this".
         let backend = FakeSessions::two();
         let mut app = App::default();
         futures::executor::block_on(bind_initial(&mut app, &backend));
@@ -3085,7 +3084,7 @@ mod tests {
     #[test]
     fn unbound_hint_renders() {
         // 40x7, bound None: wrapped status carries the remedy; input
-        // usable throughout (unbound sessions stay functional, D4).
+        // usable throughout (unbound sessions stay functional).
         let backend = TestBackend::new(40, 7);
         let mut terminal = Terminal::new(backend).unwrap();
         let app = App::default();
