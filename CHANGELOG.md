@@ -5,6 +5,15 @@ All notable changes to Polymorph will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Tool loops now echo provider reasoning back to the model. Thinking-mode
+  providers (DeepSeek `reasoning_content`, Anthropic extended thinking) reject
+  a follow-up request that drops it, so the second tool round of `review run`,
+  `review drive` and the reviewer tool loop could fail outright.
+
 ## [0.1.0] — 2026-10-18
 
 ### Added
