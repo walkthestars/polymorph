@@ -2,8 +2,9 @@
 //!
 //! Each child works in its own `git worktree` so siblings never share a working tree ("no merge
 //! conflicts between siblings"). Implemented over `git` CLI via `tokio::process`
-//! (porcelain completeness, zero unsafe). Merge-back of branches is /G — here: create (detached or
-//! branch), consuming `remove`, and `prune_orphans` for leaked trees.
+//! (porcelain completeness, zero unsafe). Merge-back of branches lives in the review crate;
+//! this module owns create (detached or branch), consuming `remove`, and `prune_orphans` for
+//! leaked trees.
 //!
 //! Orphan criterion: a `.polymorph-child` marker file WE wrote inside the
 //! worktree. Foreign worktrees (no marker) are never touched.
@@ -331,16 +332,26 @@ pub async fn merge_back(kept: KeptWorktree, message: &str) -> Result<MergeReport
             files,
         });
     }
-    if git(&kept.repo, &["merge", "--squash", &branch])
-        .await
-        .is_err()
-    {
+    // Identity first: git refuses to prepare a squash merge at all when no
+    // user.email is resolvable (`Committer identity unknown`, exit 128), so
+    // the merge runs under the same fallback identity as the commit.
+    let id = commit_identity_args(&kept.repo).await;
+    let mut merge_cmd = id.clone();
+    merge_cmd.extend(["merge".to_string(), "--squash".to_string(), branch.clone()]);
+    if let Err(merge_err) = git_ref(&kept.repo, &merge_cmd).await {
         // Squash leaves no MERGE_HEAD, so `--abort` is a no-op here:
         // `reset --hard` clears the conflict debris (the repo was
         // pre-checked clean, so nothing of value is discarded).
         let files = unmerged_files(&kept.repo).await;
         let _ = git(&kept.repo, &["reset", "--hard", "HEAD"]).await;
         let _ = cleanup_kept(&kept).await;
+        // No unmerged paths means the merge died for a non-conflict reason
+        // (locked index, unreadable tree, missing branch). Report the Git
+        // fault verbatim; an empty Conflict would blame the child's content
+        // for a plumbing failure.
+        if files.is_empty() {
+            return Err(MergeError::Git(merge_err.to_string()));
+        }
         return Err(MergeError::Conflict { branch, files });
     }
     // Empty diff (child changed nothing durable): a squash that stages nothing is a clean no-op,
@@ -363,7 +374,6 @@ pub async fn merge_back(kept: KeptWorktree, message: &str) -> Result<MergeReport
             files: Vec::new(),
         });
     }
-    let id = commit_identity_args(&kept.repo).await;
     let mut commit: Vec<String> = vec!["commit".into(), "-m".into(), message.into()];
     let mut full = id;
     full.append(&mut commit);
@@ -620,6 +630,20 @@ mod tests {
         p
     }
 
+    /// Comparison key for a path git may spell differently than we do: 8.3
+    /// short names (`RUNNER~1`) versus the long form, backslashes versus
+    /// slashes, and Windows case. Resolves through the filesystem and drops
+    /// the `\\?\` verbatim prefix `canonicalize` adds. `None` when the path
+    /// no longer resolves (a removed worktree).
+    fn canonical_cmp(path: &Path) -> Option<String> {
+        let canon = std::fs::canonicalize(path).ok()?;
+        let text = canon.to_string_lossy().replace('\\', "/");
+        let text = text
+            .strip_prefix("//?/")
+            .map_or(text.clone(), str::to_string);
+        Some(text.to_ascii_lowercase())
+    }
+
     #[tokio::test]
     async fn detached_create_remove_round_trip() {
         let dir = tempfile::tempdir().unwrap();
@@ -634,21 +658,33 @@ mod tests {
             "c1\n"
         );
         let list = git(&repo, &["worktree", "list"]).await.unwrap();
-        // Match on the worktree PATH (first column), never substring "c1": the temp parent itself
-        // may randomly contain "c1", which made the old `contains` assert luck-dependent.
-        let here = wt.path().to_string_lossy().replace('\\', "/");
+        // Match on the worktree PATH, never substring "c1": the temp parent itself may randomly
+        // contain "c1". Compare through the filesystem: git prints the long form while %TEMP% may
+        // be the 8.3 short form (`C:/Users/RUNNER~1/...` on Windows CI).
+        let here = canonical_cmp(wt.path()).expect("live worktree path resolves");
         let listed = |list: &str| {
             list.lines().any(|l| {
                 l.split_whitespace()
                     .next()
-                    .is_some_and(|p| p.replace('\\', "/") == here)
+                    .and_then(|p| canonical_cmp(Path::new(p)))
+                    .is_some_and(|c| c == here)
             })
         };
-        assert!(listed(&list), "{list}");
+        assert!(
+            listed(&list),
+            "want {here:?} listed in:
+{list}"
+        );
         wt.remove().await.unwrap();
         assert!(!dir.path().join("wt").join("c1").exists());
+        // Registration gone: only the main tree stays listed (count is spelling-independent).
         let list = git(&repo, &["worktree", "list"]).await.unwrap();
-        assert!(!listed(&list), "{list}");
+        assert_eq!(
+            list.lines().count(),
+            1,
+            "still registered:
+{list}"
+        );
     }
 
     #[tokio::test]
