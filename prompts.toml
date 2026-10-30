@@ -24,7 +24,7 @@ sha256 = "1f60c1847c9809d70d8f28b5ad9022e83f0ca85f47ae8f9f6b6b86a82b22507c"
 
 [packs.muse-muse-spark-1-3-review]
 path = "crates/polymorph-prompts/prompts/muse/muse-spark-1.3/review.md"
-sha256 = "c59eeaaa9aeaa40a8a81b9bc52bf9cc76691fd7f4b4e660d727eb5e02ecad15d"
+sha256 = "e39919dff97e49a53c92419a362f2d24dfb79561f6f15903f7107bcbaaabe034"
 
 [packs.glm-glm-5-3-plan]
 path = "crates/polymorph-prompts/prompts/glm/glm-5.3/plan.md"
