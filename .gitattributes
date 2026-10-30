@@ -1,4 +1,10 @@
-# Prompt packs are pinned byte-for-byte by prompts.toml SHA-256 rows.
-# Checkout must never rewrite line endings, or the manifest gate drifts on
-# hosts with core.autocrlf=true (windows-latest CI included).
-prompts/**/*.md text eol=lf
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.rdc binary
+*.crate binary
