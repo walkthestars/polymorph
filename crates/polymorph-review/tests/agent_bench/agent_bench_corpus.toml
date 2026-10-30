@@ -1,5 +1,5 @@
 # Agent-bench seeded corpus (Epic F6) — the deterministic basis of the
-# resolve-rate benchmark (see docs/plan-chunk33.md, docs/plan-chunk34.md).
+# resolve-rate benchmark.
 #
 # Schema per [[task]] (ORDER MATTERS in TOML, traps #16: task-level keys must
 # precede the first [table] header — keys after a [table] header belong to

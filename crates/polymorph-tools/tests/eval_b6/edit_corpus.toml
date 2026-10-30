@@ -1,5 +1,5 @@
 # B6 seeded edit corpus (Epic B6) — the deterministic basis of the omp-style
-# edit benchmark and the M3 eval scoreboard (see docs/eval-b6.md).
+# edit benchmark and the byte-exact scoreboard.
 #
 # Schema per [[task]] (ORDER MATTERS in TOML: `patch` is a task-level key, so
 # it must precede the `[task.files]` sub-table header — keys after a [table]
