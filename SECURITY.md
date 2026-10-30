@@ -13,7 +13,7 @@ Please **do not** report security vulnerabilities through public GitHub issues.
 Use [GitHub Private Vulnerability Reporting](https://github.com/walkthestars/polymorph/security/advisories/new)
 to submit a report privately to the maintainer. Include:
 
-- The affected crate and module (for example, `polymorph-tools::gate`, `polymorph-core::config`, or `polymorph-acp`).
+- The affected crate and module (for example, `polymorph-tools::gate`, `polymorph-core::config`, or `polymorph-mcp`).
 - Configuration or command flags required to trigger the issue.
 - A minimal reproducer and impact assessment.
 
