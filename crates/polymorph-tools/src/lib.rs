@@ -1980,7 +1980,7 @@ fn resolve_path(ctx: &ToolCallContext, raw: &str) -> PathBuf {
 /// argument names (harness readers re-open exactly what `write` wrote).
 pub fn resolve_tool_path(workdir: &Path, raw: &str) -> PathBuf {
     let raw = raw.trim();
-    // Normalize Git Bash style drive letters: "/c/Workspace/..." -> "C:/Workspace/..."
+    // Normalize Git Bash style drive letters: "/c/project/..." -> "C:/project/..."
     let bytes = raw.as_bytes();
     if bytes.len() >= 3 && bytes[0] == b'/' && bytes[1].is_ascii_alphabetic() && bytes[2] == b'/' {
         let drive = (bytes[1] as char).to_ascii_uppercase();

@@ -1,6 +1,6 @@
 //! `tools::web` — serica-backed web client (Epic P, chunk 119).
 //!
-//! Serica (v0.2.0, `C:/Workspace/.projects/serica`) is the extraction
+//! Serica (v0.2.0, <https://github.com/walkthestars/serica>) is the extraction
 //! engine: single static binary, REST + MCP, no keys, SSRF-hardened.
 //! It is AGPL-3.0-only, so this module drives it over HTTP to a local
 //! server (process boundary — serica crates never enter `Cargo.lock`;

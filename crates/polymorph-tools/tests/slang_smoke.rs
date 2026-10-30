@@ -4,15 +4,24 @@
 //! `dap_matrix.rs` (roster: `docs/renderdoc.md`). No agent tool
 //! consumes `.spv` yet — supply-chain + artifact proof only.
 
-/// Resolve `slangc`: absolute winget path first, else PATH probe.
-/// `None` = loud skip (host without slang — build-time acquisition in
-/// the N2a plan; CI without it skips, never reds). NOTE: `slangc` has
-/// NO `--version` flag (E00017) — the probe uses `-h target`, and the
-/// pinned version lives in the winget id, not the binary.
+/// Resolve `slangc`: `SLANGC`, then the winget package under
+/// `%LOCALAPPDATA%`, then PATH. `None` = loud skip (host without slang;
+/// CI without it skips, never reds). NOTE: `slangc` has NO `--version`
+/// flag (E00017) — the probe uses `-h target`, and the pinned version
+/// lives in the winget id, not the binary.
 fn resolve_slangc() -> Option<String> {
-    const INSTALL: &str = "C:/Users/matth/AppData/Local/Microsoft/WinGet/Packages/shader-slang.slang_Microsoft.Winget.Source_8wekyb3d8bbwe/bin/slangc.exe";
-    if std::path::Path::new(INSTALL).is_file() {
-        return Some(INSTALL.to_string());
+    if let Ok(explicit) = std::env::var("SLANGC") {
+        if std::path::Path::new(&explicit).is_file() {
+            return Some(explicit);
+        }
+    }
+    if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+        let install = std::path::PathBuf::from(local).join(
+            "Microsoft/WinGet/Packages/shader-slang.slang_Microsoft.Winget.Source_8wekyb3d8bbwe/bin/slangc.exe",
+        );
+        if install.is_file() {
+            return Some(install.to_string_lossy().into_owned());
+        }
     }
     let ok = std::process::Command::new("slangc")
         .args(["-h", "target"])
