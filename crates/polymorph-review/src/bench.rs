@@ -1,6 +1,6 @@
-//! Agent-bench corpus + scoring primitives.
+//! Agent-bench corpus + scoring primitives (Epic F6).
 //!
-//! The seeded corpus (TOML manifest, edit-corpus schema) and the LLM-free
+//! The seeded corpus (TOML manifest, B6-dialect schema) and the LLM-free
 //! machinery around it: loading, tempdir materialization, deadline-bound
 //! `cargo test` runs, hidden-test scoring. Live loop-driving lives in the
 //! CLI (`review bench`); this module stays drivable from unit tests.
@@ -37,7 +37,7 @@ pub struct Fix {
 }
 
 /// Parse a corpus manifest (TOML text). Corrupt manifests are hard errors
-/// naming the failure — never empty corpora (precedent: empties fail).
+/// naming the failure — never empty corpora (F5c precedent: empties fail).
 pub fn load_corpus(text: &str) -> anyhow::Result<Corpus> {
     let corpus: Corpus = toml::from_str(text).map_err(|e| anyhow::anyhow!("corpus TOML: {e}"))?;
     if corpus.task.is_empty() {
@@ -62,13 +62,13 @@ pub fn write_files(dir: &Path, files: &BTreeMap<String, String>) -> anyhow::Resu
     Ok(())
 }
 
-/// Materialize task files as a committable repo: `write_files` +
+/// Materialize task files as a committable repo (chunk 43): `write_files` +
 /// `git init -b main` + seed commit under a FIXED fallback identity (temp
 /// repos only — never the operator's gitconfig; worktree.rs identity rule
 /// still governs later fixer commits). Worktree children need a repo;
 /// plain `write_files` copies stay non-repos for InPlace arms.
 ///
-/// Build debris discipline (probe catch): the fixer runs `cargo
+/// Build debris discipline (chunk-43 probe catch): the fixer runs `cargo
 /// test` inside the repo, which writes `target/` + `Cargo.lock` — without
 /// an ignore, that dirt trips merge_back's repo-clean pre-check AND bloats
 /// branch commits via `add -A`. A seeded `.gitignore` keeps both clean.
@@ -113,7 +113,7 @@ pub fn materialize_repo(dir: &Path, files: &BTreeMap<String, String>) -> anyhow:
 
 /// Run `cargo test` in `dir` with a hard deadline. Returns combined
 /// stdout+stderr output and whether the suite passed. A deadline breach
-/// kills the direct child (plain spawn, no shell never applies)
+/// kills the direct child (plain spawn, no shell — traps #7 never applies)
 /// and reports as a failed run, never a hang.
 pub fn cargo_test(dir: &Path, deadline: Duration) -> (String, bool) {
     let mut child = Command::new("cargo")
@@ -160,7 +160,7 @@ pub fn cargo_test(dir: &Path, deadline: Duration) -> (String, bool) {
 }
 
 /// Which harness arm produced a result. Tools are held constant across arms
-/// (the Δ prices REVIEW, never tooling).
+/// (the Δ prices REVIEW, never tooling — plan-chunk35 §4.3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BenchArm {
     Loop,
@@ -199,7 +199,7 @@ pub fn parse_bench_arms(name: &str) -> anyhow::Result<Vec<BenchArm>> {
 /// (boards attribute to a profile, never to "the bench" unqualified).
 pub const SCOPED_PROFILE: &str = "scoped-v1";
 
-/// Discriminator variant (probe): bare-`bash` allow to isolate
+/// Discriminator variant (chunk-36 probe): bare-`bash` allow to isolate
 /// whether 100% bash-error is phrasing-shaped (gate) or systematic
 /// (exec env). Destructive denies still apply; everything else identical.
 pub const SCOPED_BASH_PROFILE: &str = "scoped-v1-bash";
@@ -210,7 +210,7 @@ pub const SCOPED_BASH_PROFILE: &str = "scoped-v1-bash";
 pub const BENCH_DENY_EXTRA: &[&str] = &["bash:rm", "bash:rmdir", "bash:del", "bash:git"];
 
 /// Resolve a `--tool-profile` name to its shell rule. Unknown names bail
-/// (fail-fast, creates nothing precedent).
+/// (fail-fast, creates nothing — F5d precedent).
 pub fn profile_shell_rule(profile: &str) -> anyhow::Result<&'static str> {
     match profile {
         "scoped-v1" => Ok("bash:cargo"),
@@ -221,7 +221,7 @@ pub fn profile_shell_rule(profile: &str) -> anyhow::Result<&'static str> {
     }
 }
 
-/// Tools-off axis: the single arm's tool list. `true` empties it
+/// Tools-off axis (chunk 41): the single arm's tool list. `true` empties it
 /// (text-only control — without merge-back the workdir evaporates, so 0/10
 /// is the predicted floor, never a failure). Mirrors the `review run`
 /// `--tools` precedent (`tools: if tools { tool_names } else { Vec::new() }`).
@@ -244,7 +244,7 @@ pub fn single_record_profile(base: &str, no_tools: bool) -> String {
     }
 }
 
-/// Record-profile stamp for worktree-merged single runs: the
+/// Record-profile stamp for worktree-merged single runs (chunk 43): the
 /// runner changed (Branch worktree + merge-back) while tools and profile
 /// stayed constant, so the board attributes the runner. Same
 /// replay-opaque convention as [`single_record_profile`].
@@ -252,7 +252,7 @@ pub fn worktree_record_profile(base: &str) -> String {
     format!("{base}+worktree")
 }
 
-/// Record-profile stamp for loop-worktree runs: the loop fixer
+/// Record-profile stamp for loop-worktree runs (chunk 44): the loop fixer
 /// merged per-turn Branch worktrees while tools and profile stayed
 /// constant. Same replay-opaque convention (bench-check never parses the
 /// profile string) so old records replay unchanged.
@@ -260,9 +260,9 @@ pub fn loop_worktree_record_profile(base: &str) -> String {
     format!("{base}+loop-worktree")
 }
 
-/// Parse the `--preamble` flag: `full` (default)
+/// Parse the `--preamble` flag (chunk 45): `full` (default, chunk-39 block)
 /// | `minimal` (fence-ban-only ablation). Unknown names bail (fail-fast,
-/// creates nothing precedent). Returns true for minimal.
+/// creates nothing — F5d precedent). Returns true for minimal.
 pub fn parse_preamble(name: &str) -> anyhow::Result<bool> {
     match name {
         "full" => Ok(false),
@@ -271,7 +271,7 @@ pub fn parse_preamble(name: &str) -> anyhow::Result<bool> {
     }
 }
 
-/// Record-profile suffix for the preamble axis: minimal runs
+/// Record-profile suffix for the preamble axis (chunk 45): minimal runs
 /// stamp `{base}+preamble-min`, composing AFTER any runner stamp (e.g.
 /// `scoped-v1-bash+loop-worktree+preamble-min`). Replay-opaque like all
 /// profile stamps — old records replay unchanged.
@@ -325,8 +325,8 @@ pub fn bench_gate_shell(
 /// Score a materialized workdir with the hidden suite: green exit = resolved.
 /// Returns (resolved, one-line summary). A suite that reports nothing
 /// (compile break, timeout, harness fault) scores unresolved with a
-/// `NO-REPORT:` summary — distinct from a reported FAIL (agent-harm datum).
-/// The REVIEWER's verdict never enters here — it feeds
+/// `NO-REPORT:` summary — distinct from a reported FAIL (agent-harm datum,
+/// chunk 36). The REVIEWER's verdict never enters here (c33 §1a) — it feeds
 /// the agreement column at record time.
 pub fn score_dir(dir: &Path) -> (bool, String) {
     let (out, ok) = cargo_test(dir, CARGO_DEADLINE);
@@ -389,7 +389,7 @@ pub fn snapshot_files(dir: &Path, names: &[String]) -> anyhow::Result<Vec<NamedF
 /// the caller's (CLI owns pid-scoped parents per established pattern).
 pub fn write_record(dir: &Path, record: &BenchRecord) -> anyhow::Result<PathBuf> {
     // Arm validated at write time: a record that cannot replay is never
-    // written (precedent — corrupt files are hard errors, never scores).
+    // written (F5c precedent — corrupt files are hard errors, never scores).
     if BenchArm::parse(&record.arm).is_none() {
         anyhow::bail!("record task {}: unknown arm {:?}", record.task, record.arm);
     }
@@ -516,7 +516,7 @@ mod tests {
 
     #[test]
     fn single_notools_axis_empties_tools_and_suffixes_profile() {
-        // Empty list (text-only control) + opaque
+        // Chunk 41 tools-off axis: empty list (text-only control) + opaque
         // suffixed stamp (replay-compat: the profile string is never parsed).
         let all = vec!["read".to_string(), "edit".to_string()];
         assert_eq!(single_tool_list(false, &all), all);
@@ -552,7 +552,7 @@ mod tests {
 
     #[test]
     fn materialize_repo_seeds_a_repo() {
-        // Files + main branch + one seed commit; worktree
+        // Chunk 43: files + main branch + one seed commit; worktree
         // children attach to this. Traversal guard inherited from write_files.
         let dir = tempfile::tempdir().unwrap();
         let mut files = BTreeMap::new();

@@ -1,4 +1,4 @@
-//! Bounded tool output: spill-to-file plus a line digest.
+//! Bounded tool output (docket #9): spill-to-file plus a line digest.
 //!
 //! A `bash` stream larger than the inline threshold is written in FULL to
 //! an indexed scratch file under `<workdir>/.polymorph/tool-output/` while
@@ -12,7 +12,7 @@
 //! ring and the kept diagnostic lines are held.
 //!
 //! The same diagnostic heuristic and line cleaner serve the review verify
-//! gate's digest, whose rendering they must keep byte-identical.
+//! gate's digest (docket #2), whose rendering they must keep byte-identical.
 
 use std::collections::VecDeque;
 use std::io::Write as _;
@@ -79,7 +79,7 @@ impl SpillConfig {
 /// Diagnostic-line heuristic (case-insensitive substrings: compiler
 /// errors, test-runner failures, panics, tracebacks, unknown-command
 /// shells). False positives only cost a kept line. Shared with the verify
-/// gate digest — changing it changes that rendering.
+/// gate digest (docket #2) — changing it changes that rendering.
 pub fn is_diagnostic_line(line: &str) -> bool {
     const MARKERS: [&str; 9] = [
         "error",

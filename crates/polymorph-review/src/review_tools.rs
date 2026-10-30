@@ -1,7 +1,7 @@
-//! Opt-in read-only reviewer tools.
+//! Opt-in read-only reviewer tools (docket #4, traps #57/#64).
 //!
 //! The default reviewer ([`crate::ReviewTurnRunner`]) is one text turn: it
-//! sees only its brief, so VERDICT DISCIPLINE has it drop every
+//! sees only its brief, so chunk 168's VERDICT DISCIPLINE has it drop every
 //! claim about code outside the artifact — which stops hallucinated callee
 //! signatures but hides real cross-file contract breaks. With `--reviewer-
 //! tools`, [`ToolReviewTurnRunner`] replaces it: the same brief and review
@@ -20,10 +20,10 @@
 //! - Results are bounded per call (a `read` page of at most
 //!   [`REVIEW_READ_MAX_LINES`] lines / [`REVIEW_RESULT_MAX_BYTES`] bytes,
 //!   with the next `offset` named — demand paging, nothing lost) and the
-//!   history is compacted across rounds like the fixer's.
+//!   history is compacted across rounds like the fixer's (docket #9).
 //! - The final answer is always a tool-free turn: when the budget is spent
 //!   (or the tool loop ends on empty text) the harness asks for the
-//!   verdict with no tools offered (a synthesis turn, verdict-shaped).
+//!   verdict with no tools offered (chunk 154's synthesis, verdict-shaped).
 //! - Cite-or-drop has teeth: a finding whose file is neither in the
 //!   reviewed text nor among the files the reviewer read, grepped or looked
 //!   up this turn is dropped (logged, counted in [`ReviewToolReport`]).
@@ -90,7 +90,7 @@ pub fn reviewer_gate(operator: &polymorph_core::config::Permissions) -> polymorp
     polymorph_tools::Gate::new(allow, operator.deny.clone())
 }
 
-/// What one tool reviewer turn did (telemetry): one per review
+/// What one tool reviewer turn did (docket #4 telemetry): one per review
 /// call, in call order, for the board and `--events-json`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ReviewToolReport {
@@ -181,7 +181,7 @@ impl ReviewToolReport {
     }
 }
 
-/// Tool reviewer turn: the review pack + spawned brief, a
+/// Tool reviewer turn (docket #4): the review pack + spawned brief, a
 /// bounded read-only tool loop, then the verdict text — `data.verdict_text`
 /// exactly like [`crate::ReviewTurnRunner`], plus `data.review_tools`.
 pub struct ToolReviewTurnRunner {
@@ -194,7 +194,7 @@ pub struct ToolReviewTurnRunner {
     pub tools: Vec<String>,
     /// Tool rounds fed back before the forced tool-free verdict turn.
     pub max_tool_rounds: u32,
-    /// In-turn tool-result history bound.
+    /// In-turn tool-result history bound (docket #9).
     pub history: ToolHistoryBudget,
     /// One [`ReviewToolReport`] per turn, in call order (the CLI maps them
     /// onto reviewed rounds).
@@ -798,7 +798,7 @@ fn finding_in_scope(file: &str, scope: &str, workdir: &str, inspected: &[String]
     })
 }
 
-/// Cite-or-drop with teeth: drop every finding whose file is
+/// Cite-or-drop with teeth (docket #4): drop every finding whose file is
 /// neither in the reviewed text nor among the inspected files. Returns
 /// the verdict text to judge — the RAW text, untouched, unless something
 /// was dropped (then the filtered verdict re-serialized; a fail left with
@@ -1262,7 +1262,7 @@ mod tests {
             "pub fn add(a: i32) -> i32 { a }\n",
         )
         .unwrap();
-        // Unverified: cites the callee without reading it.
+        // Unverified: cites the callee without reading it (traps #57).
         let turn = ScriptTurn::new(vec![collected(
             &fail_on("src/callee.rs", 1, "add needs a VkDevice"),
             vec![],
@@ -1457,7 +1457,7 @@ mod tests {
     }
 
     /// Tools off (golden): the reviewer brief the default text-only path
-    /// spawns, byte for byte — the tool reviewer adds nothing to it.
+    /// spawns, byte for byte — docket #4 adds nothing to it.
     #[tokio::test]
     async fn tools_off_review_brief_is_byte_identical() {
         struct Capture(std::sync::Mutex<Vec<String>>);
@@ -1653,7 +1653,7 @@ mod tests {
         (report, main_after, tool_runner.reports())
     }
 
-    /// End to end: a call site passes two
+    /// Docket #4 end to end (traps #64 shape): a call site passes two
     /// arguments to a callee in another file that takes three. Only the
     /// reviewer that read the callee catches it; its finding cites the
     /// inspected callee, survives cite-or-drop, reaches the fixer, and the
@@ -1674,7 +1674,7 @@ mod tests {
         assert_eq!(main_after, "fn main() { add(1, 2); }\n");
     }
 
-    /// The seeded CREATE round still skips the reviewer entirely:
+    /// Docket #7's seeded CREATE round still skips the reviewer entirely:
     /// the tool reviewer runs from round 2 only.
     #[tokio::test]
     async fn seeded_round_one_skips_the_tool_reviewer() {

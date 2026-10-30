@@ -1,11 +1,11 @@
-//! Session + message store.
+//! Session + message store (Epic C1).
 //!
-//! rusqlite (bundled) behind the tokio-rusqlite dedicated thread,
+//! rusqlite (bundled) behind the tokio-rusqlite dedicated thread (ADR-005),
 //! WAL + `synchronous=FULL` (a kill -9 loses nothing committed — throughput
 //! is irrelevant for a single-user agent), `rusqlite_migration` versions,
 //! backup-before-migrate, refuse-on-downgrade.
 //!
-//! Also home to the READ LEDGER: every range the agent shows the
+//! Also home to the READ LEDGER (C1-for-F): every range the agent shows the
 //! model is recorded with its snapshot tag, so the future hashline
 //! seen-lines guard can distinguish shown lines from elided ones. The ledger
 //! stores tag STRINGS only (no dependency on polymorph-tools).
@@ -14,7 +14,7 @@
 //! (no stringly markers); the single `call_err` maps the (non-exhaustive)
 //! tokio-rusqlite enum at the boundary.
 //!
-//! Crash-consistency contract (unit form — true OS-kill fuzz stays
+//! Crash-consistency contract (TBM-13, unit form — true OS-kill fuzz stays
 //! OPEN): dropping the store without `close()` (the in-process kill analog)
 //! loses nothing committed; reopen + `integrity_check` proves it. Pinned by
 //! `crash_reopen_stress` below.
@@ -57,9 +57,9 @@ fn migrations() -> Migrations<'static> {
              );\
              CREATE INDEX idx_reads_session_path ON reads(session_id, path);",
         ),
-        // One plan graph per
+        // Chunk 50 (G task persistence, first slice): one plan graph per
         // session, stored as validated JSON. Cascade keeps deletes clean
-        // (FK enforced per-connection in configure()).
+        // (FK enforced per-connection in configure(), traps-#11).
         M::up(
             "CREATE TABLE plan_state (\
                session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE, \
@@ -67,7 +67,7 @@ fn migrations() -> Migrations<'static> {
                updated_at INTEGER NOT NULL\
              );",
         ),
-        // Persist circuit traces / tool execution log on messages
+        // Chunk 154: persist circuit traces / tool execution log on messages
         // so tool history and circuit quickview survive restart/switching.
         M::up("ALTER TABLE messages ADD COLUMN circuit_log TEXT;"),
     ])
@@ -302,7 +302,7 @@ impl Store {
         self.create_session_with_id(&id, title).await
     }
 
-    /// Create a session with a caller-chosen id (`plan-drive
+    /// Create a session with a caller-chosen id (chunk 51: `plan-drive
     /// --session` initializes its persistence slot on first use —
     /// checkpoint-file precedent: an absent slot means fresh, saved at
     /// the end). Duplicate ids refuse with the SQLite constraint error.
@@ -562,8 +562,8 @@ impl Store {
                     rusqlite::params![to_c, from_c],
                 )
                 .map_err(StoreError::sql)?;
-                // Fork copies rows (like messages and reads) so a forked
-                // plan drive resumes where the parent stood.
+                // Chunk 51 (fork-copy decision: COPY, like messages+reads —
+                // a forked plan drive resumes where the parent stood).
                 c.execute(
                     "INSERT INTO plan_state (session_id, graph_json, updated_at) \
                      SELECT ?1, graph_json, updated_at FROM plan_state WHERE session_id = ?2",
@@ -678,10 +678,10 @@ impl Store {
             .map_err(call_err)
     }
 
-    /// Save one plan graph for a session (G persistence slice).
+    /// Save one plan graph for a session (chunk 50, G persistence slice).
     /// Upsert: re-driving overwrites. Ghost sessions refuse (append
     /// precedent — a plan on a dead session must not silently succeed).
-    /// Forks inherit the plan (COPY decision, like messages+reads).
+    /// Forks inherit the plan (chunk-51 COPY decision, like messages+reads).
     pub async fn save_plan(
         &self,
         session_id: &str,
@@ -714,7 +714,7 @@ impl Store {
         Ok(())
     }
 
-    /// Load the plan graph for a session.
+    /// Load the plan graph for a session (chunk 50).
     /// Ghost session → `NoSession` (a dead id must not read as "no plan
     /// yet" — that conflation would strand work); live session without a
     /// saved plan → `None` (absence is data, immediate-pass precedent).
@@ -788,7 +788,7 @@ impl Store {
         }
     }
 
-    /// DB + WAL + SHM sizes in bytes (soak-sampler core).
+    /// DB + WAL + SHM sizes in bytes (C2 soak-sampler core).
     pub fn sample_db_sizes(db_path: &Path) -> DbSizes {
         let sibling = |suffix: &str| {
             let mut p = db_path.as_os_str().to_owned();
@@ -922,7 +922,7 @@ mod tests {
 
     #[tokio::test]
     async fn crash_reopen_stress() {
-        // 20 cycles of {open, write, DROP WITHOUT CLOSE
+        // TBM-13 unit form: 20 cycles of {open, write, DROP WITHOUT CLOSE
         // (the in-process kill analog — no checkpoint, no graceful close),
         // reopen}. synchronous=FULL means committed rows survive; the final
         // count, order, and integrity_check prove it.
@@ -1016,7 +1016,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_with_id_round_trips_and_refuses_duplicates() {
-        // `plan-drive --session` initializes its slot on first
+        // Chunk 51: `plan-drive --session` initializes its slot on first
         // use, so ids are caller-chosen (there is no other CLI path that
         // creates sessions).
         let s = Store::open_in_memory().await.unwrap();
@@ -1098,7 +1098,7 @@ mod tests {
         let s = Store::open_in_memory().await.unwrap();
         let a = s.create_session("orig").await.unwrap();
         s.save_plan(&a.id, &plan_sample()).await.unwrap();
-        // Fork-copy decision (COPY, like messages+reads) — a
+        // Fork-copy decision (chunk 51: COPY, like messages+reads) — a
         // forked drive resumes where the parent stood. A plan-less parent
         // still forks plan-less (absence carries over, not a phantom).
         let b = s.fork_session(&a.id, "fork").await.unwrap();
@@ -1109,7 +1109,7 @@ mod tests {
         let c = s.create_session("empty").await.unwrap();
         let d = s.fork_session(&c.id, "fork-empty").await.unwrap();
         assert!(s.load_plan(&d.id).await.unwrap().is_none());
-        // Delete cascades via FK (configure() PRAGMA): the plan
+        // Delete cascades via FK (configure() PRAGMA, traps-#11): the plan
         // row dies with the session — asserted directly on the dead id (a
         // bare COUNT(*) would count the live fork's inherited copy).
         s.delete_session(&a.id).await.unwrap();

@@ -1,10 +1,10 @@
-//! Offline A/B harness.
+//! Offline A/B harness (Epic F4a).
 //!
 //! Compares two reviewer/executor arms on the SAME seeded case via
 //! [`crate::run_loop`]. LLM-free: arms are injected [`crate::Reviewer`] /
-//! [`crate::Executor`] traits (scripted fakes here; the live Bus+LLM arm
-//! is separate). Cost proxy = turns (`rounds_log.len`); the token/cost
-//! ledger and the live-model comparison remain future work.
+//! [`crate::Executor`] traits (scripted fakes here, live Bus+LLM in F4b).
+//! Cost proxy = turns (`rounds_log.len`); token/cost ledger stays TBM-09
+//! open and the live-model half of TBM-15 stays open (F4b).
 
 use polymorph_core::LoopConfig;
 
@@ -73,7 +73,7 @@ fn summarize(arm: &str, report: LoopReport) -> ArmReport {
 }
 
 /// Run the same case through two arms sequentially (deterministic; no
-/// JoinSet may parallelize live arms later without touching this).
+/// JoinSet — F4b may parallelize live arms later without touching this).
 #[allow(clippy::too_many_arguments)]
 pub async fn run_ab_pair<R1, E1, R2, E2>(
     cfg: &LoopConfig,

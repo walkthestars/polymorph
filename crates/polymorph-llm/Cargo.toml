@@ -4,6 +4,8 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "Provider routing and streaming model turns for Polymorph."
 
 [dependencies]
 anyhow.workspace = true
@@ -18,7 +20,7 @@ uuid.workspace = true
 futures.workspace = true
 regex.workspace = true
 reqwest.workspace = true
-polymorph-core = { path = "../polymorph-core" }
+polymorph-core = { version = "1.0.0", path = "../polymorph-core" }
 
 [dev-dependencies]
 tempfile.workspace = true

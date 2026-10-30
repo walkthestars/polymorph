@@ -1,0 +1,11 @@
+[package]
+name = "polymorph-drive"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Headless drive protocol (intents, events, driver contract) for Polymorph."
+
+[dependencies]
+anyhow.workspace = true

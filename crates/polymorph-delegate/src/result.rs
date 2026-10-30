@@ -1,10 +1,10 @@
-//! Typed child results.
+//! Typed child results (Epic E1c).
 //!
 //! "No prose to parse": every child turn-loop ends in a [`TypedResult`] —
 //! a status, a human summary, and machine `data`. Callers check shape with
 //! [`validate_data`] (required top-level keys; no new dep). Full
-//! verdict-schema enforcement (fixed findings shape, confidence) belongs
-//! to the review layer — this is the transport the verdict will ride in.
+//! verdict-schema enforcement (fixed findings shape, confidence) stays
+//! Epic F — this is the transport the verdict will ride in.
 
 /// How a child's drive loop ended.
 #[derive(Debug, Clone, PartialEq, Eq)]

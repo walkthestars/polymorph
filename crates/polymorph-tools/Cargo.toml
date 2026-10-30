@@ -4,6 +4,8 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "Tool registry (read, write, edit, grep, glob, bash, LSP, MCP) for Polymorph."
 
 [dependencies]
 anyhow.workspace = true
@@ -24,7 +26,7 @@ ignore.workspace = true
 globset.workspace = true
 rmcp.workspace = true
 reqwest.workspace = true
-polymorph-core = { path = "../polymorph-core" }
+polymorph-core = { version = "1.0.0", path = "../polymorph-core" }
 
 # Unix process-group reaping (`exec::kill_tree_sync`: `kill(-pgid, SIGKILL)`).
 # Already in the lock transitively (MIT OR Apache-2.0); no new crate.
@@ -37,4 +39,4 @@ toml.workspace = true
 wiremock.workspace = true
 # U2 datum only: proves skills::validate accepts diagnoser output.
 # Test-only edge (runtime stays decoupled — 134-plan ruling).
-polymorph-skills = { path = "../polymorph-skills" }
+polymorph-skills = { version = "1.0.0", path = "../polymorph-skills" }

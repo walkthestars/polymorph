@@ -1,4 +1,4 @@
-//! Fixture-server LSP tests (spawn-positive interop).
+//! Fixture-server LSP tests (Epic L, chunk 92: spawn-positive interop).
 //!
 //! A REAL child speaks REAL LSP here: `fixtures/lsp_probe_server.py`
 //! (stdlib-only) is spawned through the production `LspClient::spawn`
@@ -112,7 +112,7 @@ async fn bogus_command_fails_at_spawn() {
     );
 }
 
-/// Op-surface proof (the v2 9): every wrapper round-trips against
+/// Op-surface proof (L1b: the v2 9): every wrapper round-trips against
 /// the fixture with shape asserts; the rename echoes `newName` (request
 /// fidelity, not just connectivity); raw passthrough (`request` direct)
 /// agrees with its wrapper on the same method.

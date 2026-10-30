@@ -7,7 +7,7 @@ Polymorph uses layered TOML configuration powered by `figment`.
 1. **User configuration**: `~/.config/polymorph/config.toml` (or `%USERPROFILE%\.config\polymorph\config.toml` on Windows)
 2. **Project configuration**: `./.polymorph/config.toml`
 3. **Environment variables**: `POLYMORPH_*` and provider API key variables
-4. **CLI flags**: `--db`, `--debug`, `--theme`, and subcommand flags
+4. **CLI flags**: `--db`, `--debug`, and subcommand flags
 
 Inspect the active merged configuration at any time with:
 
@@ -28,8 +28,8 @@ base_url = "https://openrouter.ai/api/v1"
 api_key_env = "OPENROUTER_API_KEY"
 # Optional: execute a command per attempt to fetch the key (stdout trimmed, never logged)
 api_key_cmd = "op read op://Personal/OpenRouter/credential"
-# Optional: round-robin pool of keys or commands for 429 rotation
-keys = ["env:OPENROUTER_KEY_1", "env:OPENROUTER_KEY_2"]
+# Optional: additional env-var key sources for round-robin on 429
+api_key_envs = ["OPENROUTER_KEY_1", "OPENROUTER_KEY_2"]
 ```
 
 - **Credential security**: Key values resolved from `api_key_cmd` or `keys` are injected via `ScopedEnv` for the duration of a single model attempt and are redacted from all `Debug` formatting and `tracing` logs.
@@ -139,13 +139,20 @@ timeout_secs = 10
 ```
 
 - Exit code `0`: allow the tool call.
-- Exit code `2` (or any non-zero exit): deny the tool call and feed `stderr` back as the rejection reason.
+- Any non-zero exit: deny the tool call. Exit code `2` is the convention for a policy
+  rejection; its `stderr` is fed back as the rejection reason. Other exit codes report the
+  code.
 
 ---
 
 ## 6. MCP Servers (`[[mcp_servers]]`)
 
-Enrolls external Model Context Protocol (MCP) stdio servers into the tool registry. Servers spawn lazily on first call and tools are exposed under `<id>_<tool_name>` (governed by `[permissions]`).
+Enrolls external Model Context Protocol (MCP) stdio servers into the tool registry, so
+Polymorph turns can call their tools. Servers spawn lazily on first call and tools are exposed
+under `<id>_<tool_name>` (governed by `[permissions]`).
+
+This is the inbound direction: Polymorph as an MCP *client*. To expose Polymorph itself as an
+MCP server (`polymorph mcp`, one `drive` tool), see [INTERPOSER.md](INTERPOSER.md).
 
 ```toml
 [[mcp_servers]]
@@ -158,7 +165,7 @@ args = ["--directory", "C:/path/to/toothpick", "run", "toothpick", "mcp", "--db"
 
 ## 7. Language Servers (`[[lsp_servers]]`) & Debug Adapters (`[[dap_adapters]]`)
 
-Enrolls LSP servers for post-write diagnostic checks and reviewer/fixer symbol queries (`lsp_hover`, `lsp_definition`, `lsp_references`, `lsp_diagnostics`), and DAP debug adapters for runtime breakpoint inspection (`dap_start`, `dap_inspect`, `dap_evaluate`, `dap_disconnect`).
+Enrolls LSP servers for post-write diagnostic checks and reviewer/fixer symbol queries (`lsp_hover`, `lsp_definition`, `lsp_references`), and DAP debug adapters for runtime breakpoint inspection (`dap_start`, `dap_continue`, `dap_inspect`, `dap_evaluate`, `dap_disconnect`).
 
 ```toml
 [[lsp_servers]]
@@ -179,7 +186,7 @@ args = ["-m", "debugpy.adapter"]
 languages = ["python"]
 ```
 
-See [docs/lsp-servers.md](lsp-servers.md) and [docs/dap-adapters.md](dap-adapters.md) for the full 35-language roster and adapter setup details.
+See [docs/lsp-servers.md](lsp-servers.md) and [docs/dap-adapters.md](dap-adapters.md) for the 35 language keys, the 32 enrolled servers, and adapter setup details.
 
 ---
 

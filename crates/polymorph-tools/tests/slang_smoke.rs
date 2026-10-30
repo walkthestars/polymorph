@@ -1,4 +1,4 @@
-//! Slang supply-chain smoke: `slangc` pinned +
+//! Slang supply-chain smoke (chunk 114, N2a): `slangc` pinned +
 //! working + emitting debug-info SPIR-V (the artifact the future
 //! Vulkan pipeline consumes). Probe + loud-skip discipline mirrors
 //! `dap_matrix.rs` (roster: `docs/renderdoc.md`). No agent tool
@@ -10,13 +10,9 @@
 /// NO `--version` flag (E00017) — the probe uses `-h target`, and the
 /// pinned version lives in the winget id, not the binary.
 fn resolve_slangc() -> Option<String> {
-    if let Ok(local) = std::env::var("LOCALAPPDATA") {
-        let candidate = format!(
-            "{local}/Microsoft/WinGet/Packages/shader-slang.slang_Microsoft.Winget.Source_8wekyb3d8bbwe/bin/slangc.exe"
-        );
-        if std::path::Path::new(&candidate).is_file() {
-            return Some(candidate);
-        }
+    const INSTALL: &str = "C:/Users/matth/AppData/Local/Microsoft/WinGet/Packages/shader-slang.slang_Microsoft.Winget.Source_8wekyb3d8bbwe/bin/slangc.exe";
+    if std::path::Path::new(INSTALL).is_file() {
+        return Some(INSTALL.to_string());
     }
     let ok = std::process::Command::new("slangc")
         .args(["-h", "target"])

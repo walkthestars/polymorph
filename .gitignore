@@ -1,6 +1,7 @@
 # Rust build artifacts
 /target
 /target-test
+**/target
 
 # Runtime state, sessions, logs, and attempts
 /.polymorph
@@ -11,6 +12,9 @@
 *.eval.json
 *.bench.json
 *-events.json
+Cargo.lock.bak
+*.orig
+*.rej
 
 # OS and editor files
 .DS_Store

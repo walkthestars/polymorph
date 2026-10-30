@@ -1,6 +1,6 @@
 # RenderDoc & Shader Debugging Reference
 
-Polymorph provides graphics frame capture and draw/pipeline introspection tools (`polymorph-renderdoc` and `polymorph-tools::renderdoc`) alongside `renderdoc://` URI readers.
+Polymorph provides graphics frame capture and draw/pipeline introspection tools (`polymorph-tools::renderdoc`) alongside `renderdoc://` URI readers.
 
 ---
 

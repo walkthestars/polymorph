@@ -23,7 +23,7 @@ The default test suite runs completely offline (LLM, MCP, and web endpoints are 
    - Tools self-register in `crates/polymorph-tools/src/registry.rs` only; nothing registers from `polymorph-core`.
    - Pure-core text inputs are terminator-stripped normalized text.
    - API keys and secret material must never appear in `tracing` macro calls (enforced by `tracing_setup` grep-guard test).
-   - If you add or edit a prompt file under `prompts/`, update its SHA-256 entry in `prompts.toml` (enforced by CI).
+   - If you add or edit a prompt file under `crates/polymorph-prompts/prompts/`, update its SHA-256 entry in `prompts.toml` (enforced by CI).
 3. **Run the verification suite**:
    ```bash
    cargo test --workspace
@@ -70,7 +70,7 @@ docs(config): document [agent] verify_cmds table
 - [ ] `cargo test --workspace` passes
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings` passes with zero warnings
 - [ ] `cargo fmt --all -- --check` passes
-- [ ] `prompts.toml` SHA-256 manifest matches all files under `prompts/`
+- [ ] `prompts.toml` SHA-256 manifest matches all files under `crates/polymorph-prompts/prompts/`
 - [ ] Documentation (`README.md`, `docs/`) is updated if CLI flags or config keys changed
 - [ ] `CHANGELOG.md` is updated
 - [ ] Every commit carries a valid `Signed-off-by` line (`git commit -s`) and the [CLA](CLA.md) is signed (first-time contributors)

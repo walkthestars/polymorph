@@ -1,12 +1,12 @@
-//! `polymorph-tasks` — task model + dependency DAG + PLAN.md.
+//! `polymorph-tasks` — task model + dependency DAG + PLAN.md (Epic G).
 //!
-//! The plan-mode substrate. [`graph`] owns the model
+//! Chunk 46 (first slice): the plan-mode substrate. [`graph`] owns the model
 //! (tasks, statuses, edges, ready-order, merge ordering, checkpoints);
 //! [`plan`] owns the observable artifact (PLAN.md render/parse). No LLM, no
 //! bus, no network — the reviewer loop drives these types without touching
-//! them (seam precedent).
+//! them (F1/F2 seam precedent).
 //!
-//! Rules:
+//! Rules (0-master plan-mode shape + chunk-42 D4):
 //! - The plan is a FILE (rendered, reviewed, rewritten), never a black-box
 //!   transcript.
 //! - `Done` is terminal: resume never resurrects completed work.

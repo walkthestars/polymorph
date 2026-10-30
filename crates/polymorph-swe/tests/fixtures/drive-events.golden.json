@@ -1,0 +1,58 @@
+[
+  {
+    "type": "round_started",
+    "round": 1,
+    "max_rounds": 3
+  },
+  {
+    "type": "verdict",
+    "round": 1,
+    "passed": false,
+    "summary": "findings=1"
+  },
+  {
+    "type": "verdict",
+    "round": 2,
+    "passed": false,
+    "summary": "findings=0 (unparseable reviewer verdict: not JSON)",
+    "invalid": true,
+    "parse_error": "not JSON",
+    "synthesized": "create"
+  },
+  {
+    "type": "finding",
+    "location": "src/main.rs:1",
+    "message": "demo finding"
+  },
+  {
+    "type": "diff",
+    "status": "M src/main.rs",
+    "stat": " 1 file changed, 1 insertion(+)"
+  },
+  {
+    "type": "plan",
+    "title": "demo plan",
+    "tasks": [
+      {
+        "id": "t1",
+        "title": "first task",
+        "status": "pending"
+      }
+    ]
+  },
+  {
+    "type": "budget",
+    "rounds_used": 2,
+    "rounds_max": 3,
+    "tools_used": 4,
+    "tools_max": 30
+  },
+  {
+    "type": "halted",
+    "reason": "MaxIterations"
+  },
+  {
+    "type": "finished",
+    "verdict": "PASSED"
+  }
+]

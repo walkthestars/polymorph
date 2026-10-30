@@ -1,6 +1,6 @@
-//! DAP client substrate (framing + spawn + initialize).
+//! DAP client substrate (Epic M: chunk 102 M1a, framing + spawn + initialize).
 //!
-//! D1/D2 (design): `tools::dap` module (NOT a new crate —
+//! D1/D2 (chunk-101 design): `tools::dap` module (NOT a new crate —
 //! debugging is a tool-execution concern, no new surface ships), stdio +
 //! `Content-Length` framing REUSED from [`crate::lsp`] (`encode_message` /
 //! `read_message` are transport-generic: `Value` in, framed bytes out —
@@ -8,7 +8,7 @@
 //! survey: no DAP-protocol crates in the local cargo cache, network
 //! survey policy-denied — the L hand-rolled precedent stands).
 //!
-//! DAP wire differences from LSP (general knowledge re-verifies
+//! DAP wire differences from LSP (general knowledge, M1a re-verifies
 //! against a scripted peer below — assumed nowhere): every message
 //! carries `seq` + `type` (`request` | `response` | `event`); responses
 //! pair via `request_seq` (not `id`); server→client traffic is `event`
@@ -27,17 +27,17 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 const DAP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// Server descriptor: which child to spawn (argv passes as items, never
-/// a shell string class; the `[[dap_adapters]]` table maps onto
+/// a shell string, traps-#9 class; the `[[dap_adapters]]` table maps onto
 /// this at M2). `env` carries adapter-scoped variables (e.g. `PYTHONPATH`
 /// at extension-bundled libs) — per-child, never process-global (the
-/// `set_var` race class).
+/// chunk-95 `set_var` race class).
 #[derive(Debug, Clone, PartialEq)]
 pub struct DapSpec {
     pub cmd: String,
     pub args: Vec<String>,
     pub env: Vec<(String, String)>,
     /// Spawn cwd (e.g. dlv builds debug binaries beside the package —
-    /// without this they land in the harness cwd dlv finding).
+    /// without this they land in the harness cwd; M2 dlv finding).
     /// `None` inherits (debugpy/codelldb need none — absolute paths).
     pub workdir: Option<std::path::PathBuf>,
 }
@@ -59,7 +59,7 @@ impl DapSpec {
 
 /// Protocol half: seq pairing + event queue over any byte transport.
 /// Generic so the handshake state machine proves out over loopback
-/// duplex AND over real adapter pipes with zero duplication:
+/// duplex (M1a) AND over real adapter pipes (M1b+) with zero duplication:
 /// [`DapClient`] is one child plus this conn.
 #[derive(Debug)]
 pub struct DapConn<R, W> {
@@ -73,7 +73,7 @@ pub struct DapConn<R, W> {
     /// The launch→configurationDone lifecycle overlaps two requests by
     /// protocol design (debugpy holds the `launch` response until
     /// configured), so awaiting one call must park — never refuse —
-    /// strangers (debugpy finding, same chunk as the fix).
+    /// strangers (M1b debugpy finding, same chunk as the fix).
     pending: std::collections::BTreeMap<u64, serde_json::Value>,
 }
 
@@ -225,7 +225,7 @@ where
     }
 
     /// Wait for the FIRST of several server events up to `budget`
-    /// Continue/start must notice `terminated` the
+    /// (chunk 107, M3): continue/start must notice `terminated` the
     /// moment it posts — awaiting `stopped` alone would burn the whole
     /// budget on every run-to-completion program. One remaining-clock
     /// for all names; expiry names the set. Non-matching frames queue.
@@ -283,7 +283,7 @@ where
         .await
     }
 
-    /// Core session ops: thin typed wrappers over [`Self::request`]
+    /// Core session ops (M1b): thin typed wrappers over [`Self::request`]
     /// so the M3 tool surface builds on proven argument shapes. Results
     /// pass through as `Value` (the L1b precedent — canonical mapping is
     /// M3's business, when agent-facing reads need field-level types).
@@ -363,7 +363,7 @@ where
 }
 
 /// One connected debug adapter: piped stdio child + protocol conn.
-/// Client-only v1: requests + events — no serving.
+/// Client-only v1 (D2): requests + events — no serving.
 #[derive(Debug)]
 pub struct DapClient {
     child: tokio::process::Child,
@@ -528,7 +528,7 @@ impl DapClient {
     }
 }
 
-/// TCP-connected debug adapter: some adapters speak
+/// TCP-connected debug adapter (chunk 104, M2): some adapters speak
 /// DAP over TCP only (`dlv dap -l`, `codelldb --port`) — stdio is not
 /// universal. `DapConn`'s R/W genericity carries the whole protocol
 /// with zero duplication: split halves plug straight in.
@@ -606,7 +606,7 @@ impl DapTcpClient {
             let start = std::time::Instant::now();
             // Adapters disagree which pipe carries the address (dlv:
             // stdout `DAP server listening at:`; others: stderr) —
-            // scan BOTH, first match wins (dlv finding, same chunk).
+            // scan BOTH, first match wins (M2 dlv finding, same chunk).
             // EOF on either pipe breaks the scan: a healthy adapter
             // holds both pipes open through startup, so EOF here means
             // a dying adapter — the no-port bail below names it.
@@ -718,7 +718,7 @@ impl DapTcpClient {
 }
 
 // Delegate the protocol surface so callers drive stdio and TCP
-// sessions identically (matrix rows differ only in construction).
+// sessions identically (M2 matrix rows differ only in construction).
 macro_rules! delegate_conn {
     ($( $name:ident ( $( $arg:ident : $ty:ty ),* ) ),* $(,)?) => {
         impl DapTcpClient {
@@ -772,7 +772,7 @@ impl DapTcpClient {
 }
 
 /// Uniform session surface over stdio ([`DapClient`]) and TCP
-/// ([`DapTcpClient`]) sessions: the matrix driver —
+/// ([`DapTcpClient`]) sessions (chunk 104, M2): the matrix driver —
 /// and later M3's tool surface — writes ONE flow against this trait
 /// instead of per-transport copies. Lifecycles, not transports.
 #[async_trait::async_trait]
@@ -1015,7 +1015,7 @@ pub fn free_port() -> anyhow::Result<u16> {
         .context("dap free_port addr")
 }
 
-/// Adapter spec table: language → [`DapSpec`], mirroring
+/// Adapter spec table (chunk 104, M2): language → [`DapSpec`], mirroring
 /// `LspPool`'s spec side. Sessions spawn FRESH per use (debugger
 /// sessions are inherently single-shot — unlike LSP there is deliberately
 /// no connected-client pool to go stale). M3's tool surface reads specs
@@ -1036,7 +1036,7 @@ impl DapPool {
         Ok(())
     }
 
-    /// Spec for one language (session spawn reads through here).
+    /// Spec for one language (M3 session spawn reads through here).
     pub fn spec_for(&self, language: &str) -> Option<DapSpec> {
         self.specs.get(language).cloned()
     }
@@ -1101,7 +1101,7 @@ pub async fn wire_dap_adapters(
     enrolled
 }
 
-/// Per-language `launch` arguments: shapes proven by
+/// Per-language `launch` arguments (chunk 107, M3): shapes proven by
 /// the M2 matrix rows — a new adapter adds one arm here (plus its
 /// matrix row), never a new call path. `workdir` feeds adapters that
 /// need an explicit cwd (codelldb); others ignore it.
@@ -1119,11 +1119,11 @@ pub fn launch_args_for(
     }
 }
 
-/// Caps for the combined inspect payload: the agent's
+/// Caps for the combined inspect payload (chunk 107, M3): the agent's
 /// tool budget (8 calls/round, 4 rounds) favors ONE chunky read over
 /// threads→stack→scopes→variables round-trips — but unbounded dumps
 /// would flood context. Over-cap entries count, never silently drop
-/// (the same caps discipline as diagnostics).
+/// (the chunk-98 caps precedent).
 pub const MAX_INSPECT_FRAMES: usize = 20;
 pub const MAX_INSPECT_VARS: usize = 50;
 
@@ -1325,7 +1325,7 @@ mod tests {
     async fn unmatched_response_parks_for_its_awaiter() {
         // Overlapped lifecycles (launch held past configurationDone) make
         // out-of-order responses PROTOCOL-NORMAL: the stranger parks in
-        // the pending map and our response still resolves (debugpy
+        // the pending map and our response still resolves (M1b debugpy
         // finding — the old fail-loud arm could not drive a session).
         let (mut conn, mut peer_rx, mut peer_tx) = loopback();
         let drive = async move {

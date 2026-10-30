@@ -4,6 +4,8 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "Plan-file and task-graph model for Polymorph."
 
 [dependencies]
 anyhow.workspace = true

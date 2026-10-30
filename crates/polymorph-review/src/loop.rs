@@ -1,7 +1,7 @@
-//! Plan/act loop driver.
+//! Plan/act loop driver (Epic F1c).
 //!
 //! Both modes are the same reviewer→executor machine over FRESH reviewer
-//! context each round: plan mode critiques the plan, act mode
+//! context each round (0-master §4): plan mode critiques the plan, act mode
 //! critiques the artifact. The reviewer and executor are injected traits —
 //! scripted fakes here, Bus + LLM bindings in F2.
 
@@ -43,7 +43,7 @@ impl LoopMode {
 
 /// Everything a reviewer round may know. There is deliberately NO
 /// history/findings/transcript field — a fresh reviewer sees goal +
-/// criteria + CURRENT artifact and nothing else.
+/// criteria + CURRENT artifact and nothing else (§2.6 refinement #1).
 /// The type system, not discipline, enforces clean context.
 #[derive(Debug, Clone)]
 pub struct ReviewerInput {
@@ -60,7 +60,7 @@ pub struct ReviewerInput {
 /// The criteria ride along for the same reason: a CREATE job's only
 /// finding is the reviewer's one-paragraph summary of the spec, so a fixer
 /// without the criteria rebuilt the rest from repo docs and never saw the
-/// verification commands.
+/// verification commands (Frontier traps #34).
 #[derive(Debug, Clone)]
 pub struct ExecutorInput {
     pub goal: String,
@@ -70,7 +70,7 @@ pub struct ExecutorInput {
     pub mode: LoopMode,
 }
 
-/// Reviewer failure: malformed verdict (maps [`crate::VerdictError`] here).
+/// Reviewer failure: malformed verdict (F2 maps [`crate::VerdictError`] here).
 /// Consumes the round; the loop continues to the cap, then escalates.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ReviewerError {
@@ -98,7 +98,7 @@ pub trait Executor: Send + Sync {
 }
 
 /// Why the loop escalated. Priority: Survivor > final-round-invalid >
-/// MaxIterations (review correction — invalid-driven caps must
+/// MaxIterations (plan-chunk9 review correction — invalid-driven caps must
 /// not misreport as plain caps).
 #[derive(Debug, Clone, PartialEq)]
 pub enum EscalateReason {
@@ -114,17 +114,17 @@ pub enum Outcome {
     Escalated { reason: EscalateReason, rounds: u32 },
 }
 
-/// One round for the transcript (convergence stats flow from here).
+/// One round for the transcript (TBM-06 convergence stats flow from here).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RoundRecord {
     pub round: u32,
     pub verdict: RoundVerdict,
     pub findings: usize,
     /// Machine-readable finding one-liners (`P1 file:line issue`, capped
-    /// [`MAX_ISSUES_PER_ROUND`]) for bench taxonomy: counts flow to
+    /// [`MAX_ISSUES_PER_ROUND`]) for bench taxonomy (F6): counts flow to
     /// cost proxies, these flow to failure classification.
     pub issues: Vec<String>,
-    /// `Some` when the verdict came from the caller's seed (the
+    /// `Some` when the verdict came from the caller's seed (docket #7: the
     /// harness answers an empty CREATE/START job's round 1), not a
     /// reviewer call — carrying which seed rule fired.
     pub synthesized: Option<SeedKind>,
@@ -134,7 +134,7 @@ pub struct RoundRecord {
     pub invalid: Option<String>,
 }
 
-/// Which harness seed answered round 1: `Create` — the
+/// Which harness seed answered round 1 (docket #7): `Create` — the
 /// artifact path(s) are missing, so the work is creating them; `Start` —
 /// a pure `--diff` set on a clean tree, so the GOAL is not implemented yet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -223,7 +223,7 @@ pub async fn run_loop<R: Reviewer, E: Executor>(
     run_loop_seeded(cfg, goal, criteria, initial, mode, reviewer, executor, None).await
 }
 
-/// [`run_loop`] with an optional round-1 seed: non-empty
+/// [`run_loop`] with an optional round-1 seed (docket #7): non-empty
 /// `seed` findings stand in for the round-1 reviewer verdict (a FAIL
 /// carrying exactly them; the reviewer is not called that round) and the
 /// record is marked `synthesized` with the seed kind. Everything else is
@@ -260,7 +260,7 @@ pub async fn run_loop_seeded<R: Reviewer, E: Executor>(
     // Findings of the most recent failed round — reported as `surviving`
     // if the loop exhausts `max_iterations` without a terminal verdict.
     let mut last_findings: Vec<Finding> = Vec::new();
-    // Stalled-loop signal: finding identity + reviewed artifact
+    // Stalled-loop signal (chunk 168): finding identity + reviewed artifact
     // of the previous failed round. A verbatim repeat against an
     // executor-unchanged artifact means the fix turn was a no-op.
     let mut last_ids: Option<Vec<FindingId>> = None;
@@ -570,7 +570,7 @@ mod tests {
 
     #[tokio::test]
     async fn executor_receives_the_criteria_every_round() {
-        // Regression: the fix turn got goal + artifact +
+        // Regression (Frontier traps #34): the fix turn got goal + artifact +
         // findings but never the criteria, so a CREATE job's fixer only saw
         // the reviewer's one-finding summary of the spec.
         let criteria = "Files: a.rs
@@ -663,7 +663,7 @@ Verify: cargo test -p a --lib exact_name";
 
     #[tokio::test]
     async fn stalled_noop_fix_escalates_as_survivor_early() {
-        // Verbatim findings against an executor-unchanged
+        // Chunk 168: verbatim findings against an executor-unchanged
         // artifact mean the fix turn was a no-op — Survivor at round 2
         // with the finding attached, not a bare cap at round 5.
         let r = ScriptReviewer::new(vec![Ok(fail_verdict("stuck")), Ok(fail_verdict("stuck"))]);
@@ -807,7 +807,7 @@ Verify: cargo test -p a --lib exact_name";
 
     #[tokio::test]
     async fn seed_answers_round_one_without_a_reviewer_call() {
-        // The seed is round 1's verdict — the reviewer is first
+        // Docket #7: the seed is round 1's verdict — the reviewer is first
         // consulted in round 2, on the executor's output.
         let r = ScriptReviewer::new(vec![Ok(pass_verdict())]);
         let e = ScriptExecutor::fixing("created");

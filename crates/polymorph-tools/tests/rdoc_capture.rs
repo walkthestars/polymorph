@@ -1,4 +1,4 @@
-//! Tool-level RenderDoc contracts: `rdoc_capture`
+//! Tool-level RenderDoc contracts (chunk 112, N1a): `rdoc_capture`
 //! driven through `Registry::call` — gate-first, fail-closed spec,
 //! headed capture to a real `.rdc` — over a REAL install. Probe +
 //! loud-skip discipline mirrors `dap_matrix.rs` (roster:
@@ -20,7 +20,7 @@ fn resolve_renderdoc() -> Option<String> {
     ok.then(|| "renderdoccmd".to_string())
 }
 
-/// Resolve ucrt64 gcc (absolute — bare invocation
+/// Resolve ucrt64 gcc (absolute — the chunk-112 trap: bare invocation
 /// fails silent exit 1 because cc1 needs ucrt64/bin on PATH; the build
 /// below prefixes PATH explicitly).
 fn resolve_gcc() -> Option<String> {
@@ -28,14 +28,14 @@ fn resolve_gcc() -> Option<String> {
     std::path::Path::new(GCC).is_file().then(|| GCC.to_string())
 }
 
-/// Serializes headed GL work in-process (defect: six
+/// Serializes headed GL work in-process (chunk 114 defect: six
 /// concurrent headed captures starved each other into the 120s timeout
 /// under full-workspace load — each app is seconds alone). Cross-binary
 /// contention stays possible (cargo runs targets as processes); if it
 /// ever bites, the escalation is a lockfile, not a bigger timeout.
 static HEADED_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-/// Headed gate: the triangle sample opens a real window and
+/// Headed gate (chunk 117): the triangle sample opens a real window and
 /// `renderdoccmd capture` injects into it — default `cargo test` skips.
 /// Set `POLYMORPH_HEADED=1` to run; skips return green (counts unchanged).
 fn headed_enabled() -> bool {

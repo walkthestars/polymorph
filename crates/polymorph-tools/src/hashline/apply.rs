@@ -5,13 +5,12 @@
 //!   tag-checked, bounds-checked, and overlap-checked BEFORE any result is
 //!   built, so a bad hunk anywhere means zero changes everywhere.
 //! - `apply_to_disk` — reads every section file, runs the pure core, then
-//!   writes via temp-file + rename (on-disk variant). A missing file, a
+//!   writes via temp-file + rename (B4b on-disk variant). A missing file, a
 //!   stale tag, or a second-section failure leaves every file untouched.
 //! - Line numbers always refer to the ORIGINAL file state (stable addressing).
 //!
-//! Crash-consistency contract (unit form — true kill -9 fuzzing is not
-//! covered here): single `fs::write` would suffice for one file, but temp +
-//! rename
+//! Crash-consistency contract (B4b, unit form — true kill -9 fuzzing is
+//! TBM-16): single `fs::write` would suffice for one file, but temp + rename
 //! makes even multi-file patches atomic per file and never leaves a torn
 //! target: the target path is only ever replaced by a whole rename, and temp
 //! files are removed on any failure (asserted by test).
@@ -586,7 +585,7 @@ pub fn apply_to_disk(
     Ok(report)
 }
 
-/// Parse + apply to disk in one call (the tool-call entry point for the corpus).
+/// Parse + apply to disk in one call (the tool-call entry point for B6).
 pub fn apply_text_to_disk(
     patch_text: &str,
     root: &Path,

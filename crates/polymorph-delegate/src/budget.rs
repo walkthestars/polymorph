@@ -1,9 +1,9 @@
-//! Turn/stall budgets.
+//! Turn/stall budgets (Epic E1b).
 //!
 //! Master rule: NO wall-clock kills — a child stops on turn count, tool-call
 //! count, or stall (turns without progress). Wall-clock durations are
 //! recorded on the outcome for observability only, never acted on.
-//! Numbers below are starting points and are tuned against measurements.
+//! Numbers below are starting points; Epic F (TBM-06) measures and tunes.
 
 use polymorph_core::Role;
 

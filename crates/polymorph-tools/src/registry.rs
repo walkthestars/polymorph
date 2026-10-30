@@ -6,8 +6,8 @@
 
 pub use crate::{is_allowed, v1_tool_floor, Registry, ToolContext, ToolDef};
 
-/// Build the V1 tool floor as a live registry (wiring).
-/// Registration order is the priority order from
+/// Build the V1 tool floor as a live registry (Epic B3 wiring).
+/// Registration order is the priority order from 0-master §Tools inventory.
 pub fn v1_registry() -> crate::Registry {
     let mut r = crate::Registry::new();
     for def in v1_tool_floor() {

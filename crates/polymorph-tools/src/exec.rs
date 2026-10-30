@@ -1,13 +1,13 @@
-//! Non-interactive shell execution.
+//! Non-interactive shell execution (Epic B1).
 //!
 //! Scope: `tokio::process` only. Interactive PTY (portable-pty/ConPTY) is
-//! belongs in a separate module when it lands — this file must not
+//! Epic B2 and lives in a separate module when it lands — this file must not
 //! grow PTY code paths.
 //!
 //! Guarantees: timeout kills the whole child (no orphans); a cancelled token
 //! kills the child and returns `Interrupted`, never partial success.
 //! Output is read incrementally into [`crate::output::StreamCapture`]s
-//! [`run_bash_streamed`] spills large streams to files instead
+//! (docket #9): [`run_bash_streamed`] spills large streams to files instead
 //! of holding them in memory.
 
 use std::time::Duration;
@@ -50,7 +50,7 @@ pub async fn run_bash(
     run_bash_with_env(cmd, timeout, cancel, &[]).await
 }
 
-/// `run_bash` plus per-child env overrides: values ride the
+/// `run_bash` plus per-child env overrides (chunk 95): values ride the
 /// spawned child's environment ONLY — never the process globals (the
 /// `set_var` race: parallel hook runs crossed each other's rows).
 /// Empty `env` behaves exactly like `run_bash`.
@@ -63,7 +63,7 @@ pub async fn run_bash_with_env(
     run_shell(cmd, timeout, cancel, env, None).await
 }
 
-/// `run_bash_with_env` in an explicit working directory (verify
+/// `run_bash_with_env` in an explicit working directory (docket #2 verify
 /// gate: operator commands run in the drive's workdir, not the process
 /// cwd). Same shell, quoting, timeout and tree-kill guarantees; a missing
 /// `cwd` surfaces as [`ExecError::Spawn`].
@@ -94,7 +94,7 @@ async fn run_shell(
     })
 }
 
-/// One `bash` run with bounded capture: each stream over
+/// One `bash` run with bounded capture (docket #9): each stream over
 /// `spill.inline_bytes` is written in full to its own file under
 /// `<cwd>/.polymorph/tool-output/` WHILE it is read, and comes back as a
 /// digest (see [`crate::output`]); streams under it come back exactly as
@@ -591,7 +591,7 @@ mod tests {
         wait_until_dead(&pid_file).await;
     }
 
-    /// Under the threshold the streamed run returns exactly
+    /// Docket #9: under the threshold the streamed run returns exactly
     /// what `run_bash_in` returns (byte identity for small outputs).
     #[tokio::test]
     async fn streamed_small_output_matches_run_bash_in() {
@@ -612,7 +612,7 @@ mod tests {
         assert!(!dir.path().join(".polymorph").exists());
     }
 
-    /// ~50 MB of output streams to the spill file (every byte)
+    /// Docket #9: ~50 MB of output streams to the spill file (every byte)
     /// while the inline digest stays small.
     #[tokio::test]
     async fn streamed_large_output_spills_every_byte() {
@@ -650,7 +650,7 @@ mod tests {
         assert!(run.stderr.is_empty());
     }
 
-    /// A timeout keeps what the command printed before the kill.
+    /// Docket #9: a timeout keeps what the command printed before the kill.
     #[tokio::test]
     async fn streamed_timeout_keeps_partial_output() {
         let dir = tempfile::tempdir().unwrap();

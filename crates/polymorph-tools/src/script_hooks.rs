@@ -1,11 +1,11 @@
-//! Script-command hooks: external commands consulted at
+//! Script-command hooks (Epic J1, chunk 87): external commands consulted at
 //! the `Registry::call` boundary, after the in-process handlers (cheap
 //! first, spawn cost second).
 //!
 //! Event delivery is environment (`POLYMORPH_HOOK_EVENT=pre|post|stop`,
 //! `POLYMORPH_HOOK_TOOL`, `POLYMORPH_HOOK_ARGS` as JSON, `POLYMORPH_HOOK_OK`
 //! + `POLYMORPH_HOOK_DETAIL` on post) — portable across `cmd` and `sh`
-//!   without quoting layers (never nest command strings).
+//!   without quoting layers (traps #9: never nest command strings).
 //!
 //! Exit-code semantics (fail-closed): 0 = Allow; 2 = Deny with trimmed
 //! stderr (capped) as the reason; any other code, timeout, or spawn
@@ -59,7 +59,7 @@ pub struct ScriptHook {
 pub const MAX_HOOK_TIMEOUT_SECS: u64 = 600;
 
 /// Validate one config entry into a runnable hook. Refusals name the field
-/// (fail-closed at attach time — bad config bails pre-spend precedent).
+/// (fail-closed at attach time — bad config bails pre-spend, F5d precedent).
 pub fn validate_entry(entry: &polymorph_core::config::HookEntry) -> anyhow::Result<ScriptHook> {
     let on = ScriptOn::parse(&entry.event)?;
     if entry.command.trim().is_empty() {
@@ -158,12 +158,12 @@ async fn run_script(
     cancel: &CancellationToken,
 ) -> anyhow::Result<ScriptOut> {
     // Env delivery (no argv quoting layers): child inherits process env
-    // PLUS these overrides, applied PER-CHILD (root-cause fix:
+    // PLUS these overrides, applied PER-CHILD (chunk 95 root-cause fix:
     // process-global `set_var` let parallel hook runs — threads AND
     // JoinSet-fanned subagents — cross each other's TOOL/ARGS rows, and
     // pre-hooks inherited STALE OK/DETAIL from earlier post runs).
     // Values are data (a tool name / JSON blob), never secrets — HookEvents
-    // carry shapes, not values.
+    // carry shapes, not values (c79 invariant).
     let mut env = vec![
         ("POLYMORPH_HOOK_EVENT", kind),
         ("POLYMORPH_HOOK_TOOL", tool),
@@ -247,7 +247,7 @@ mod tests {
 
     // NOTE: script-execution tests below shell out via `cmd /C` (Windows
     // host + windows-only CI — same platform note as the exec suite).
-    // Keep commands quote-free and fast (well under timeouts).
+    // Keep commands quote-free (traps #9) and fast (well under timeouts).
 
     #[tokio::test]
     async fn exit_zero_allows() {
@@ -313,7 +313,7 @@ mod tests {
     #[tokio::test]
     async fn env_delivers_tool_name() {
         // Delivery proof: the script decides on the TOOL var (unquoted
-        // comparison — quote-free, value has no spaces).
+        // comparison — quote-free per traps #9, value has no spaces).
         let hook = ScriptHook {
             on: ScriptOn::Pre,
             command: "cmd /C if %POLYMORPH_HOOK_TOOL%==read exit 2".to_string(),
@@ -328,7 +328,7 @@ mod tests {
 
     #[tokio::test]
     async fn concurrent_hooks_observe_own_tool() {
-        // Race pin (root cause: process-global `set_var` let
+        // Race pin (chunk-95 root cause: process-global `set_var` let
         // parallel runs — test threads AND JoinSet-fanned subagents — read
         // each other's TOOL rows; `env_delivers_tool_name` failed exactly
         // this way under workspace-parallel load). 16 concurrent runs with

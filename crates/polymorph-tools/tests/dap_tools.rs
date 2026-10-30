@@ -1,4 +1,4 @@
-//! Tool-level DAP contracts: the five session tools
+//! Tool-level DAP contracts (chunk 107, M3): the five session tools
 //! driven through `Registry::call` — table routing, program-scoped
 //! gating, isolation, removal, caps — over REAL adapters. Probe +
 //! loud-skip discipline mirrors `dap_matrix.rs` (roster:
@@ -6,7 +6,7 @@
 
 use polymorph_tools::dap::DapSpec;
 
-/// Headed/TCP gate: the dlv row binds a TCP listener (the
+/// Headed/TCP gate (chunk 117): the dlv row binds a TCP listener (the
 /// firewall-prompt suspect) — default `cargo test` skips. Set
 /// `POLYMORPH_HEADED=1` to run; skips return green (counts unchanged).
 fn headed_enabled() -> bool {
@@ -332,7 +332,7 @@ async fn dap_tools_dlv_flow_through_table() {
 #[tokio::test]
 async fn dap_tools_inspect_caps_name_omissions() {
     // 60 locals in scope: the payload caps at MAX_INSPECT_VARS and says
-    // how many it dropped (caps precedent, live proof).
+    // how many it dropped (chunk-98 caps precedent, live proof).
     let d = tempfile::tempdir().unwrap();
     let Some(r) = debugpy_registry(&d).await else {
         eprintln!("SKIP dap_tools_inspect_caps_name_omissions: no Python 3 + bundled debugpy libs");

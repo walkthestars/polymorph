@@ -1,31 +1,32 @@
 # Polymorph Operational Workflows
 
-Step-by-step guides for driving Polymorph across its four primary interfaces: headless Reviewer Loops (`review drive`), Task DAG Plans (`review plan-drive`), the interactive Terminal UI (`polymorph`), and Editor ACP (`polymorph acp`).
+Step-by-step guides for the three ways to drive Polymorph: a single verified change
+(`review drive`), a multi-task plan (`review plan-drive`), and an MCP client (`polymorph
+mcp`). A read-only viewer (`polymorph-watch`) is covered last.
 
 ---
 
-## Workflow 1: Driving a Verified Code Change (`polymorph review drive`)
+## Workflow 1: Drive a verified code change
 
-Use `review drive` when you want an automated Fixer + Clean-Context Reviewer loop backed by compiler, test, and LSP gates.
+Use `review drive` for an automated fixer + clean-context reviewer loop backed by compiler,
+test, and LSP gates.
 
-### Single-file creation or modification
+### One file
 
 ```bash
 polymorph review drive \
   --goal "Implement a thread-safe LRU cache with O(1) get and put" \
-  --criteria "All unit tests in src/lru.rs pass; zero clippy warnings; no unwrap() on user inputs" \
+  --criteria "1) all unit tests in src/lru.rs pass 2) zero clippy warnings 3) no unwrap() on user input" \
   --artifact-file src/lru.rs \
   --tools \
   --lsp-error-gate \
   --reviewer-tools \
   --verify-cmd "cargo test --workspace" \
   --verify-cmd "cargo clippy --workspace --all-targets -- -D warnings" \
-  --events-json lru-events.json
+  --events-json .polymorph/events.json
 ```
 
-### Multi-file subsystem refactor (`--artifact-files` & `--diff`)
-
-When a task spans multiple files or a full git changeset, pass repeatable `--artifact-files` globs or `--diff`:
+### Several files or a whole diff
 
 ```bash
 polymorph review drive \
@@ -38,18 +39,29 @@ polymorph review drive \
   --verify-cmd "cargo test --workspace"
 ```
 
-What happens on each round:
-1. **Snapshot**: Before the fixer touches any file via `write` or `edit`, `RestoreLedger` snapshots the exact original bytes on disk.
-2. **Fixer turn**: The fixer reads files (minting hashline tags), applies atomic hashline edits, and runs tests.
-3. **Harness verification gate**: Polymorph runs every `--verify-cmd` in order and queries enrolled LSP servers for diagnostics on all mutated files.
-4. **Reviewer turn**: A fresh, clean-context reviewer inspects the primary artifacts, any peripheral files mutated during the drive, the command execution ledger, `--verify-cmd` digests, and LSP diagnostics. If `--verify-cmd` failed or `--lsp-error-gate` found error diagnostics, the harness vetoes any passing verdict automatically.
-5. **Convergence or rollback**: If the reviewer emits `Pass` (with no harness vetoes), the drive succeeds. If the drive fails, escalates, or is cancelled with `Ctrl-C`, `--on-fail rollback` (the default for `drive`) restores the working tree byte-for-byte and saves the attempt under `.polymorph/attempts/<timestamp>/`.
+Each round:
+
+1. **Snapshot.** Before the fixer touches a file with `write` or `edit`, `RestoreLedger`
+   records the original bytes.
+2. **Fixer turn.** The fixer reads files (minting hashline tags), applies atomic hashline
+   edits, and runs tests.
+3. **Harness gates.** Polymorph runs every `--verify-cmd` in order and collects LSP
+   diagnostics for every mutated file.
+4. **Reviewer turn.** A fresh reviewer inspects the artifacts, peripheral diffs, command
+   ledger, verify output, and diagnostics. A failed verify command or an error-severity
+   diagnostic (with `--lsp-error-gate`) vetoes a passing verdict.
+5. **Outcome.** A pass keeps the edits. A failure, escalation, or `Ctrl-C` restores the
+   working tree byte-for-byte (`--on-fail rollback`, the default for `drive`) and archives
+   the attempt under `.polymorph/attempts/`.
+
+`--repo <DIR>` runs the whole drive in a detached worktree that is removed at the end;
+nothing is merged back. Use it to verify against a clean tree, not to land a change.
 
 ---
 
-## Workflow 2: Executing a Multi-Task DAG (`PLAN.md`)
+## Workflow 2: Execute a multi-task DAG (`PLAN.md`)
 
-For multi-step features, write a `PLAN.md` file with task dependencies and acceptance criteria:
+For multi-step features, write a `PLAN.md` with dependencies and acceptance criteria:
 
 ```markdown
 # Plan: Authentication Token Refresh
@@ -59,7 +71,7 @@ Status: pending
 Deps: none
 Criteria:
 - `RefreshToken` struct added in `src/auth/model.rs`
-- Migration `004_refresh_tokens.sql` passes round-trip test
+- Migration `004_refresh_tokens.sql` passes a round-trip test
 
 ## [task-2] Wire /auth/refresh endpoint
 Status: pending
@@ -69,12 +81,12 @@ Criteria:
 - Integration tests in `tests/auth_refresh.rs` pass
 ```
 
-1. **Inspect and validate the task DAG offline**:
+1. **Validate the DAG offline**:
    ```bash
    polymorph review plan-show --plan PLAN.md
    ```
 
-2. **Drive the plan in topological order with checkpointing**:
+2. **Drive it in topological order with checkpointing**:
    ```bash
    polymorph review plan-drive \
      --plan PLAN.md \
@@ -82,44 +94,65 @@ Criteria:
      --checkpoint .polymorph/plan-checkpoint.json \
      --max-rounds 3
    ```
-   If interrupted, re-running with the same `--checkpoint` file resumes from the last completed task without re-running finished nodes.
+   Re-running with the same checkpoint resumes from the last completed task. The input
+   `PLAN.md` is never overwritten; the updated plan is written to `--out`. Exit `0` means the
+   drive completed, not that every task passed: read the output plan.
 
 ---
 
-## Workflow 3: Interactive Terminal UI (`polymorph`)
+## Workflow 3: Drive from an MCP client
 
-Run `polymorph` with no arguments (or `polymorph --theme tokyo-night`) to open the multi-pane TUI:
-
-- **Chat & streaming**: Converse with the active role chain with live tool-call transparency and 4-stage circuit status.
-- **File picker & diff pane**: Browse workspace files, inspect diffs, and review LSP diagnostic gutters.
-- **Slash commands**:
-  - `/attach <path>` — Attach an image to the next turn for multimodal vision analysis.
-  - `/session` — Create, switch, or fork persistent SQLite sessions.
-  - `/theme <name>` — Switch TUI color themes live.
-- **Ask-user confirmation overlay**: When a tool or hook requests confirmation, an interactive picker modal prompts for approval without losing your draft input.
-
----
-
-## Workflow 4: Editor Integration via ACP (`polymorph acp`)
-
-Polymorph implements the Agent Client Protocol (`agent-client-protocol`) over stdio so you can drive it directly from **Zed** or other ACP-compatible editors.
-
-Add the following to your Zed `settings.json`:
+`polymorph mcp` speaks MCP over stdio and exposes one tool, `drive`. Register it in Claude
+Code, Codex, Cursor, or any MCP client:
 
 ```json
 {
-  "agent_servers": {
+  "mcpServers": {
     "polymorph": {
-      "command": "C:/path/to/polymorph.exe",
-      "args": [
-        "acp",
-        "--tools",
-        "--max-tool-rounds",
-        "30",
-        "--act-pack",
-        "C:/path/to/polymorph/prompts/glm/glm-5.3/act.md"
-      ]
+      "command": "polymorph",
+      "args": ["mcp"]
     }
   }
 }
 ```
+
+A tool call carries the same contract as the CLI:
+
+```json
+{
+  "goal": "Reject empty frames in FrameBuffer::slice",
+  "artifact_files": ["src/buffer.rs"],
+  "criteria": "1) an empty frame returns Err 2) existing tests pass",
+  "verify_cmds": ["cargo test"],
+  "repo": "/path/to/project",
+  "max_rounds": 3
+}
+```
+
+The result is `{exit_code, passed, rounds_used, rounds_max, events, stderr_tail}`. Treat the
+change as landed only when `passed` is `true` — exit code `0` plus a `finished` event with
+verdict `PASSED`. Any other result carries the findings; re-plan the goal or criteria and
+retry once.
+
+The server runs one drive at a time and always uses `--on-fail rollback`. `repo` is the
+child's working directory, not the CLI `--repo` worktree. Limits: 1–5 rounds, 1–32 artifacts,
+up to 8 verify commands, 30–7,200 seconds.
+
+The full event and exit-code contract is in [INTERPOSER.md](INTERPOSER.md).
+
+---
+
+## Workflow 4: Watch a drive
+
+`polymorph-watch` is a separate binary that reads an event ledger and renders it; it never
+calls a model.
+
+```bash
+cargo build --release -p polymorph-watch
+polymorph-watch --events .polymorph/events.json --follow
+```
+
+The viewer shows the header path and event count, the status (`running`, `PASSED`, or
+`HALTED: <reason>`), one row per round with its verdict, the budget line, and recent
+findings. `--follow` re-reads the file every 250 ms (adjust with `--interval-ms`). Press
+`q`, `Esc`, or `Ctrl-C` to exit.

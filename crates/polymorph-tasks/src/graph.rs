@@ -1,4 +1,4 @@
-//! Task model + dependency DAG.
+//! Task model + dependency DAG (Epic G, chunk 46).
 //!
 //! The plan-mode substrate the reviewer loop drives: tasks with dependency
 //! edges, topological ready-order, and cycle rejection. Validation lives at
@@ -6,7 +6,7 @@
 //! trust the file), while [`TaskGraph::add_task`] refuses only what it can
 //! judge locally (duplicates, empty/self/unknown deps). Forward references
 //! are impossible through `add_task` (deps must already exist), so cycle
-//! detection belongs to the whole-graph validators class:
+//! detection belongs to the whole-graph validators — traps-#23 class:
 //! validation in the validation phase, never mid-write.
 
 use std::collections::{BTreeMap, VecDeque};
@@ -131,7 +131,7 @@ impl TaskGraph {
 
     /// Push without local validation — `plan::parse` ONLY, which runs
     /// whole-graph [`Self::validate`] before returning (forward refs from
-    /// files cannot survive `add_task`). Never use elsewhere.
+    /// files cannot survive `add_task`, traps-#23). Never use elsewhere.
     pub(crate) fn push_unchecked(&mut self, task: Task) {
         self.tasks.push(task);
     }
@@ -141,7 +141,7 @@ impl TaskGraph {
     }
 
     /// Add one task. Refuses empty ids, duplicates, self-deps, and deps on
-    /// tasks not yet present (fail-fast at write precedent). Cycle
+    /// tasks not yet present (fail-fast at write — F5d precedent). Cycle
     /// detection is NOT here: with unknown deps refused, no `add_task` call
     /// can close a cycle, so a check would be unreachable code — cycles are
     /// caught by [`Self::validate`], which the parse/load boundaries run.
@@ -268,7 +268,7 @@ impl TaskGraph {
             .collect()
     }
 
-    /// Full topological order (dependency order — the merge-back
+    /// Full topological order (dependency order — the chunk-42 merge-back
     /// rule for multi-child merges). Insertion order breaks ties.
     pub fn topo_order(&self) -> Result<Vec<String>, GraphError> {
         self.validate()?;
@@ -298,7 +298,7 @@ impl TaskGraph {
         Ok(order)
     }
 
-    /// Order a completed-task subset for merging (dependency
+    /// Order a completed-task subset for merging (chunk-42 D4: dependency
     /// order, caller stops at the first conflict — no partial merges).
     /// Unknown ids are refused (fail-fast — silently dropping a branch
     /// would lose work).

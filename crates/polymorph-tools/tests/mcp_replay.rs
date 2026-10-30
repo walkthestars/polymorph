@@ -1,7 +1,7 @@
-//! Cassette replay for MCP transcripts.
+//! Cassette replay (Epic H, chunk 57: H4 close for MCP transcripts).
 //!
 //! `FramePlayer` implements rmcp's `Transport<RoleClient>` over the `in`
-//! frames of `tests/cassettes/mcp_probe.json` (recorded): each
+//! frames of `tests/cassettes/mcp_probe.json` (recorded chunk 56): each
 //! `receive()` pops the next recorded server frame, each `send()` logs its
 //! method. The replay test serves a real client over the player, enrolls,
 //! and drives `Registry::call` — results and the sent spine must equal the
@@ -13,7 +13,7 @@ use std::future::Future;
 use std::path::PathBuf;
 
 /// A scripted `Transport<RoleClient>`: canned server frames in, method log
-/// out. Release is send-gated: the service pump drains an
+/// out. Release is send-gated (c57 lesson): the service pump drains an
 /// always-ready transport BEFORE any request is pending, so `receive()`
 /// parks until the matching send happened — exactly the causality a real
 /// server provides. Plan entries pair 1:1 with sends in recorded order;

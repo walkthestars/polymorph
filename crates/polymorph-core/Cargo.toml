@@ -4,6 +4,8 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "Configuration, sessions, and shared types for Polymorph."
 
 [dependencies]
 anyhow.workspace = true
@@ -17,7 +19,7 @@ rusqlite.workspace = true
 tokio-rusqlite.workspace = true
 rusqlite_migration.workspace = true
 uuid.workspace = true
-polymorph-tasks = { path = "../polymorph-tasks" }
+polymorph-tasks = { version = "1.0.0", path = "../polymorph-tasks" }
 
 [dev-dependencies]
 tempfile.workspace = true

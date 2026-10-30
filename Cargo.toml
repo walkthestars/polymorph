@@ -5,29 +5,29 @@ members = [
   "crates/polymorph-llm",
   "crates/polymorph-skills",
   "crates/polymorph-delegate",
+  "crates/polymorph-prompts",
+  "crates/polymorph-watch",
+  "crates/polymorph-mcp",
   "crates/polymorph-review",
   "crates/polymorph-tasks",
   "crates/polymorph-tools",
-  "crates/polymorph-acp",
-  "crates/polymorph-web",
-  "crates/polymorph-renderdoc",
-  "crates/polymorph-cli",
-  "crates/polymorph-tui",
+  "crates/polymorph-swe",
+  "crates/polymorph-drive",
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 rust-version = "1.88"
 license = "AGPL-3.0-only"
 repository = "https://github.com/walkthestars/polymorph"
-authors = ["walkthestars <64265241+walkthestars@users.noreply.github.com>"]
+authors = ["Polymorph Contributors"]
 
 [workspace.dependencies]
 anyhow = "1"
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["preserve_order"] }
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["full"] }
 tracing = "0.1"
@@ -39,7 +39,7 @@ figment = { version = "0.10", features = ["toml", "env"] }
 genai = "0.6"
 ratatui = "0.29"
 crossterm = { version = "0.28", features = ["event-stream"] }
-rmcp = { version = "3", features = ["client", "server", "transport-child-process", "transport-async-rw"] }
+rmcp = { version = "3", features = ["client", "server", "transport-child-process", "transport-async-rw", "transport-io"] }
 portable-pty = "0.9"
 grep-regex = "0.1"
 regex = "1"
@@ -51,8 +51,6 @@ sha2 = "0.10"
 toml = "0.8"
 insta = "1"
 wiremock = "0.6"
-termimad = "0.35"
-syntect = "5"
 reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"] }
 futures = "0.3"
 async-trait = "0.1"
@@ -63,7 +61,6 @@ pretty_assertions = "1"
 rusqlite = { version = "0.37", features = ["bundled"] }
 tokio-rusqlite = "0.7"
 rusqlite_migration = "2"
-agent-client-protocol = "2"
 libc = "0.2"
 
 # The profile that 'dist' will build with
