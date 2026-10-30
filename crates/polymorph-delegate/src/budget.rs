@@ -1,9 +1,8 @@
-//! Turn/stall budgets (Epic E1b).
+//! Turn/stall budgets.
 //!
-//! Master rule: NO wall-clock kills — a child stops on turn count, tool-call
-//! count, or stall (turns without progress). Wall-clock durations are
-//! recorded on the outcome for observability only, never acted on.
-//! Numbers below are starting points; Epic F (TBM-06) measures and tunes.
+//! Master rule: NO wall-clock kills — a child stops on turn count, tool-call count, or stall (turns
+//! without progress). Wall-clock durations are recorded on the outcome for observability only,
+//! never acted on. Numbers below are starting points; measures and tunes.
 
 use polymorph_core::Role;
 
@@ -37,7 +36,7 @@ impl Budget {
         }
     }
 
-    /// Role-routed budget (the roadmap "`smol` budgets" line made concrete):
+    /// Role-routed budget:
     /// Smol|Tiny run smol, everything else runs standard.
     pub fn for_role(role: Role) -> Self {
         match role {
@@ -63,7 +62,7 @@ mod tests {
         assert!(m.max_turns < s.max_turns);
         assert!(m.max_tool_calls < s.max_tool_calls);
         assert!(m.stall_turns < s.stall_turns);
-        // ...but still allows real work (nonzero everywhere).
+        //...but still allows real work (nonzero everywhere).
         assert!(m.max_turns > 0 && m.max_tool_calls > 0 && m.stall_turns > 0);
     }
 

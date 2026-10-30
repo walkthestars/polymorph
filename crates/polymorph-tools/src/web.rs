@@ -1,4 +1,4 @@
-//! `tools::web` — serica-backed web client (Epic P, chunk 119).
+//! `tools::web` — serica-backed web client.
 //!
 //! Serica (v0.2.0, <https://github.com/walkthestars/serica>) is the extraction
 //! engine: single static binary, REST + MCP, no keys, SSRF-hardened.
@@ -9,17 +9,14 @@
 //! deps). No connection pool: HTTP needs none (unlike stdio children);
 //! pool-if-measured at P1b, not upfront.
 //!
-//! Wire contract (source-read off the serica checkout, chunk-116/119
-//! design): `GET {base}/api/v1/search?q=&page=&safe=&lang=` +
-//! `GET {base}/api/v1/extract?url=`, envelope
-//! `{"success":true,"data":{…}}` /
-//! `{"success":false,"error":{"code","message"}}`. Statuses (serica's
-//! own tests): INVALID_QUERY→400, RATE_LIMITED→429, UNAUTHORIZED→401,
-//! CONTENT_TOO_LARGE→413, EXTRACT_TIMEOUT→504, 503 when down.
+//! Wire contract: `GET {base}/api/v1/search?q=&page=&safe=&lang=` + `GET
+//! {base}/api/v1/extract?url=`, envelope `{"success":true,"data":{…}}` /
+//! `{"success":false,"error":{"code","message"}}`. Statuses (serica's own tests):
+//! INVALID_QUERY→400, RATE_LIMITED→429, UNAUTHORIZED→401, CONTENT_TOO_LARGE→413,
+//! EXTRACT_TIMEOUT→504, 503 when down.
 //!
-//! `total_results` is the PAGE-BATCH count (serica struct comment —
-//! NOT a corpus total). This client echoes it verbatim; P1b tool
-//! descriptions must carry that caveat (docketed in plan-chunk119).
+//! `total_results` is the PAGE-BATCH count (serica struct comment — NOT a corpus total). This
+//! client echoes it verbatim; tool descriptions must carry that caveat.
 
 use std::time::Duration;
 
@@ -140,9 +137,8 @@ fn unknown_code() -> String {
     "UNKNOWN".to_string()
 }
 
-/// Split an optional `#fragment` off a scheme remainder (P2 chunk 121).
-/// Fragments never ride HTTP — the caller fetches without it and echoes
-/// it (116-D4: never stripped silently).
+/// Split an optional `#fragment` off a scheme remainder. Fragments never ride HTTP — the caller
+/// fetches without it and echoes it (116-D4: never stripped silently).
 fn split_fragment(rest: &str) -> (&str, Option<String>) {
     match rest.split_once('#') {
         Some((base, frag)) if !frag.is_empty() => (base, Some(frag.to_string())),
@@ -539,9 +535,7 @@ mod tests {
 
     #[tokio::test]
     async fn wiremock_bare_429_without_body_still_classifies() {
-        // Status-first proof: no envelope at all, still RateLimited —
-        // never a Transport misroute (the chunk-7 429 lesson: match the
-        // status, never sniff the body).
+        // Status-first proof: no envelope at all, still RateLimited — never a Transport misroute.
         use wiremock::matchers::{method, path};
         use wiremock::{Mock, MockServer, ResponseTemplate};
         let server = MockServer::start().await;

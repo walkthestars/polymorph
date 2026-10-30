@@ -1,7 +1,7 @@
 //! `polymorph-core` — agent loop, plan/act/review state machine.
 //!
-//! Chunk 1 (Epic A skeleton): role routing types, verdict schema (fixed JSON
-//! per 0-master §2.6), and loop config. No LLM calls yet — that is A3.
+//! Role routing types, verdict schema (fixed JSON), and loop config. No LLM calls
+//! yet — that is A3.
 
 use serde::{Deserialize, Serialize};
 
@@ -70,7 +70,7 @@ impl Role {
     }
 }
 
-/// Reviewer verdict. Fixed JSON shape — never parse prose (0-master §2.6).
+/// Reviewer verdict. Fixed JSON shape — never parse prose.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Verdict {
     pub verdict: VerdictKind,
@@ -102,7 +102,7 @@ pub enum Severity {
     P3,
 }
 
-/// Reviewer-loop convergence config (Epic F; declared here so CLI can parse it).
+/// Reviewer-loop convergence config.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoopConfig {
     /// Max reviewer→executor rounds before escalation.

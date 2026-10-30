@@ -1,12 +1,12 @@
-//! Verdict text boundary (Epic F1a).
+//! Verdict text boundary.
 //!
 //! LLMs emit text; the loop runs on [`polymorph_core::Verdict`]. This module
 //! is the ONLY text→verdict path: strict `serde_json` object parse, then
-//! semantic validation. Prose is refused, never scraped (0-master §2.6:
-//! deterministic verdict shape — never parse prose).
+//! semantic validation. Prose is refused, never scraped (deterministic verdict
+//! shape — never parse prose).
 //!
 //! Field VALUES are read tolerantly where the intent is unambiguous (live
-//! drive: one finding's `"line": "    return ..."` voided a whole verdict
+//! drive: one finding's `"line": " return..."` voided a whole verdict
 //! and its round): `verdict`/`severity` ignore case and padding,
 //! `confidence` takes a numeric string, and `line` takes `12`, `"12"`,
 //! `"12-15"`, `"L12"` — anything else is an unknown location (`None`), its

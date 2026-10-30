@@ -1,4 +1,4 @@
-//! Write-through enforcement tests (Epic L, chunk 94: L2).
+//! Write-through enforcement tests.
 //!
 //! Writes and edits route through the language server where one runs
 //! (diagnostic pull, inform-only); without a server the write stands with
@@ -110,7 +110,7 @@ async fn pool_records_messages_per_uri() {
     let (uri, messages) = recorded.iter().next().unwrap();
     assert!(uri.ends_with("a.rs"), "{uri}");
     assert_eq!(messages, &vec!["probe-diagnostic".to_string()]);
-    // Docket #3: the same record keeps the wire line (1-based) + severity.
+    // The same record keeps the wire line (1-based) + severity.
     let details = r.lsp_diagnostic_details().await;
     assert_eq!(
         details[uri],

@@ -9,11 +9,10 @@
 //!   stale tag, or a second-section failure leaves every file untouched.
 //! - Line numbers always refer to the ORIGINAL file state (stable addressing).
 //!
-//! Crash-consistency contract (B4b, unit form — true kill -9 fuzzing is
-//! TBM-16): single `fs::write` would suffice for one file, but temp + rename
-//! makes even multi-file patches atomic per file and never leaves a torn
-//! target: the target path is only ever replaced by a whole rename, and temp
-//! files are removed on any failure (asserted by test).
+//! Crash-consistency contract: single `fs::write` would suffice for one file, but temp + rename
+//! makes even multi-file patches atomic per file and never leaves a torn target: the target path is
+//! only ever replaced by a whole rename, and temp files are removed on any failure (asserted by
+//! test).
 
 use super::{FileSection, HashlineError, Op, Patch, SnapshotStore};
 use std::collections::{BTreeMap, HashMap};

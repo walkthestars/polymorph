@@ -1,13 +1,11 @@
-//! str_replace baseline scorer (Chunk 28, design `plan-chunk27.md`).
+//! Str_replace baseline scorer.
 //!
-//! The rival arm for the TBM-05 delta: anchored old/new substitution
-//! against the SAME `EvalCase` / `Scoreboard` / `gate` / `CaseOutcome` as
-//! the hashline scorer. The ONLY moving variables between arms are format
-//! pack + extractor/applier — setup and byte-compare ride the shared
-//! helpers in [`super::eval`] (`write_initial_files`, `check_workspace`),
-//! factored, not copied.
+//! The rival arm for the delta: anchored old/new substitution against the SAME `EvalCase` /
+//! `Scoreboard` / `gate` / `CaseOutcome` as the hashline scorer. The ONLY moving variables between
+//! arms are format pack + extractor/applier — setup and byte-compare ride the shared helpers in
+//! [`super::eval`] (`write_initial_files`, `check_workspace`), factored, not copied.
 //!
-//! Contract (normative, spike-proven in chunk 27 then deleted):
+//! Contract:
 //! ```text
 //! [edit a.txt]
 //! <<<
@@ -220,7 +218,7 @@ fn parse_sections(inner: &str) -> Result<Vec<StrSection>, StrExtractError> {
                     break; // next header while open => unclosed below
                 }
                 // A bare `[...]` line inside old is content, not a header
-                // (only `[edit ...]` opens) — keep it verbatim.
+                // (only `[edit...]` opens) — keep it verbatim.
                 old.push(l);
                 i += 1;
             }
@@ -287,7 +285,7 @@ pub fn extract_strreplace(text: &str) -> Result<Vec<StrSection>, StrExtractError
     let inner = unwrap_fence(text)?;
     // Fast path: no header at all => prose (avoids line-number noise).
     if !inner.contains("[edit ") {
-        // A bare `[...]` line that is not `[edit ...]` still names its
+        // A bare `[...]` line that is not `[edit...]` still names its
         // shape fault rather than hiding as prose.
         for (idx, line) in inner.lines().enumerate() {
             let t = line.trim();
@@ -399,10 +397,9 @@ pub fn score_str_case(case: &EvalCase, root: &Path) -> CaseReport {
     }
 }
 
-/// Render the user prompt for a str_replace eval turn (chunk 28): the
-/// instruction plus each workspace file WITHOUT tags (tags are meaningless
-/// without snapshots — showing them would leak hashline concepts into the
-/// baseline, design §1). Shape mirrors `render_eval_prompt`.
+/// Render the user prompt for a str_replace eval turn: the instruction plus each workspace file
+/// WITHOUT tags (tags are meaningless without snapshots — showing them would leak hashline concepts
+/// into the baseline, design §1). Shape mirrors `render_eval_prompt`.
 ///
 /// ```text
 /// TASK: <instruction>

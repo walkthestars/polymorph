@@ -1,24 +1,22 @@
-//! Hashline edit format (Epic B4, ADR-003).
+//! Hashline edit format.
 //!
-//! A line-anchored, content-hash-keyed patch language for LLM-driven edits,
-//! modeled on omp's `@oh-my-pi/hashline` (OBSERVED via DeepWiki's source index
-//! of `can1357/oh-my-pi`, 2026-09-07: `[PATH#TAG]` file-version binding with
-//! 4-hex snapshot tags, verb ops `PUT`/`CUT`/`REM`/`MV`, single `+` payload
-//! sigil, all-or-nothing in-memory preflight, original-state line numbering,
-//! 100k-line range cap, no-op diagnostics, LF/BOM normalization).
+//! A line-anchored, content-hash-keyed patch language for model-driven edits:
+//! `[PATH#TAG]` file-version binding with 4-hex snapshot tags, verb ops
+//! `PUT`/`CUT`/`REM`/`MV`, a single `+` payload sigil, all-or-nothing in-memory
+//! preflight, original-state line numbering, a 100k-line range cap, no-op
+//! diagnostics, and LF/BOM normalization.
 //!
-//! Deliberate v1 divergences from upstream (documented, not accidental):
-//! - STRICT applier, no boundary repair (no echo-dropping, delimiter balance,
-//!   or indentation recovery). Prompt packs teach exactness instead. Upstream
-//!   parity gap, recorded in plan-chunk4.
-//! - No `N*` syntactic-block ops (needs tree-sitter — Epic L). The parser
-//!   recognizes the form and returns `Unsupported`, never a mis-apply.
-//! - No seen-lines guard yet (needs the read ledger — session store, Epic C).
-//! - Registers (`CUT ... @name` / `PUT >N @name`) work IN-patch only.
-//!   Cross-patch registers need session state (Epic E).
-//! - Tag hash is SHA-256 (first 4 hex as the TAG, full hex as the binding).
-//!   Collision handling is therefore exact-hash comparison, strictly stronger
-//!   than upstream's prefer-most-recent.
+//! Deliberate divergences from the upstream format:
+//!
+//! - STRICT applier: no boundary repair (no echo-dropping, delimiter balance, or
+//!   indentation recovery). Prompt packs teach exactness instead. No `N*`
+//!   syntactic-block ops: the parser recognizes the form and returns
+//!   `Unsupported`, never a mis-apply.
+//! - No seen-lines guard yet.
+//! - Registers (`CUT ... @name` / `PUT >N @name`) work in-patch only; cross-patch
+//!   registers need session state.
+//! - The tag hash is SHA-256 (first 4 hex as the tag, full hex as the binding), so
+//!   collision handling is exact-hash comparison.
 //!
 //! Format (v1 grammar):
 //! ```text
@@ -105,7 +103,7 @@ pub enum Op {
 pub enum HashlineError {
     #[error("parse error at patch line {line}: {msg}")]
     Parse { line: usize, msg: String },
-    #[error("unsupported op (needs Epic L tree-sitter): {0}")]
+    #[error("unsupported op (needs tree-sitter): {0}")]
     Unsupported(String),
     #[error("stale tag for '{path}': expected #{tag} but content changed")]
     StaleTag { path: String, tag: String },

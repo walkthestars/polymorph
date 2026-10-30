@@ -1,4 +1,4 @@
-//! Atomic-split planner (Chunks 127–128, Epic T).
+//! Atomic-split planner.
 //!
 //! Pure planning over CLI-shaped text plus ONE spawn edge:
 //! [`plan_commits`] (offline: status + diff strings in, ordered groups
@@ -70,7 +70,7 @@ pub enum SplitError {
 
 /// Parse `git status --porcelain=v1` output.
 ///
-/// Rename lines (`R  old -> new`) take the NEW path. `??` paths are
+/// Rename lines (`R old -> new`) take the NEW path. `??` paths are
 /// untracked. Anything shorter than `XY␣path` refuses naming the line.
 pub fn parse_porcelain(status: &str) -> Result<Vec<ChangedFile>, SplitError> {
     let mut out = Vec::new();
@@ -352,10 +352,9 @@ pub fn plan_commits(
     order_groups(groups, deps)
 }
 
-/// One `git -C <repo> <args>` call: piped stdio (never inherit —
-/// traps #4), stderr folded into the error. Paths only, no secrets
-/// exist here (mirrors `delegate::worktree::git`; not imported —
-/// delegate is not a tools dep, stated).
+/// One `git -C <repo> <args>` call: piped stdio, stderr folded into the error. Paths only, no
+/// secrets exist here (mirrors `delegate::worktree::git`; not imported — delegate is not a tools
+/// dep, stated).
 async fn git_out(repo: &Path, args: &[&str]) -> anyhow::Result<String> {
     let out = tokio::process::Command::new("git")
         .arg("-C")

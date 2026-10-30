@@ -1,4 +1,4 @@
-//! Evolution-lite data shapes (Chunk 130, Epic U slice U1a).
+//! Evolution-lite data shapes.
 //!
 //! Export + candidate layer for prompt-pack evolution: scored eval
 //! pairs fold into failure-first JSONL traces ([`export_traces`], parsed
@@ -108,14 +108,12 @@ pub fn parse_traces(jsonl: &str) -> Result<Vec<TraceRecord>, String> {
     Ok(out)
 }
 
-/// A pack-mutation proposal: FULL file contents per prompt path plus the
-/// parent manifest rows it was dashed against. Full files (packs are KBs
-/// — TBM-12), never diffs: diffs derive at PR-render ([`render_diff`]).
+/// A pack-mutation proposal: FULL file contents per prompt path plus the parent manifest rows it
+/// was dashed against. Full files, never diffs: diffs derive at PR-render ([`render_diff`]).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct PackCandidate {
     pub id: String,
-    /// Parent `prompts.toml` sha rows (path → sha256) the candidate was
-    /// dashed against (TBM-17: the gate re-verifies these in U1b).
+    /// Parent `prompts.toml` sha rows (path → sha256) the candidate was dashed against.
     pub parent_hashes: BTreeMap<String, String>,
     /// Proposed full contents per prompt path.
     pub files: BTreeMap<String, String>,
@@ -142,13 +140,11 @@ pub fn render_diff(candidate: &PackCandidate, current: &BTreeMap<String, String>
     out
 }
 
-/// U1b judging layer (Chunk 131) + U1c proposer seam (Chunk 133):
-/// trace→board rebuild, parent-hash (dashed-against) verify, offline
-/// baseline replay, before/after judge reusing [`super::eval::gate`],
-/// and the external-proposer boundary ([`ProposerBrief`], [`Proposer`],
-/// [`SimpleMutator`]). Claimed after-boards are shape- + math-checked
-/// here; trust arrives via the key-gated live re-run (129 D3 — stated,
-/// not hidden).
+/// U1b judging layer + U1c proposer seam: trace→board rebuild, parent-hash (dashed-against) verify,
+/// offline baseline replay, before/after judge reusing [`super::eval::gate`], and the external-
+/// proposer boundary ([`ProposerBrief`], [`Proposer`], [`SimpleMutator`]). Claimed after-boards are
+/// shape- + math-checked here; trust arrives via the key-gated live re-run (129 D3 — stated, not
+/// hidden).
 ///
 /// sha256 hex over bytes (mirrors the CLI manifest hasher —
 /// `cli/src/main.rs:verify_prompt_manifest`; same bytes ⇒ same row).
@@ -356,11 +352,9 @@ pub fn chain_verify(
     judge(before, after, min_rate).map_err(|e| format!("chain: {e}"))
 }
 
-/// U2 skill layer (Chunk 134, last U slice): `SKILL.md` candidates with
-/// the same PR shape as packs (full file + parent hash + rules) plus a
-/// hand-rolled hygiene diagnoser. Strict validation itself lives in
-/// `polymorph-skills::validate` (dev-dep proof only — runtime stays
-/// decoupled, 134-plan ruling).
+/// U2 skill layer: `SKILL.md` candidates with the same PR shape as packs (full file + parent hash +
+/// rules) plus a hand-rolled hygiene diagnoser. Strict validation itself lives in `polymorph-
+/// skills::validate` (dev-dep proof only — runtime stays decoupled, 134-plan ruling).
 ///
 /// A skill-mutation proposal: the FULL `SKILL.md` (single-file v1 —
 /// resources/ rides a triggered follow-up) + parent sha + note.
@@ -451,7 +445,7 @@ fn flat_fields(md: &str) -> Option<BTreeMap<String, String>> {
 /// `compatibility` > 500 chars with the issue named). Structural faults
 /// (bad fence, missing name/description, name mismatch) are NAMED and
 /// left untouched. Line-trailing whitespace is NEVER trimmed (markdown
-/// `  ` = `<br>` — stated non-repair).
+/// ` ` = `<br>` — stated non-repair).
 pub fn diagnose_skill_fix(name: &str, current_md: &str, failure_note: &str) -> SkillDiagnosis {
     let mut issues = Vec::new();
     let mut structural = false;
@@ -972,7 +966,7 @@ mod tests {
         std::fs::write(dir.join("SKILL.md"), &broken).unwrap();
         let red = polymorph_skills::validate(&dir).unwrap_err().to_string();
         assert!(red.contains("ompatibility"), "{red}");
-        // Diagnose → fix → write back → GREEN.
+        // Diagnose → fix → write back → pass.
         let d = diagnose_skill_fix("demo-skill", &broken, "compat overlong");
         assert!(d.fixed, "{d:?}");
         std::fs::write(dir.join("SKILL.md"), &d.fixed_md).unwrap();

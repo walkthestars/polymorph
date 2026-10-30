@@ -1,11 +1,8 @@
-//! MCP client substrate (Epic H: chunk 53 connect + list + enroll,
-//! chunk 54 gate-first dispatch over a lazy per-server pool).
+//! MCP client substrate.
 
 use crate::{Registry, ToolDef};
 
-/// Server descriptor: which child to spawn (c52 D1/D6 — stdio first, no
-/// URLs or secrets in config; argv passes as items, never a shell string,
-/// traps-#9 class).
+/// Server descriptor: which child to spawn.
 #[derive(Debug, Clone, PartialEq)]
 pub struct McpServerSpec {
     pub id: String,
@@ -31,11 +28,10 @@ impl From<&polymorph_core::config::McpServerEntry> for McpServerSpec {
     }
 }
 
-/// Wire configured servers (chunk 55): add + connect + list + enroll per
-/// server, fail-soft (warn + continue — one broken server never kills the
-/// run). Returns enrolled tool names for the model allowlist. The bench
-/// deliberately does NOT call this (apparatus stability — boards stay
-/// comparable; stated at its registry site).
+/// Wire configured servers: add + connect + list + enroll per server, fail-soft (warn + continue —
+/// one broken server never kills the run). Returns enrolled tool names for the model allowlist. The
+/// bench deliberately does NOT call this (apparatus stability — boards stay comparable; stated at
+/// its registry site).
 pub async fn wire_mcp_servers(
     registry: &mut Registry,
     servers: &[polymorph_core::config::McpServerEntry],
@@ -74,7 +70,7 @@ pub async fn wire_mcp_servers(
     names
 }
 
-/// Registry name for one server tool: `mcp__<server>__<tool>` (c52 D2).
+/// Registry name for one server tool: `mcp__<server>__<tool>`.
 /// Server ids never hold `_` (enforced at enroll/connect) so the FIRST
 /// `__` split is unambiguous even when tool names contain `__`.
 pub fn mcp_tool_name(server: &str, tool: &str) -> String {
@@ -94,8 +90,8 @@ fn valid_server_id(id: &str) -> bool {
     !id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
 }
 
-/// Minimal tool view for enrollment (D2). Carries the server schema for the
-/// chunk-54 `Registry::schema` extension; the server validates args.
+/// Minimal tool view for enrollment (D2). Carries the server schema for the `Registry::schema`
+/// extension; the server validates args.
 #[derive(Debug, Clone, PartialEq)]
 pub struct McpToolInfo {
     pub name: String,
@@ -188,9 +184,8 @@ pub fn enroll_mcp_tools(
 /// network IO (lock sections stay short — never held across awaits).
 pub type McpClient = std::sync::Arc<rmcp::service::RunningService<rmcp::RoleClient, ()>>;
 
-/// Persistent clients, one per server (c52 D5). Lazy: the first call
-/// connects; eviction-on-break is chunk 55 (a poisoned client fails until
-/// process end — no prod callers yet, unit surface only, stated).
+/// Persistent clients, one per server. Lazy: the first call connects; eviction-on-break is
+/// (a poisoned client fails until process end — no prod callers yet, unit surface only, stated).
 #[derive(Debug, Default)]
 pub struct McpPool {
     specs: std::collections::BTreeMap<String, McpServerSpec>,
@@ -222,11 +217,9 @@ impl McpPool {
     }
 }
 
-/// Call one enrolled MCP tool (chunk 54: gate-first, lazy connect, MRTR
-/// default kept per c52 — `call_tool`, not `call_tool_once`). Transport
-/// and `is_error` faults become `Failed` (recoverable at the feed loop,
-/// F3b precedent); only the gate denies (taxonomy stays meaningful).
-/// No new `CallError` variant (c52 D7).
+/// Call one enrolled MCP tool. Transport and `is_error` faults become `Failed` (recoverable at the
+/// feed loop, F3b precedent); only the gate denies (taxonomy stays meaningful). No new `CallError`
+/// variant.
 pub async fn call_mcp_tool(
     pool: &tokio::sync::Mutex<McpPool>,
     name: &str,
@@ -234,7 +227,7 @@ pub async fn call_mcp_tool(
     gate: &crate::Gate,
 ) -> Result<serde_json::Value, crate::CallError> {
     use crate::CallError;
-    // Gate FIRST (c52 D4): before connect and before call. A denial leaves
+    // Gate FIRST: before connect and before call. A denial leaves
     // the pool untouched — connecting is itself a side effect.
     gate.check(name).map_err(CallError::Denied)?;
     let (server, tool) = split_mcp_tool_name(name)
@@ -242,7 +235,7 @@ pub async fn call_mcp_tool(
     // Server-level rules use the SAME `__` joining, which the `:`/` `-segment
     // Gate never matches (caught by test — `mcp__probe` does not prefix-match
     // `mcp__probe__echo` under segment rules). Check the server prefix
-    // explicitly so one rule still governs a whole server (c52 D4 intent).
+    // explicitly so one rule still governs a whole server.
     gate.check(&format!("mcp__{server}"))
         .map_err(CallError::Denied)?;
     // Resolve or lazily connect in two short lock sections — the lock is
@@ -385,7 +378,7 @@ mod tests {
     #[test]
     fn spawn_missing_binary_fails_fast() {
         // Negative spawn path only (positive needs a protocol-speaking
-        // child — loopback covers the protocol, c55 covers transcripts).
+        // child — loopback covers the protocol, covers transcripts).
         let spec = McpServerSpec {
             id: "probe".into(),
             cmd: "definitely-not-a-real-mcp-binary-xyz".into(),
@@ -408,7 +401,7 @@ mod tests {
         let client_t =
             rmcp::transport::async_rw::AsyncRwTransport::<rmcp::RoleClient, _, _>::new(br, bw);
         // Both ends must progress together: each `serve` awaits the peer's
-        // handshake, so sequential awaits deadlock (caught live, 60s hang).
+        // handshake, so sequential awaits deadlock (observed as a 60s hang).
         let (server, client) = tokio::join!(
             rmcp::serve_server(ProbeServer, server_t),
             rmcp::ServiceExt::serve((), client_t)
@@ -427,8 +420,8 @@ mod tests {
         enroll_mcp_tools(&mut r, "probe", &infos).unwrap();
         assert!(r.get("mcp__probe__probe_echo").is_some());
         assert!(r.get("mcp__probe__nope").is_none());
-        // Dispatch lands here (chunk 54): inject the loopback client and
-        // call through the registry exactly like the feed loop does.
+        // Dispatch lands here: inject the loopback client and call through the registry exactly
+        // like the feed loop does.
         r.inject_mcp_client("probe", std::sync::Arc::new(client))
             .await;
         let d = tempfile::tempdir().unwrap();

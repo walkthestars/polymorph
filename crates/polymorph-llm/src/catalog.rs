@@ -1,8 +1,8 @@
-//! Model catalog (Epic D1e).
+//! Model catalog.
 //!
-//! Discovery source is models.dev (the open OpenRouter+capability registry
-//! per 0-master Odds & Ends — reuse, don't maintain our own). The catalog is
-//! best-effort and offline-first:
+//! Discovery source is models.dev (an open capability registry; reuse it
+//! rather than maintaining our own). The catalog is best-effort and
+//! offline-first:
 //!
 //! - [`Catalog::fallback`]: pinned snapshot compiled in via `include_str!`
 //!   (ids this project actually routes: GLM + Muse Spark). Builds and
@@ -102,7 +102,7 @@ impl Catalog {
 
 /// Best-effort reduction of a models.dev-shaped document to id → info.
 /// Handled shapes (pinned by tests): `{models: {id: obj}}`, `{models: [ids
-/// | {id..}]}`, `{providers: {prov: {models: ...}}}`, and a bare `{id: obj}`
+/// | {id..}]}`, `{providers: {prov: {models:...}}}`, and a bare `{id: obj}`
 /// map (the cache/fallback shape). Anything else → empty map.
 pub fn normalize_models_dev(doc: &serde_json::Value) -> BTreeMap<String, ModelInfo> {
     let mut out = BTreeMap::new();

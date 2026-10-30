@@ -1,9 +1,8 @@
-//! `polymorph-delegate` — subagent engine (Epic E).
+//! `polymorph-delegate` — subagent engine.
 //!
-//! Chunk 8 (E1 bus core): spawn/steer/stop lifecycle, turn/stall budgets,
-//! typed JSON results, JoinSet fan-out, worktree isolation. Turn execution
-//! is a pluggable [`TurnRunner`](bus::TurnRunner) — Epic F wires the real
-//! tools+LLM loop; this crate depends on core only, never tools/llm.
+//! (E1 bus core): spawn/steer/stop lifecycle, turn/stall budgets, typed JSON results, JoinSet fan-
+//! out, worktree isolation. Turn execution is a pluggable [`TurnRunner`](bus::TurnRunner) — wires
+//! the real tools+LLM loop; this crate depends on core only, never tools/llm.
 
 pub mod budget;
 pub mod bus;

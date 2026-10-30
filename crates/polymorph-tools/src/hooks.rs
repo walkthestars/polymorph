@@ -1,11 +1,11 @@
-//! Tool-call hooks (Epic J1, chunk 79): PreToolUse / PostToolUse / Stop.
+//! Tool-call hooks: PreToolUse / PostToolUse / Stop.
 //!
 //! In-process handler registry consulted at the `Registry::call` boundary
 //! (pre → resolve → per-tool gate → execute → post). Hooks are an
 //! ADDITIONAL layer — the distributed per-tool gates stay exactly where
 //! they are (observed, not centralized). Handlers are sync and must be
 //! fast/non-blocking (no sleeps, no spawns); script-command handlers ride
-//! a later slice with their own timeout policy (stated, not silent).
+//! a later addition with its own timeout policy (stated, not silent).
 //!
 //! Semantics: PreToolUse consults handlers in registration order, FIRST
 //! `Deny` wins (mapped to typed `CallError::Denied`, before even
@@ -49,7 +49,7 @@ pub enum HookDecision {
 }
 
 /// In-process handler table. Empty by default (pure passthrough — every
-/// pre-79 caller behaves identically, proven by the unchanged suite).
+/// prior caller behaves identically, proven by the unchanged suite).
 #[derive(Default)]
 pub struct HookRegistry {
     handlers: Vec<HookHandler>,
@@ -97,10 +97,9 @@ impl HookRegistry {
     }
 }
 
-/// One ask-user question (Epic J1, chunk 89): which tool wants to run and
-/// the handler-supplied question. Owned throughout; the prompter answers
-/// Allow/Deny — there is deliberately NO third sync variant (D1: the sync
-/// boundary never blocks on a human).
+/// One ask-user question: which tool wants to run and the handler-supplied question. Owned
+/// throughout; the prompter answers Allow/Deny — there is deliberately NO third sync variant (D1:
+/// the sync boundary never blocks on a human).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PromptRequest {
     pub tool: String,
@@ -108,16 +107,13 @@ pub struct PromptRequest {
 }
 
 /// Interactive prompter: answers one question asynchronously. Implemented
-/// by surfaces with a human (TUI modal); headless loops attach none and
-/// fail closed (D2). The `Debug` bound keeps `Registry`'s derive working.
+/// by surfaces with a human; headless loops attach none and fail closed. The `Debug` bound keeps `Registry`'s derive working.
 #[async_trait::async_trait]
 pub trait Prompter: Send + Sync + std::fmt::Debug {
     async fn ask(&self, req: PromptRequest) -> HookDecision;
 
-    /// Structured pick (Epic Q, chunk 122): choose among options.
-    /// Default body dismisses (backward compatible — pre-122
-    /// implementors keep compiling; surfaces override when they can
-    /// render a picker, TUI/ACP arms docketed as Q-followup).
+    /// Structured pick: choose among options. Default body dismisses (backward compatible — prior
+    /// implementors keep compiling; surfaces override when they can render a picker).
     async fn pick(&self, req: PickRequest) -> PickOutcome {
         let _ = req;
         PickOutcome::Dismissed {
@@ -126,13 +122,11 @@ pub trait Prompter: Send + Sync + std::fmt::Debug {
     }
 }
 
-/// Cap on options per pick (Epic Q, chunk 122): overlay space + model
-/// discipline (chunk-98 caps precedent); TUI slice inherits it.
+/// Cap on options per pick: overlay space and model discipline.
 pub const MAX_ASK_OPTIONS: usize = 8;
 
-/// One pickable option (Epic Q, chunk 122): a stable label the model
-/// gets back verbatim, an optional hint for the human, at most one
-/// `recommended` per request (validated at the tool, not here).
+/// One pickable option: a stable label the model gets back verbatim, an optional hint for the
+/// human, at most one `recommended` per request (validated at the tool, not here).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PickOption {
     pub label: String,
@@ -140,8 +134,8 @@ pub struct PickOption {
     pub recommended: bool,
 }
 
-/// One structured pick question (Epic Q, chunk 122): owned throughout.
-/// `multi` allows several labels; `allow_other` admits free text.
+/// One structured pick question: owned throughout. `multi` allows several labels; `allow_other`
+/// admits free text.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PickRequest {
     pub tool: String,
@@ -151,8 +145,8 @@ pub struct PickRequest {
     pub allow_other: bool,
 }
 
-/// Structured pick outcome (Epic Q, chunk 122): labels (stable under
-/// renderer reorder — never indices), free text, or dismissal.
+/// Structured pick outcome: labels (stable under renderer reorder — never indices), free text, or
+/// dismissal.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PickOutcome {
     Selected(Vec<String>),
@@ -164,7 +158,7 @@ pub enum PickOutcome {
 /// pass. Consulted in registration order; the first question wins (D1).
 type AskHandler = Box<dyn Fn(&str, &serde_json::Value) -> Option<String> + Send + Sync>;
 
-/// Ask-user table + optional prompter. Empty = never asks (all pre-89
+/// Ask-user table + optional prompter. Empty = never asks (all prior
 /// behavior unchanged); fires without a prompter = fail-closed Deny (D2).
 #[derive(Default)]
 pub struct AskRegistry {
@@ -335,7 +329,7 @@ mod tests {
 
     #[tokio::test]
     async fn default_pick_impl_dismisses() {
-        // A pre-122 prompter (ask-only) keeps compiling AND dismisses
+        // A prior prompter (ask-only) keeps compiling AND dismisses
         // picks — backward compatibility with a stated behavior.
         #[derive(Debug)]
         struct AskOnly;

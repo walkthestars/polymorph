@@ -1,18 +1,14 @@
-//! `polymorph-tasks` — task model + dependency DAG + PLAN.md (Epic G).
+//! `polymorph-tasks` — task model + dependency DAG + PLAN.md.
 //!
-//! Chunk 46 (first slice): the plan-mode substrate. [`graph`] owns the model
-//! (tasks, statuses, edges, ready-order, merge ordering, checkpoints);
-//! [`plan`] owns the observable artifact (PLAN.md render/parse). No LLM, no
-//! bus, no network — the reviewer loop drives these types without touching
-//! them (F1/F2 seam precedent).
+//! The plan-mode substrate. [`graph`] owns the model (tasks, statuses, edges, ready-
+//! order, merge ordering, checkpoints); [`plan`] owns the observable artifact (PLAN.md
+//! render/parse). No LLM, no bus, no network — the reviewer loop drives these types without
+//! touching them (F1/F2 seam precedent).
 //!
-//! Rules (0-master plan-mode shape + chunk-42 D4):
-//! - The plan is a FILE (rendered, reviewed, rewritten), never a black-box
-//!   transcript.
-//! - `Done` is terminal: resume never resurrects completed work.
-//! - Multi-child merges run in dependency order; the caller stops at the
-//!   first conflict (no partial merges) — [`graph::TaskGraph::merge_order`]
-//!   only orders, it never merges.
+//! Rules: - The plan is a FILE (rendered, reviewed, rewritten), never a black-box transcript. -
+//! `Done` is terminal: resume never resurrects completed work. - Multi-child merges run in
+//! dependency order; the caller stops at the first conflict (no partial merges) —
+//! [`graph::TaskGraph::merge_order`] only orders, it never merges.
 
 pub mod graph;
 pub mod plan;

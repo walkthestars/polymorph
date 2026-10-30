@@ -1,19 +1,15 @@
-//! `polymorph-review` — clean-context reviewer loop (Epic F1, offline core).
+//! `polymorph-review` — clean-context reviewer loop.
 //!
-//! Chunk 9: verdict text boundary, convergence state machine, and the
-//! mode-parameterized plan/act loop driver over injected async
-//! [`Reviewer`]/[`Executor`] traits. No LLM, no Bus, no network — F2 binds
-//! these traits to the delegate bus + D1-managed LLM path without touching F1.
+//! Verdict text boundary, convergence state machine, and the mode-parameterized plan/act loop
+//! driver over injected async [`Reviewer`]/[`Executor`] traits. No LLM, no Bus, no network — F2
+//! binds these traits to the delegate bus + D1-managed LLM path without touching F1.
 //!
-//! Rules (0-master §§2.6, 4 "Plan/Act/Review/Delegate"):
-//! - Reviewer input carries goal + criteria + CURRENT artifact only. There is
-//!   deliberately NO history/findings field on [`ReviewerInput`] — reviewer
-//!   independence is enforced by construction, not by discipline.
-//! - Verdicts are typed [`polymorph_core::Verdict`]; raw model text crosses
-//!   ONLY via [`parse_verdict`](verdict::parse_verdict) (strict JSON, never
-//!   prose-sniffed).
-//! - Escalate-reason priority: Survivor > final-round-invalid > MaxIterations.
-//! - This crate depends on core ONLY (delegate precedent, chunk 8).
+//! Rules: - Reviewer input carries goal + criteria +
+//! CURRENT artifact only. There is deliberately NO history/findings field on [`ReviewerInput`] —
+//! reviewer independence is enforced by construction, not by discipline. - Verdicts are typed
+//! [`polymorph_core::Verdict`]; raw model text crosses ONLY via
+//! [`parse_verdict`](verdict::parse_verdict) (strict JSON, never prose-sniffed). - Escalate-reason
+//! priority: Survivor > final-round-invalid > MaxIterations. - This crate depends on core ONLY.
 
 pub mod ab;
 pub mod artifact_set;

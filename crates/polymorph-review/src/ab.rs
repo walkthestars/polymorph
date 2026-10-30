@@ -1,10 +1,9 @@
-//! Offline A/B harness (Epic F4a).
+//! Offline A/B harness.
 //!
-//! Compares two reviewer/executor arms on the SAME seeded case via
-//! [`crate::run_loop`]. LLM-free: arms are injected [`crate::Reviewer`] /
-//! [`crate::Executor`] traits (scripted fakes here, live Bus+LLM in F4b).
-//! Cost proxy = turns (`rounds_log.len`); token/cost ledger stays TBM-09
-//! open and the live-model half of TBM-15 stays open (F4b).
+//! Compares two reviewer/executor arms on the SAME seeded case via [`crate::run_loop`]. LLM-free:
+//! arms are injected [`crate::Reviewer`] / [`crate::Executor`] traits (scripted fakes here, live
+//! Bus+LLM in F4b). Cost proxy = turns (`rounds_log.len`); token/cost ledger stays open and the
+//! live-model half of stays open (F4b).
 
 use polymorph_core::LoopConfig;
 

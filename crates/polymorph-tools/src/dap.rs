@@ -1,12 +1,10 @@
-//! DAP client substrate (Epic M: chunk 102 M1a, framing + spawn + initialize).
+//! DAP client substrate.
 //!
-//! D1/D2 (chunk-101 design): `tools::dap` module (NOT a new crate —
-//! debugging is a tool-execution concern, no new surface ships), stdio +
-//! `Content-Length` framing REUSED from [`crate::lsp`] (`encode_message` /
-//! `read_message` are transport-generic: `Value` in, framed bytes out —
-//! zero LSP-specific content), client-only v1. Zero new deps (offline
-//! survey: no DAP-protocol crates in the local cargo cache, network
-//! survey policy-denied — the L hand-rolled precedent stands).
+//! D1/D2: `tools::dap` module (NOT a new crate — debugging is a tool-execution concern, no new
+//! surface ships), stdio + `Content-Length` framing REUSED from [`crate::lsp`] (`encode_message` /
+//! `read_message` are transport-generic: `Value` in, framed bytes out — zero LSP-specific content),
+//! client-only v1. Zero new deps (offline survey: no DAP-protocol crates in the local cargo cache,
+//! network survey policy-denied — the L hand-rolled precedent stands).
 //!
 //! DAP wire differences from LSP (general knowledge, M1a re-verifies
 //! against a scripted peer below — assumed nowhere): every message
@@ -26,11 +24,8 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 /// direction, same 30 s).
 const DAP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
-/// Server descriptor: which child to spawn (argv passes as items, never
-/// a shell string, traps-#9 class; the `[[dap_adapters]]` table maps onto
-/// this at M2). `env` carries adapter-scoped variables (e.g. `PYTHONPATH`
-/// at extension-bundled libs) — per-child, never process-global (the
-/// chunk-95 `set_var` race class).
+/// Server descriptor: which child to spawn. `env` carries adapter-scoped variables (e.g.
+/// `PYTHONPATH` at extension-bundled libs) — per-child, never process-global.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DapSpec {
     pub cmd: String,
@@ -69,11 +64,10 @@ pub struct DapConn<R, W> {
     /// Server-pushed `event` frames seen while awaiting responses,
     /// oldest-first. Observation only (client-only v1 posture).
     events: Vec<serde_json::Value>,
-    /// Responses for OTHER outstanding requests, keyed by `request_seq`.
-    /// The launch→configurationDone lifecycle overlaps two requests by
-    /// protocol design (debugpy holds the `launch` response until
-    /// configured), so awaiting one call must park — never refuse —
-    /// strangers (M1b debugpy finding, same chunk as the fix).
+    /// Responses for OTHER outstanding requests, keyed by `request_seq`. The
+    /// launch→configurationDone lifecycle overlaps two requests by protocol design (debugpy holds
+    /// the `launch` response until configured), so awaiting one call must park — never refuse —
+    /// strangers.
     pending: std::collections::BTreeMap<u64, serde_json::Value>,
 }
 
@@ -192,11 +186,8 @@ where
             .context("dap event wait timeout")?
     }
 
-    /// One event frame off the pipe, no queue touch, no timeout — the
-    /// callers ([`Self::next_event`], [`Self::await_event`]) own queue
-    /// discipline and ceilings. (A queued-first read here would defeat
-    /// `await_event`'s skip logic: the same non-matching event would
-    /// return forever — caught live by the skip test, fixed same chunk.)
+    /// One event frame off the pipe, no queue touch, no timeout — the callers
+    /// ([`Self::next_event`], [`Self::await_event`]) own queue discipline and ceilings.
     async fn read_event_raw(&mut self) -> anyhow::Result<serde_json::Value> {
         let msg = crate::lsp::read_message(&mut self.reader)
             .await
@@ -224,11 +215,10 @@ where
         self.await_any(std::slice::from_ref(&name), budget).await
     }
 
-    /// Wait for the FIRST of several server events up to `budget`
-    /// (chunk 107, M3): continue/start must notice `terminated` the
-    /// moment it posts — awaiting `stopped` alone would burn the whole
-    /// budget on every run-to-completion program. One remaining-clock
-    /// for all names; expiry names the set. Non-matching frames queue.
+    /// Wait for the FIRST of several server events up to `budget`: continue/start must notice
+    /// `terminated` the moment it posts — awaiting `stopped` alone would burn the whole budget on
+    /// every run-to-completion program. One remaining-clock for all names; expiry names the set.
+    /// Non-matching frames queue.
     pub async fn await_any(
         &mut self,
         names: &[&str],
@@ -528,11 +518,10 @@ impl DapClient {
     }
 }
 
-/// TCP-connected debug adapter (chunk 104, M2): some adapters speak
-/// DAP over TCP only (`dlv dap -l`, `codelldb --port`) — stdio is not
-/// universal. `DapConn`'s R/W genericity carries the whole protocol
-/// with zero duplication: split halves plug straight in.
-/// Owns the child for teardown parity with [`DapClient`] (kill + reap).
+/// TCP-connected debug adapter: some adapters speak DAP over TCP only (`dlv dap -l`, `codelldb
+/// --port`) — stdio is not universal. `DapConn`'s R/W genericity carries the whole protocol with
+/// zero duplication: split halves plug straight in. Owns the child for teardown parity with
+/// [`DapClient`] (kill + reap).
 pub struct DapTcpClient {
     child: tokio::process::Child,
     conn: DapConn<
@@ -604,12 +593,10 @@ impl DapTcpClient {
             let mut err_lines = BufReader::new(stderr).lines();
             let mut found = None;
             let start = std::time::Instant::now();
-            // Adapters disagree which pipe carries the address (dlv:
-            // stdout `DAP server listening at:`; others: stderr) —
-            // scan BOTH, first match wins (M2 dlv finding, same chunk).
-            // EOF on either pipe breaks the scan: a healthy adapter
-            // holds both pipes open through startup, so EOF here means
-            // a dying adapter — the no-port bail below names it.
+            // Adapters disagree which pipe carries the address (dlv: stdout `DAP server listening
+            // at:`; others: stderr) — scan BOTH, first match wins. EOF on either pipe breaks the
+            // scan: a healthy adapter holds both pipes open through startup, so EOF here means a
+            // dying adapter — the no-port bail below names it.
             while start.elapsed() < DAP_TIMEOUT {
                 let remaining = DAP_TIMEOUT
                     .checked_sub(start.elapsed())
@@ -771,10 +758,9 @@ impl DapTcpClient {
     }
 }
 
-/// Uniform session surface over stdio ([`DapClient`]) and TCP
-/// ([`DapTcpClient`]) sessions (chunk 104, M2): the matrix driver —
-/// and later M3's tool surface — writes ONE flow against this trait
-/// instead of per-transport copies. Lifecycles, not transports.
+/// Uniform session surface over stdio ([`DapClient`]) and TCP ([`DapTcpClient`]) sessions: the
+/// matrix driver — and later M3's tool surface — writes ONE flow against this trait instead of per-
+/// transport copies. Lifecycles, not transports.
 #[async_trait::async_trait]
 pub trait DapSession: Send {
     async fn initialize(&mut self, adapter_id: &str) -> anyhow::Result<serde_json::Value>;
@@ -995,7 +981,7 @@ impl DapSession for DapTcpClient {
 }
 
 /// Parse a `127.0.0.1:PORT` (or `host:PORT`) listening address out of one
-/// adapter log line (`dlv dap -l` prints `API server listening at: ...`).
+/// adapter log line (`dlv dap -l` prints `API server listening at:...`).
 /// Pure for unit tests; `None` = not a listening line (caller keeps
 /// scanning — first match wins).
 pub fn parse_listening_port(line: &str) -> Option<u16> {
@@ -1015,11 +1001,9 @@ pub fn free_port() -> anyhow::Result<u16> {
         .context("dap free_port addr")
 }
 
-/// Adapter spec table (chunk 104, M2): language → [`DapSpec`], mirroring
-/// `LspPool`'s spec side. Sessions spawn FRESH per use (debugger
-/// sessions are inherently single-shot — unlike LSP there is deliberately
-/// no connected-client pool to go stale). M3's tool surface reads specs
-/// from here via the registry.
+/// Adapter spec table: language → [`DapSpec`], mirroring `LspPool`'s spec side. Sessions spawn
+/// FRESH per use (debugger sessions are inherently single-shot — unlike LSP there is deliberately
+/// no connected-client pool to go stale). M3's tool surface reads specs from here via the registry.
 #[derive(Debug, Default)]
 pub struct DapPool {
     specs: std::collections::BTreeMap<String, DapSpec>,
@@ -1101,10 +1085,9 @@ pub async fn wire_dap_adapters(
     enrolled
 }
 
-/// Per-language `launch` arguments (chunk 107, M3): shapes proven by
-/// the M2 matrix rows — a new adapter adds one arm here (plus its
-/// matrix row), never a new call path. `workdir` feeds adapters that
-/// need an explicit cwd (codelldb); others ignore it.
+/// Per-language `launch` arguments: shapes proven by the M2 matrix rows — a new adapter adds one
+/// arm here (plus its matrix row), never a new call path. `workdir` feeds adapters that need an
+/// explicit cwd (codelldb); others ignore it.
 pub fn launch_args_for(
     language: &str,
     program: &str,
@@ -1119,11 +1102,9 @@ pub fn launch_args_for(
     }
 }
 
-/// Caps for the combined inspect payload (chunk 107, M3): the agent's
-/// tool budget (8 calls/round, 4 rounds) favors ONE chunky read over
-/// threads→stack→scopes→variables round-trips — but unbounded dumps
-/// would flood context. Over-cap entries count, never silently drop
-/// (the chunk-98 caps precedent).
+/// Caps for the combined inspect payload: the agent's tool budget (8 calls/round, 4 rounds) favors
+/// ONE chunky read over threads→stack→scopes→variables round-trips — but unbounded dumps would
+/// flood context. Over-cap entries count, never silently drop.
 pub const MAX_INSPECT_FRAMES: usize = 20;
 pub const MAX_INSPECT_VARS: usize = 50;
 
@@ -1381,9 +1362,8 @@ mod tests {
 
     #[tokio::test]
     async fn response_without_request_seq_fails_loud() {
-        // Audit-found hole (same chunk): a response that pairs with
-        // NOTHING must fail naming the frame — parking it would rot in
-        // the pending map and poison later lifecycles silently.
+        // Audit-found hole: a response that pairs with NOTHING must fail naming the frame — parking
+        // it would rot in the pending map and poison later lifecycles silently.
         let (mut conn, mut peer_rx, mut peer_tx) = loopback();
         let drive = async move {
             let _ = peer_read(&mut peer_rx).await;

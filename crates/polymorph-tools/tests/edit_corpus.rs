@@ -1,4 +1,4 @@
-//! B6 seeded edit-corpus driver (Epic B6).
+//! B6 seeded edit-corpus driver.
 //!
 //! Loads `eval_b6/edit_corpus.toml`, runs every task in an isolated tempdir:
 //! write initial files → mint tags → substitute `{{TAG:path}}` (or corrupt

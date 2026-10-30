@@ -1,8 +1,7 @@
 //! `polymorph-tools` — tool implementations + self-registering registry.
 //!
-//! CONVENTION (Epic A, per execution plan §4): tools self-register in
-//! `polymorph-tools/src/registry.rs`; nothing registers from `core`.
-//! Chunk 3: exec/read/write/grep/glob land here; edit (hashline) is B4.
+//! CONVENTION: tools self-register in `polymorph-tools/src/registry.rs`; nothing registers from
+//! `core`. exec/read/write/grep/glob land here; edit (hashline) is B4.
 
 pub mod dap;
 pub mod eval;
@@ -78,15 +77,14 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Context as _;
 
-/// Tool execution context (placeholder; Epic B fills in session/permissions).
+/// Tool execution context.
 #[derive(Debug, Clone, Default)]
 pub struct ToolContext {
     pub session_id: String,
 }
 
-/// A registered tool descriptor. Input schemas live in
-/// [`Registry::schema`], execution in [`Registry::call`] (Epic F3a) — the
-/// descriptor itself stays name + description by convention.
+/// A registered tool descriptor. Input schemas live in [`Registry::schema`], execution in
+/// [`Registry::call`] — the descriptor itself stays name + description by convention.
 #[derive(Clone)]
 pub struct ToolDef {
     pub name: String,
@@ -102,10 +100,9 @@ impl std::fmt::Debug for ToolDef {
     }
 }
 
-/// Execution context for one tool call (Epic F3a): the child workdir that
-/// relative paths resolve against, the permission gate, and the
-/// cancellation token (observed by `bash` only — fs/hashline calls are fast
-/// and sync). All fields clone; build one per call site.
+/// Execution context for one tool call: the child workdir that relative paths resolve against, the
+/// permission gate, and the cancellation token (observed by `bash` only — fs/hashline calls are
+/// fast and sync). All fields clone; build one per call site.
 #[derive(Debug, Clone)]
 pub struct ToolCallContext {
     pub workdir: PathBuf,
@@ -140,10 +137,9 @@ fn summarized(value: &serde_json::Value) -> String {
     }
 }
 
-/// Registry: name → definition. Populated by `inventory`-style explicit
-/// registration calls (no magic re-export from core). Owns the hashline
-/// snapshot store (Epic F3a): tags mint and verify against ONE store per
-/// registry, so an `edit` sees tags minted through the same registry.
+/// Registry: name → definition. Populated by `inventory`-style explicit registration calls (no
+/// magic re-export from core). Owns the hashline snapshot store: tags mint and verify against ONE
+/// store per registry, so an `edit` sees tags minted through the same registry.
 #[derive(Debug, Default)]
 pub struct Registry {
     tools: BTreeMap<String, ToolDef>,
@@ -158,11 +154,10 @@ pub struct Registry {
     hooks: HookRegistry,
     scripts: Vec<ScriptHook>,
     ask: AskRegistry,
-    /// Files `grep`/`glob` never surface (docket #8: a drive's own
-    /// `--events-json` path), on top of the always-on harness-state rule.
+    /// Files `grep`/`glob` never surface, on top of the always-on harness-state rule.
     scan_hidden: Vec<PathBuf>,
-    /// `bash` output bounding (docket #9): streams over the threshold
-    /// spill to `.polymorph/tool-output/` and reach the model as digests.
+    /// `bash` output bounding: streams over the threshold spill to `.polymorph/tool-output/` and
+    /// reach the model as digests.
     output_spill: output::SpillConfig,
 }
 
@@ -199,8 +194,7 @@ impl Registry {
         self.mcp.lock().await.connected()
     }
 
-    /// Schema for one tool: enrolled server schemas first, then the V1
-    /// static table (chunk 54 — the model loop reads through here).
+    /// Schema for one tool: enrolled server schemas first, then the V1 static table.
     pub fn schema_of(&self, name: &str) -> Option<serde_json::Value> {
         self.mcp_schemas
             .get(name)
@@ -220,10 +214,9 @@ impl Registry {
         self.tools.is_empty()
     }
 
-    /// Mint a hashline tag for content shown to the model (Epic F3b read→
-    /// tag flow): the caller passes the FULL current normalized text (tags
-    /// bind content; callers holding paginated views re-read the file).
-    /// Thin lock+mint — the store stays encapsulated across crates.
+    /// Mint a hashline tag for content shown to the model: the caller passes the FULL current
+    /// normalized text (tags bind content; callers holding paginated views re-read the file). Thin
+    /// lock+mint — the store stays encapsulated across crates.
     pub async fn mint_tag(&self, path: &Path, normalized_content: &str) -> String {
         self.snapshots.lock().await.mint(path, normalized_content)
     }
@@ -431,17 +424,14 @@ impl Registry {
         Some(s)
     }
 
-    /// Dispatch one JSON tool call (Epic F3a): resolve → gate → execute.
-    /// Gate runs BEFORE anything executes (a denial leaves zero side
-    /// effects); arg errors name the field. Results are JSON (nonzero bash
-    /// exits are data, never errors — exec precedent). Relative paths join
-    /// `ctx.workdir`; absolute paths pass through (documented gap: no
-    /// sandbox — tools are local by design, the Gate owns dangerous ops).
-    /// Dispatch one JSON tool call (Epic F3a, hooks J1): pre-hook consult
-    /// → resolve → gate → execute → post-hook notify. A pre-hook denial
-    /// maps to typed `CallError::Denied` BEFORE resolve (hooks see probes
-    /// too); post-hook observes every outcome including denials and
-    /// unknown-tool refusals (telemetry, never control).
+    /// Dispatch one JSON tool call: resolve → gate → execute. Gate runs BEFORE anything executes (a
+    /// denial leaves zero side effects); arg errors name the field. Results are JSON (nonzero bash
+    /// exits are data, never errors — exec precedent). Relative paths join `ctx.workdir`; absolute
+    /// paths pass through (documented gap: no sandbox — tools are local by design, the Gate owns
+    /// dangerous ops). Dispatch one JSON tool call: pre-hook consult → resolve → gate → execute →
+    /// post-hook notify. A pre-hook denial maps to typed `CallError::Denied` BEFORE resolve (hooks
+    /// see probes too); post-hook observes every outcome including denials and unknown-tool
+    /// refusals (telemetry, never control).
     pub async fn call(
         &self,
         name: &str,
@@ -460,8 +450,8 @@ impl Registry {
             });
             return Err(denied);
         }
-        // Script pre-hooks (chunk 87): spawned, in order, first Deny wins.
-        // Empty list = zero spawns (the common path costs one branch).
+        // Script pre-hooks: spawned, in order, first Deny wins. Empty list = zero spawns (the
+        // common path costs one branch).
         let args_json = serde_json::to_string(&args).unwrap_or_default();
         for script in self
             .scripts
@@ -483,9 +473,8 @@ impl Registry {
                 return Err(denied);
             }
         }
-        // Ask-user hooks (chunk 89, D1): first question wins; sync/script
-        // denials above already won. No handlers = one branch (the common
-        // path costs nothing). Fires without a prompter = fail-closed Deny
+        // Ask-user hooks: first question wins; sync/script denials above already won. No handlers =
+        // one branch (the common path costs nothing). Fires without a prompter = fail-closed Deny
         // (D2), posted like every other denial.
         if let Some(question) = self.ask.question_for(name, &args) {
             if let HookDecision::Deny { reason } = self.ask.resolve(name, question).await {
@@ -523,21 +512,19 @@ impl Registry {
         outcome
     }
 
-    /// Hide one file from `grep`/`glob` results (docket #8). Set before
-    /// the registry is shared; `read` of the exact path still works.
+    /// Hide one file from `grep`/`glob` results. Set before the registry is shared; `read` of the
+    /// exact path still works.
     pub fn hide_from_scans(&mut self, path: PathBuf) {
         self.scan_hidden.push(path);
     }
 
-    /// Set the `bash` spill policy (docket #9; `[agent]
-    /// tool_output_inline_bytes` / `tool_output_keep_files`). Set before
-    /// the registry is shared; the default spills past 16 KiB per stream.
+    /// Set the `bash` spill policy. Set before the registry is shared; the default spills past 16
+    /// KiB per stream.
     pub fn set_output_spill(&mut self, spill: output::SpillConfig) {
         self.output_spill = spill;
     }
 
-    /// Files hidden from `grep`/`glob` (docket #8); command change
-    /// detection never reports them either.
+    /// Files hidden from `grep`/`glob`; command change detection never reports them either.
     pub fn scan_hidden(&self) -> &[PathBuf] {
         &self.scan_hidden
     }
@@ -626,8 +613,7 @@ impl Registry {
         self.lsp.lock().await.diagnostics()
     }
 
-    /// Last recorded diagnostics per URI with line + severity (docket #3:
-    /// reviewer evidence + the opt-in error gate; same map, richer rows).
+    /// Last recorded diagnostics per URI with line + severity.
     pub async fn lsp_diagnostic_details(
         &self,
     ) -> std::collections::BTreeMap<String, Vec<lsp::LspDiagnostic>> {
@@ -639,9 +625,8 @@ impl Registry {
         self.lsp.lock().await.is_push_only(language)
     }
 
-    /// Test-only seed for the L-actuation (1) brief feed (chunk 98):
-    /// writes directly into the pool's last-recorded map — no server,
-    /// no IO. Production populates via `lsp_post_write` only.
+    /// Test-only seed for the L-actuation (1) brief feed: writes directly into the pool's last-
+    /// recorded map — no server, no IO. Production populates via `lsp_post_write` only.
     pub async fn test_seed_lsp_diagnostics(
         &self,
         map: std::collections::BTreeMap<String, Vec<String>>,
@@ -649,7 +634,7 @@ impl Registry {
         self.lsp.lock().await.test_seed_diagnostics(map);
     }
 
-    /// Test-only structured seed (docket #3): line + severity rows.
+    /// Test-only structured seed: line + severity rows.
     pub async fn test_seed_lsp_diagnostic_details(
         &self,
         map: std::collections::BTreeMap<String, Vec<lsp::LspDiagnostic>>,
@@ -698,11 +683,7 @@ impl Registry {
         if paths.is_empty() {
             return;
         }
-        // Workspace root for initialize (chunk-97 live gaps #2 and #5:
-        // servers like rust-analyzer discover nothing under a null root,
-        // and match file URLs case-sensitively — drive letter goes
-        // lowercase via the shared helper).
-        // Verbatim root to match verbatim file URIs below when any
+        // Workspace root for initialize. Verbatim root to match verbatim file URIs below when any
         // written language needs it (same server compares both).
         let verbatim = paths
             .iter()
@@ -795,41 +776,37 @@ impl Registry {
             "grep" => call_grep(&args, ctx, &self.scan_hidden).await,
             "glob" => call_glob(&args, ctx, &self.scan_hidden).await,
             "bash" => call_bash(&args, ctx, &self.output_spill).await,
-            // LSP read-only queries (chunk 100, L-actuation 3A):
-            // fixer-allowlist tools, gate-first like every fs tool.
+            // LSP read-only queries: fixer-allowlist tools, gate-first like every fs tool.
             "lsp_hover" => self.call_lsp("hover", &args, ctx).await,
             "lsp_definition" => self.call_lsp("definition", &args, ctx).await,
             "lsp_references" => self.call_lsp("references", &args, ctx).await,
-            // Debugger sessions (chunk 107, M3): fixer-allowlist tools
-            // over the session table, gate-first on the debuggee program.
+            // Debugger sessions: fixer-allowlist tools over the session table, gate-first on the
+            // debuggee program.
             "dap_start" => self.call_dap_start(&args, ctx).await,
             "dap_continue" => self.call_dap_session_op("dap_continue", &args, ctx).await,
             "dap_inspect" => self.call_dap_session_op("dap_inspect", &args, ctx).await,
             "dap_evaluate" => self.call_dap_session_op("dap_evaluate", &args, ctx).await,
             "dap_disconnect" => self.call_dap_session_op("dap_disconnect", &args, ctx).await,
-            // Graphics capture (chunk 112, N1a): headed capture to .rdc,
-            // gate-first on the target program like DAP session tools.
+            // Graphics capture: headed capture to.rdc, gate-first on the target program like DAP
+            // session tools.
             "rdoc_capture" => self.call_rdoc_capture(&args, ctx).await,
-            // Capture introspection (chunk 113, N1b): headed replay
-            // queries over .rdc files, gate-first on the capture (data-
-            // scoped); user scripts gate on their own path instead.
+            // Capture introspection: headed replay queries over.rdc files, gate-first on the
+            // capture (data- scoped); user scripts gate on their own path instead.
             "rdoc_draws" => self.call_rdoc_introspect("rdoc_draws", &args, ctx).await,
             "rdoc_state" => self.call_rdoc_introspect("rdoc_state", &args, ctx).await,
             "rdoc_diff" => self.call_rdoc_introspect("rdoc_diff", &args, ctx).await,
             "rdoc_script" => self.call_rdoc_script(&args, ctx).await,
-            // Web research (chunk 120, P1b): serica-backed search +
-            // extract, gate-first on the query/URL (broad rules cover
-            // whole tools via the `rule:` prefix match — DAP precedent).
+            // Web research: serica-backed search + extract, gate-first on the query/URL (broad
+            // rules cover whole tools via the `rule:` prefix match — DAP precedent).
             "web_search" => self.call_web_search(&args, ctx).await,
             "web_extract" => self.call_web_extract(&args, ctx).await,
-            // Structured ambiguity picker (chunk 122, Q): gate-first
-            // like every tool; headless dismissal fails closed.
+            // Structured ambiguity picker: gate-first like every tool; headless dismissal fails
+            // closed.
             "ask" => self.call_ask(&args, ctx).await,
-            // Atomic-split proposal (chunk 128, T2): propose-only
-            // groups, gate-first pre-spawn like every tool.
+            // Atomic-split proposal: propose-only groups, gate-first pre-spawn like every tool.
             "split_plan" => self.call_split_plan(&args, ctx).await,
-            // MCP tools (chunk 54): enrolled names dispatch through the
-            // pool; gate-first inside (denials precede connects).
+            // MCP tools: enrolled names dispatch through the pool; gate-first inside (denials
+            // precede connects).
             _ if name.starts_with("mcp__") => {
                 crate::mcp::call_mcp_tool(&self.mcp, name, &args, &ctx.gate).await
             }
@@ -852,9 +829,8 @@ impl Registry {
         // validates or writes (apply itself is all-or-nothing, but the gate
         // must speak first). Parse errors bail here with the parser's text.
         let parsed = hashline::parse(&patch)
-            // .context (not format!) keeps the typed HashlineError in the
-            // chain for the bench classifier (chunk 38) — Display text
-            // stays "edit: invalid patch: ..." either way.
+            //.context (not format!) keeps the typed HashlineError in the chain for the bench
+            // classifier — Display text stays "edit: invalid patch:..." either way.
             .context("edit: invalid patch")?;
         for sec in &parsed.sections {
             ctx.gate
@@ -875,12 +851,10 @@ impl Registry {
         }))
     }
 
-    /// Read-only LSP query (chunk 100, L-actuation 3A): gate → route →
-    /// read → didOpen + one hover/definition/references request. Never
-    /// writes; reviewers never see these (fixer allowlist opt-in only —
-    /// reviewer spawns keep `tools = []`). No server / unknown extension
-    /// is a model-readable Ok note (L fail-soft), never an error; request
-    /// failures evict (the post_write path) and name the op.
+    /// Read-only LSP query: gate → route → read → didOpen + one hover/definition/references
+    /// request. Never writes; reviewers never see these (fixer allowlist opt-in only — reviewer
+    /// spawns keep `tools = []`). No server / unknown extension is a model-readable Ok note (L
+    /// fail-soft), never an error; request failures evict (the post_write path) and name the op.
     async fn call_lsp(
         &self,
         op: &str,
@@ -919,9 +893,7 @@ impl Registry {
             )));
         }
         let text = String::from_utf8_lossy(&bytes).into_owned();
-        // Same URI/root discipline as the write-through path (chunk-97
-        // gaps #2 + #5: null roots starve rust-analyzer; drive case is
-        // per-server via `prefer_verbatim_uri`).
+        // Same URI/root discipline as the write-through path.
         let verbatim = lsp::prefer_verbatim_uri(language);
         let uri = if verbatim {
             lsp::uri_for_verbatim(&ctx.workdir, &path)
@@ -965,12 +937,10 @@ impl Registry {
         }
     }
 
-    /// Open a debug session (chunk 107, M3): gate → resolve → spawn →
-    /// initialize → launch (held) → breakpoints → configured → first
-    /// stop. Returns `{session, stopped:{reason,thread} | ended:true}`.
-    /// Permissions follow the debuggee: every later session op gates
-    /// `dap_<op>:<program>` against the SAME program string.
-    /// The table lock is held across the drive (the `lsp_post_write`
+    /// Open a debug session: gate → resolve → spawn → initialize → launch (held) → breakpoints →
+    /// configured → first stop. Returns `{session, stopped:{reason,thread} | ended:true}`.
+    /// Permissions follow the debuggee: every later session op gates `dap_<op>:<program>` against
+    /// the SAME program string. The table lock is held across the drive (the `lsp_post_write`
     /// precedent — one session drives at a time per registry).
     async fn call_dap_start(
         &self,
@@ -1091,14 +1061,12 @@ impl Registry {
         }
     }
 
-    /// One stopped-or-ended wait shared by start and continue (chunk
-    /// 107, M3): whichever of `stopped` vs terminal (`terminated` /
-    /// `exited` / `disconnect`) posts FIRST wins — run-to-completion
-    /// programs resolve in milliseconds, not after a burnt budget (the
-    /// single-name wait would spend the full timeout on every clean
-    /// exit). Stopped records thread (frame clears — it belongs to the
-    /// next inspect); terminal ends the run (the caller drops the
-    /// runner: `kill_on_drop` reaps, no table entry, no leak).
+    /// One stopped-or-ended wait shared by start and continue: whichever of `stopped` vs terminal
+    /// (`terminated` / `exited` / `disconnect`) posts FIRST wins — run-to-completion programs
+    /// resolve in milliseconds, not after a burnt budget (the single-name wait would spend the full
+    /// timeout on every clean exit). Stopped records thread (frame clears — it belongs to the next
+    /// inspect); terminal ends the run (the caller drops the runner: `kill_on_drop` reaps, no table
+    /// entry, no leak).
     async fn await_stop(
         runner: &mut dyn dap::DapSession,
         timeout: std::time::Duration,
@@ -1131,12 +1099,10 @@ impl Registry {
         StopOutcome::Stopped { reason, thread }
     }
 
-    /// Headed graphics capture (chunk 112, N1a): gate → resolve →
-    /// fail-closed spec lookup → `renderdoccmd capture` → newest `.rdc`.
-    /// Permissions follow the TARGET (`rdoc_capture:<program>` — the DAP
-    /// program-scoped precedent; capture ids could never be
-    /// pre-authorized). The sample's workdir contains debris by
-    /// construction (program-parent rule, the dlv lesson).
+    /// Headed graphics capture: gate → resolve → fail-closed spec lookup → `renderdoccmd capture` →
+    /// newest `.rdc`. Permissions follow the TARGET (`rdoc_capture:<program>` — the DAP program-
+    /// scoped precedent; capture ids could never be pre-authorized). The sample's workdir contains
+    /// debris by construction (program-parent rule, the dlv lesson).
     async fn call_rdoc_capture(
         &self,
         args: &serde_json::Value,
@@ -1183,9 +1149,8 @@ impl Registry {
         }))
     }
 
-    /// Capture introspection (chunk 113, N1b): headed replay queries.
-    /// Draws/state/diff share capture-gating + spec lookup; only the
-    /// query mode and shaping differ. Permissions follow the CAPTURE
+    /// Capture introspection: headed replay queries. Draws/state/diff share capture-gating + spec
+    /// lookup; only the query mode and shaping differ. Permissions follow the CAPTURE
     /// (`rdoc_<op>:<capture>` — data-scoped, the DAP program precedent).
     async fn call_rdoc_introspect(
         &self,
@@ -1277,10 +1242,9 @@ impl Registry {
         Ok(shaped)
     }
 
-    /// User-script execution (chunk 113, N1b): runs a caller-supplied
-    /// Python file under the embedded runtime. Gates on the SCRIPT path
-    /// (user code execution — the dangerous arm); embedded first-class
-    /// runs bypass this gate as own code (builtin-tool trust).
+    /// User-script execution: runs a caller-supplied Python file under the embedded runtime. Gates
+    /// on the SCRIPT path (user code execution — the dangerous arm); embedded first-class runs
+    /// bypass this gate as own code (builtin-tool trust).
     async fn call_rdoc_script(
         &self,
         args: &serde_json::Value,
@@ -1321,9 +1285,8 @@ impl Registry {
         }))
     }
 
-    /// Session-op router (chunk 107, M3): continue/inspect/evaluate/
-    /// disconnect share lookup + program-scoped gating; only the drive
-    /// differs. Unknown sessions fail naming the id (typos stay loud).
+    /// Session-op router: continue/inspect/evaluate/ disconnect share lookup + program-scoped
+    /// gating; only the drive differs. Unknown sessions fail naming the id (typos stay loud).
     async fn call_dap_session_op(
         &self,
         op: &str,
@@ -1504,9 +1467,8 @@ impl Registry {
         }
     }
 
-    /// Read a file — or a `web://` URL through serica (P1b chunk 120;
-    /// other `://` schemes fail closed naming P2). Gate stays first,
-    /// unchanged position; `web://` reuses the `read:{path}` grant.
+    /// Read a file — or a `web://` URL through serica. Gate stays first, unchanged position;
+    /// `web://` reuses the `read:{path}` grant.
     async fn call_read(
         &self,
         args: &serde_json::Value,
@@ -1518,7 +1480,7 @@ impl Registry {
             .map_err(CallError::Denied)?;
         if let Some(rest) = path.strip_prefix("web://") {
             // Bare hosts are shorthand for https (serica needs a full
-            // URL — caught live in 120c: bare `example.com` answered
+            // URL: bare `example.com` answered
             // INVALID_QUERY). An embedded scheme passes through as-is.
             let url = if rest.contains("://") {
                 rest.to_string()
@@ -1527,8 +1489,8 @@ impl Registry {
             };
             return self.call_scheme_extract(&url, None).await;
         }
-        // P2 handlers (chunk 121): scheme URL → fetch URL + fragment
-        // echo. Gate stays the single `read:{path}` check above.
+        // P2 handlers: scheme URL → fetch URL + fragment echo. Gate stays the single `read:{path}`
+        // check above.
         if let Some(rest) = path.strip_prefix("gh://") {
             let (url, fragment) = web::github_url(rest)
                 .map_err(|e| CallError::Failed(anyhow::anyhow!("read gh: {e:#}")))?;
@@ -1613,12 +1575,10 @@ impl Registry {
         self.call_web_extract_url(&url).await
     }
 
-    /// `ask` structured picker (Epic Q, chunk 122): validate shape
-    /// (non-empty question, 1–8 options, unique non-empty labels, at
-    /// most one recommended), gate `ask:{question}`, resolve via the
-    /// prompter. `Selected` labels are re-checked against the offered
-    /// set (a rogue prompter cannot inject); `Dismissed` fails closed
-    /// as `Denied` (loop-visible "user unavailable", never a stall).
+    /// `ask` structured picker: validate shape (non-empty question, 1–8 options, unique non-empty
+    /// labels, at most one recommended), gate `ask:{question}`, resolve via the prompter.
+    /// `Selected` labels are re-checked against the offered set (a rogue prompter cannot inject);
+    /// `Dismissed` fails closed as `Denied` (loop-visible "user unavailable", never a stall).
     async fn call_ask(
         &self,
         args: &serde_json::Value,
@@ -1729,11 +1689,10 @@ impl Registry {
         }
     }
 
-    /// Atomic-split proposal (chunk 128, T2): propose-only groups over a
-    /// live repo via `split::plan_live`. Gate FIRST (pre-spawn — a denial
-    /// leaves zero side effects, F3a contract). Split faults (non-repo,
-    /// cycles) surface as failures, never denials (typed-boundary
-    /// precedent: denials are permissions only).
+    /// Atomic-split proposal: propose-only groups over a live repo via `split::plan_live`. Gate
+    /// FIRST (pre-spawn — a denial leaves zero side effects, F3a contract). Split faults (non-repo,
+    /// cycles) surface as failures, never denials (typed-boundary precedent: denials are
+    /// permissions only).
     async fn call_split_plan(
         &self,
         args: &serde_json::Value,
@@ -1778,11 +1737,9 @@ impl Registry {
         Ok(split::groups_json(&repo, &groups))
     }
 
-    /// `git://<repo>/split` preview (chunk 128, T2): split-plan JSON
-    /// over a live repo, no-deps floor. Already gated by the caller
-    /// (`read:{path}` — the web:// precedent). Only the `/split` suffix
-    /// is served; every other `git://` shape fails closed naming the
-    /// path (P2 precedent).
+    /// `git://<repo>/split` preview: split-plan JSON over a live repo, no-deps floor. Already gated
+    /// by the caller (`read:{path}` — the web:// precedent). Only the `/split` suffix is served;
+    /// every other `git://` shape fails closed naming the path (P2 precedent).
     async fn call_git_split_url(
         &self,
         rest: &str,
@@ -1814,9 +1771,8 @@ impl Registry {
             .map_err(|e| CallError::Failed(anyhow::anyhow!("web_extract: shape failed: {e}")))
     }
 
-    /// Scheme-read tail (P2 chunk 121): extract + envelope augmentation
-    /// (`resolved_url` always — the mapping is the feature; `fragment`
-    /// only when given — fragments never ride HTTP, the echo is the
+    /// Scheme-read tail: extract + envelope augmentation (`resolved_url` always — the mapping is
+    /// the feature; `fragment` only when given — fragments never ride HTTP, the echo is the
     /// preservation). Already gated by the caller.
     async fn call_scheme_extract(
         &self,
@@ -1836,10 +1792,9 @@ impl Registry {
         Ok(out)
     }
 
-    /// `renderdoc://<capture>[#event]` (P2 chunk 121): no event → draws
-    /// list, event → pipeline state — straight delegation to the N1b
-    /// introspect machinery (live-proven at 113; its own capture-scoped
-    /// gates hold under the `read:{path}` grant).
+    /// `renderdoc://<capture>[#event]`: no event → draws list, event → pipeline state — straight
+    /// delegation to the N1b introspect machinery (live-proven at 113; its own capture-scoped gates
+    /// hold under the `read:{path}` grant).
     async fn call_renderdoc_url(
         &self,
         rest: &str,
@@ -1883,7 +1838,7 @@ impl Registry {
     }
 }
 
-/// Outcome of one stopped-or-ended wait (chunk 107, M3).
+/// Outcome of one stopped-or-ended wait.
 enum StopOutcome {
     Stopped { reason: String, thread: u64 },
     Ended,
@@ -1962,8 +1917,8 @@ fn arg_opt_u64(args: &serde_json::Value, tool: &str, field: &str) -> anyhow::Res
     }
 }
 
-/// Required 0-based position arg for the LSP query tools (chunk 100):
-/// present + non-negative integer + u32-range, else the field is named.
+/// Required 0-based position arg for the LSP query tools: present + non-negative integer +
+/// u32-range, else the field is named.
 fn arg_pos(args: &serde_json::Value, tool: &str, field: &str) -> anyhow::Result<u32> {
     let n = arg_opt_u64(args, tool, field)?
         .ok_or_else(|| anyhow::anyhow!("{tool}: `{field}` must be a non-negative integer"))?;
@@ -1997,9 +1952,8 @@ pub fn resolve_tool_path(workdir: &Path, raw: &str) -> PathBuf {
     }
 }
 
-/// A `scheme://` prefix that is NOT a file path (P1b chunk 120).
-/// Windows drive letters (`C:/x`) never contain `://`; single-char or
-/// non-alphanumeric prefixes fall through to the file path as before.
+/// A `scheme://` prefix that is NOT a file path. Windows drive letters (`C:/x`) never contain
+/// `://`; single-char or non-alphanumeric prefixes fall through to the file path as before.
 fn scheme_of(path: &str) -> Option<&str> {
     let (scheme, _) = path.split_once("://")?;
     (!scheme.is_empty() && scheme.len() > 1 && scheme.chars().all(|c| c.is_ascii_alphanumeric()))
@@ -2087,9 +2041,8 @@ async fn call_bash(
     let secs = arg_opt_u64(args, "bash", "timeout_secs")?
         .unwrap_or(120)
         .min(600);
-    // The call's workdir, not the process cwd (docket #8): under `--repo`
-    // the fixer's commands must see the worktree its file tools edit.
-    // Docket #9: large streams spill under that workdir's harness dir.
+    // The call's workdir, not the process cwd: under `--repo` the fixer's commands must see the
+    // worktree its file tools edit. large streams spill under that workdir's harness dir.
     let run = exec::run_bash_streamed(
         &cmd,
         std::time::Duration::from_secs(secs),
@@ -2100,9 +2053,8 @@ async fn call_bash(
     .await;
     match run.status {
         Ok(exit_code) => Ok(bash_result(&run.stdout, &run.stderr, Some(exit_code))),
-        // Docket #9: a timeout keeps what the command printed before the
-        // kill (still an error — the command did not finish). Nothing
-        // printed = the pre-#9 message exactly.
+        // A timeout keeps what the command printed before the kill (still an error — the command
+        // did not finish). Nothing printed = the pre-#9 message exactly.
         Err(e @ exec::ExecError::TimedOut(_))
             if !(run.stdout.is_empty() && run.stderr.is_empty()) =>
         {
@@ -2115,9 +2067,9 @@ async fn call_bash(
     }
 }
 
-/// `bash` result JSON: `{stdout, stderr, exit_code}` exactly as before
-/// docket #9 when nothing spilled; a spilled stream's text is its digest,
-/// with `<stream>_spill: {path, total_bytes, total_lines[, error]}` beside.
+/// `bash` result JSON: `{stdout, stderr, exit_code}` exactly as before when nothing spilled; a
+/// spilled stream's text is its digest, with `<stream>_spill: {path, total_bytes, total_lines[,
+/// error]}` beside.
 fn bash_result(
     stdout: &output::CapturedStream,
     stderr: &output::CapturedStream,
@@ -2138,8 +2090,8 @@ fn bash_result(
     v
 }
 
-/// The V1 tool floor (Epic B target): read/write/edit/grep/glob/bash.
-/// Chunk 1 registers descriptors only; executors arrive with Epic B.
+/// The V1 tool floor: read/write/edit/grep/glob/bash. registers descriptors only; executors arrive
+/// with.
 pub fn v1_tool_floor() -> Vec<ToolDef> {
     vec![
         ToolDef {
@@ -2166,9 +2118,8 @@ pub fn v1_tool_floor() -> Vec<ToolDef> {
             name: "bash".into(),
             description: "Shell exec (non-interactive + PTY)".into(),
         },
-        // L-actuation 3A (chunk 100): read-only LSP queries for the
-        // fixer allowlist. Reviewers never see them (their spawns keep
-        // `tools = []`); fixers opt in per call site (`--tools`).
+ // L-actuation 3A: read-only LSP queries for the fixer allowlist. Reviewers never see them
+ // (their spawns keep `tools = []`); fixers opt in per call site (`--tools`).
         ToolDef {
             name: "lsp_hover".into(),
             description: "LSP hover at a position (read-only; needs a registered server)".into(),
@@ -2183,10 +2134,9 @@ pub fn v1_tool_floor() -> Vec<ToolDef> {
             description: "LSP find-references at a position (read-only; needs a registered server)"
                 .into(),
         },
-        // M3 debugger surface (chunk 107): session tools for RUNTIME
-        // questions. The bash-vs-DAP instruction lives HERE (tool
-        // descriptions reach the model through schemas — the
-        // TOOLS_PREAMBLE block is eval-pinned and stays untouched).
+ // M3 debugger surface: session tools for RUNTIME questions. The bash-vs-DAP instruction
+ // lives HERE (tool descriptions reach the model through schemas — the TOOLS_PREAMBLE block
+ // is eval-pinned and stays untouched).
         ToolDef {
             name: "dap_start".into(),
             description: "Run a program under a debugger to its first breakpoint and STOP there. PREFER over bash when the question is about RUNTIME state (wrong variable values, crashes, exceptions, hangs): the debugger shows actual values where bash only shows outputs. Use bash for static questions (file contents, running commands, logs). Returns a session id; ALWAYS dap_disconnect it when done.".into(),
@@ -2207,16 +2157,14 @@ pub fn v1_tool_floor() -> Vec<ToolDef> {
             name: "dap_disconnect".into(),
             description: "End a debug session and reap its adapter. ALWAYS call when done debugging; sessions never outlive the task.".into(),
         },
-        // N1a graphics capture (chunk 112): PREFER over guessing GPU
-        // state — a headed capture replays headless for draw/state
-        // inspection (N1b). The target must present frames.
+ // N1a graphics capture: PREFER over guessing GPU state — a headed capture replays headless
+ // for draw/state inspection (N1b). The target must present frames.
         ToolDef {
             name: "rdoc_capture".into(),
             description: "Capture a presenting graphics app under RenderDoc to a .rdc file (headless replay + thumbnail source). Use for GPU-state questions; bash covers static questions. Returns the newest .rdc path.".into(),
         },
-        // N1b introspection (chunk 113): headed replay queries over
-        // captures. Draws first (event ids feed state), then state,
-        // then diff; user scripts last (gated on their own path).
+ // N1b introspection: headed replay queries over captures. Draws first (event ids feed
+ // state), then state, then diff; user scripts last (gated on their own path).
         ToolDef {
             name: "rdoc_draws".into(),
             description: "List GPU actions (draws, clears, markers) in a RenderDoc capture with event ids and counts. Use before rdoc_state; event ids feed it.".into(),
@@ -2233,8 +2181,8 @@ pub fn v1_tool_floor() -> Vec<ToolDef> {
             name: "rdoc_script".into(),
             description: "Run a Python analysis script under RenderDoc's embedded runtime for custom GPU questions. The script MUST write JSON to the RDOC_OUT env path and quit the UI or the call times out. Output echoed (32KB cap).".into(),
         },
-        // P1b web research (chunk 120): serica-backed, observe-first.
-        // External facts and docs live here; NEVER send secrets outward.
+ // P1b web research: serica-backed, observe-first. External facts and docs live here; NEVER
+ // send secrets outward.
         ToolDef {
             name: "web_search".into(),
             description: "Search the web (serica/DuckDuckGo) for external facts, docs, and prior art. PREFER over guessing APIs, versions, or error meanings. total_results is the page-batch count, NOT a corpus total.".into(),
@@ -2243,15 +2191,14 @@ pub fn v1_tool_floor() -> Vec<ToolDef> {
             name: "web_extract".into(),
             description: "Extract a web page as markdown (serica, ads stripped, 50KB cap). PREFER over quoting a URL unseen; read() serves web:// URLs through the same path.".into(),
         },
-        // Q structured picker (chunk 122): interrupt-worthy ambiguity
-        // only — a turn spent asking is a turn not acting. NEVER ask
-        // about secrets, and never ask when a documented default exists.
+ // Q structured picker: interrupt-worthy ambiguity only — a turn spent asking is a turn not
+ // acting. NEVER ask about secrets, and never ask when a documented default exists.
         ToolDef {
             name: "ask".into(),
             description: "Ask the operator to resolve genuine ambiguity: one question plus options (one may be marked recommended). Use ONLY when blocked on a human judgment call; prefer deciding from context, docs, or code. Without an attached human the call is denied — phrase calls so denial reads as proceed-with-defaults.".into(),
         },
-        // T atomic-split proposal (chunk 128): groups are data, commits
-        // stay operator-owned — the tool never writes history.
+ // T atomic-split proposal: groups are data, commits stay operator-owned — the tool never
+ // writes history.
         ToolDef {
             name: "split_plan".into(),
             description: "Propose atomic-commit groups for a dirty git working tree (same-file clusters, explicit-dep order, cycle refusal). PROPOSE-ONLY: returns groups as data, never commits. Use when unrelated changes must not share a commit.".into(),
@@ -2259,9 +2206,8 @@ pub fn v1_tool_floor() -> Vec<ToolDef> {
     ]
 }
 
-/// Permission decision: deny-rules beat allow on the same prefix (Epic B5).
-/// Thin delegate over [`Gate`] — the gate owns the semantics, this keeps the
-/// chunk-1 call shape working.
+/// Permission decision: deny-rules beat allow on the same prefix. Thin delegate over [`Gate`] — the
+/// gate owns the semantics, this keeps the call shape working.
 pub fn is_allowed(tool_call: &str, allow: &[String], deny: &[String]) -> bool {
     Gate::new(allow.to_vec(), deny.to_vec())
         .check(tool_call)
@@ -2306,7 +2252,7 @@ mod tests {
         assert!(is_allowed("read:foo", &[], &[]));
     }
 
-    // ---- Epic F3a: callable registry ----
+    // Callable registry ----
     use tokio_util::sync::CancellationToken;
 
     fn ctx_for(dir: &tempfile::TempDir) -> ToolCallContext {
@@ -2348,7 +2294,7 @@ mod tests {
         assert!(err.to_string().contains("frobnicate"), "{err}");
     }
 
-    // ---- Epic J1: hooks ----
+    // Hooks ----
     #[tokio::test]
     async fn hook_pre_deny_blocks_with_zero_side_effects() {
         let mut r = registry::v1_registry();
@@ -2843,7 +2789,7 @@ mod tests {
         assert_eq!(*stops.lock().unwrap(), vec!["0 rounds".to_string()]);
     }
 
-    // ---- Epic J1: ask-user (chunk 89) ----
+    // Ask-user ----
     #[derive(Debug)]
     struct FakePrompter {
         allow: bool,
@@ -3028,7 +2974,7 @@ mod tests {
         assert!(err.contains("read"), "{err}");
     }
 
-    // ---- L-actuation 3A (chunk 100): read-only LSP query tools ----
+    // L-actuation 3A: read-only LSP query tools ----
     #[tokio::test]
     async fn lsp_tools_route_unknown_extensions_soft() {
         // No language route → Ok note, no server needed, no error.
@@ -3128,7 +3074,7 @@ mod tests {
         assert!(err.contains("`character`"), "{err}");
     }
 
-    // ---- M3 debugger session tools (chunk 107) ----
+    // M3 debugger session tools ----
     #[test]
     fn dap_launch_args_pin_proven_shapes() {
         // One arm per adapter, byte-pinned to the M2 matrix rows that
@@ -3157,9 +3103,8 @@ mod tests {
 
     #[tokio::test]
     async fn dap_start_gate_first_before_spawn() {
-        // Denied program that does not exist: gate-first proves itself —
-        // a resolve-first implementation would fail on the missing file
-        // instead of denying (the chunk-100 lsp gate test, same shape).
+        // Denied program that does not exist: gate-first proves itself — a resolve-first
+        // implementation would fail on the missing file instead of denying.
         use crate::CallError;
         let r = registry::v1_registry();
         let d = tempfile::tempdir().unwrap();
@@ -3252,9 +3197,8 @@ mod tests {
 
     #[test]
     fn dap_tool_descriptions_carry_the_instruction() {
-        // M3's bash-vs-DAP instruction lives in tool descriptions (the
-        // preamble is eval-pinned — chunk 39/45). Pin the load-bearing
-        // phrases so edits cannot silently drop the guidance.
+        // M3's bash-vs-DAP instruction lives in tool descriptions. Pin the load-bearing phrases so
+        // edits cannot silently drop the guidance.
         let r = registry::v1_registry();
         let desc = |name: &str| r.get(name).unwrap().description.clone();
         let start = desc("dap_start");
@@ -3641,8 +3585,8 @@ mod tests {
         assert_eq!(out["exit_code"], 7);
     }
 
-    /// Docket #8: `bash` runs in the call's workdir (the `--repo`
-    /// worktree), not the process cwd — a relative write lands there.
+    /// `bash` runs in the call's workdir (the `--repo` worktree), not the process cwd — a relative
+    /// write lands there.
     #[tokio::test]
     async fn call_bash_runs_in_the_call_workdir() {
         let r = registry::v1_registry();
@@ -3664,11 +3608,9 @@ mod tests {
             .exists());
     }
 
-    /// Docket #9: a large `bash` stream comes back as a digest naming its
-    /// spill file; a diagnostic from the middle survives; the model can
-    /// page the file with an exact `read` (offset/limit) and a `grep` whose
-    /// `dir` is the file or the spill dir, while workspace scans stay
-    /// blind to it.
+    /// A large `bash` stream comes back as a digest naming its spill file; a diagnostic from the
+    /// middle survives; the model can page the file with an exact `read` (offset/limit) and a
+    /// `grep` whose `dir` is the file or the spill dir, while workspace scans stay blind to it.
     #[tokio::test]
     async fn call_bash_spills_large_output_and_the_file_pages() {
         let r = registry::v1_registry();
@@ -3727,8 +3669,7 @@ mod tests {
         assert!(hits["hits"].as_array().unwrap().is_empty(), "{hits}");
     }
 
-    /// Docket #9: a timed-out `bash` still errors, now carrying what the
-    /// command printed before the kill.
+    /// A timed-out `bash` still errors, now carrying what the command printed before the kill.
     #[tokio::test]
     async fn call_bash_timeout_carries_partial_output() {
         let r = registry::v1_registry();
@@ -3757,8 +3698,8 @@ mod tests {
         assert!(err.contains("printed-before-kill"), "{err}");
     }
 
-    /// Docket #8: registry-hidden paths and harness state never surface
-    /// through `grep`/`glob`; an exact `read` of the hidden file still works.
+    /// Registry-hidden paths and harness state never surface through `grep`/`glob`; an exact `read`
+    /// of the hidden file still works.
     #[tokio::test]
     async fn call_grep_and_glob_skip_hidden_and_harness_state() {
         let mut r = registry::v1_registry();

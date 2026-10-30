@@ -1,6 +1,6 @@
-//! Agent-bench seeded-corpus driver (Epic F6, chunk 34+).
+//! Agent-bench seeded-corpus driver.
 //!
-//! Admits every task of `agent_bench/agent_bench_corpus.toml` RED then GREEN
+//! Runs every task of `agent_bench/agent_bench_corpus.toml` from a failing start to a passing finish
 //! through the shared [`polymorph_review::bench`] API (loader, tempdir
 //! materialization, deadline-bound `cargo test`): write initial files → suite
 //! must FAIL naming every fail_to_pass (pass_to_pass must read `ok`) → write
@@ -31,13 +31,13 @@ fn agent_bench_corpus_red_then_green() {
         let (red_out, red_ok) = cargo_test(dir.path(), CARGO_DEADLINE);
         let mut red_good = !red_ok && red_out.contains("test result: FAILED");
         for name in &task.fail_to_pass {
-            // `test tests::<name> ... FAILED` — substring on the bare name.
+            // `test tests::<name>... FAILED` — substring on the bare name.
             if !(red_out.contains(name.as_str()) && red_out.contains("FAILED")) {
                 red_good = false;
             }
         }
         for name in &task.pass_to_pass {
-            // `test tests::<name> ... ok` — the passing tests really passed.
+            // `test tests::<name>... ok` — the passing tests really passed.
             if !red_out.contains(&format!("{name} ... ok")) {
                 red_good = false;
             }

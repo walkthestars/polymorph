@@ -1,12 +1,10 @@
-//! Multi-file and worktree-diff review scopes (docket #5, traps #63).
+//! Multi-file and worktree-diff review scopes.
 //!
-//! `review run|drive` grade one `--artifact-file` by default. An
-//! [`ArtifactSet`] grades a changeset instead: declared files
-//! (`--artifact-file` first, then each `--artifact-files` path or glob)
-//! and, in `--diff` mode, every file the drive workdir changed against a
-//! git base. The set is re-read from disk for every review, so files a fix
-//! turn creates or changes join it. Rows reuse docket #1's attachment
-//! renderer: same budgets, row/hunk-boundary cuts, every omission named.
+//! `review run|drive` grade one `--artifact-file` by default. An [`ArtifactSet`] grades a changeset
+//! instead: declared files (`--artifact-file` first, then each `--artifact-files` path or glob)
+//! and, in `--diff` mode, every file the drive workdir changed against a git base. The set is re-
+//! read from disk for every review, so files a fix turn creates or changes join it. Rows reuse 's
+//! attachment renderer: same budgets, row/hunk-boundary cuts, every omission named.
 //!
 //! Rules:
 //! - Git runs as `git <args>` with no shell (`std::process::Command`),
@@ -150,10 +148,9 @@ impl ArtifactSet {
             .filter(|m| m.declared && m.change.is_none() && is_absent(workdir, &m.path))
             .map(|m| m.path.clone())
             .collect();
-        // CREATE rule: nothing to grade yet — every member is a declared
-        // path that does not exist, and the diff (if any) is empty. One
-        // glob match, any changed file (a deletion too), or one existing
-        // declared file (even empty: the chunk-166 ruling) is review-first.
+        // CREATE rule: nothing to grade yet — every member is a declared path that does not exist,
+        // and the diff (if any) is empty. One glob match, any changed file (a deletion too), or one
+        // existing declared file is review-first.
         let create = absent_declared.len() == members.len();
         if create {
             text.push_str(&create_status(&absent_declared, self.diff_base.as_deref()));
@@ -241,18 +238,17 @@ impl ArtifactSet {
 }
 
 impl RenderedSet {
-    /// Whether `raw` (any spelling) names a member — the executor drops
-    /// such files from docket #1's peripheral section (never twice).
+    /// Whether `raw` (any spelling) names a member — the executor drops such files from 's
+    /// peripheral section (never twice).
     pub fn covers(&self, raw: &str) -> bool {
         self.ids.contains(&attach_identity(&self.base, raw))
     }
 
-    /// Harness round-1 finding for a CREATE set (docket #7 parity): `Some`
-    /// exactly when the rendering carries the ARTIFACT SET STATUS note —
-    /// every member a missing declared path and no changed file. Names
-    /// the first missing declared file, or [`DIFF_SET_FINDING_FILE`] when
-    /// nothing is declared (an empty diff). Kind `Start` for a pure
-    /// `--diff` set on a clean tree (nothing declared), else `Create`.
+    /// Harness round-1 finding for a CREATE set: `Some` exactly when the rendering carries the
+    /// ARTIFACT SET STATUS note — every member a missing declared path and no changed file. Names
+    /// the first missing declared file, or [`DIFF_SET_FINDING_FILE`] when nothing is declared (an
+    /// empty diff). Kind `Start` for a pure `--diff` set on a clean tree (nothing declared), else
+    /// `Create`.
     pub fn create_seed(&self) -> Option<crate::RoundSeed> {
         if !self.create {
             return None;
@@ -266,7 +262,7 @@ impl RenderedSet {
         if self.absent_declared.is_empty() && self.diff_base.is_some() {
             // Pure `--diff` on a clean tree: the goal may as well be a
             // change to existing files (live drive: a signature refactor
-            // was seeded "files ... must be created") — say implement.
+            // was seeded "files... must be created") — say implement.
             return Some(crate::RoundSeed {
                 kind: crate::SeedKind::Start,
                 findings: vec![polymorph_core::Finding {
@@ -330,13 +326,9 @@ fn member(workdir: &Path, path: String, declared: bool, glob: bool) -> Member {
     }
 }
 
-/// Whether a worktree change is harness state, never the artifact
-/// (docket #5 live drive: an unignored `.polymorph/` put the drive's own
-/// config and growing rolling log into ARTIFACT FILES UNDER REVIEW, and
-/// the reviewer graded those instead of the code): anything under a
-/// `.polymorph` directory, or a drive event ledger (the docket #8 scan
-/// filter, [`polymorph_tools::fs::is_harness_state`]), or the marker file
-/// of a `--repo` drive worktree (untracked by design, never a change).
+/// Whether a worktree change is harness state, never the artifact: anything under a `.polymorph`
+/// directory, or a drive event ledger, or the marker file of a `--repo` drive worktree (untracked
+/// by design, never a change).
 fn is_harness_change(workdir: &Path, git_path: &str) -> bool {
     let rel = Path::new(git_path);
     rel == Path::new(polymorph_delegate::WORKTREE_MARKER)
@@ -371,7 +363,7 @@ fn create_fact(absent: &[String], diff_base: Option<&str>) -> String {
     }
 }
 
-/// Reviewer note for a CREATE set (chunk-168 `create_job_note` parity).
+/// Reviewer note for a CREATE set.
 fn create_status(absent: &[String], diff_base: Option<&str>) -> String {
     format!(
         "\nARTIFACT SET STATUS:\n{} Judge goal/criteria fit against the empty set; do NOT emit findings merely claiming files are missing, and do NOT pass a goal that requires files. If files should be created, emit exactly ONE finding that names a target file, states the required contents from the goal and criteria (that file citation satisfies VERDICT DISCIPLINE), and proposes the creation — a failing verdict with zero findings is schema-invalid and wastes the round.\n",
@@ -555,9 +547,8 @@ mod tests {
         }
     }
 
-    /// Docket #5: declared files render together, each under a path
-    /// header with numbered lines a finding can cite as `path:line`;
-    /// spellings of one file collapse; a missing one is ABSENT.
+    /// Declared files render together, each under a path header with numbered lines a finding can
+    /// cite as `path:line`; spellings of one file collapse; a missing one is ABSENT.
     #[test]
     fn declared_files_render_with_citable_headers() {
         let dir = tempfile::tempdir().unwrap();
@@ -578,10 +569,9 @@ mod tests {
         assert!(out.create_seed().is_none());
     }
 
-    /// Docket #5: globs expand against workdir-relative paths (sorted,
-    /// gitignore-aware), dedupe against declared paths, and a zero-match
-    /// glob is reported (the CLI refuses it pre-spend). A literal path
-    /// with glob characters that exists stays a path.
+    /// Globs expand against workdir-relative paths (sorted, gitignore-aware), dedupe against
+    /// declared paths, and a zero-match glob is reported (the CLI refuses it pre-spend). A literal
+    /// path with glob characters that exists stays a path.
     #[test]
     fn globs_expand_relative_and_dedupe() {
         let dir = tempfile::tempdir().unwrap();
@@ -614,8 +604,8 @@ mod tests {
         assert!(declared(&["src/[.rs"]).render(dir.path()).is_err());
     }
 
-    /// Docket #5: diff mode picks up modified, added (staged), deleted and
-    /// untracked files — not ignored ones — and lists each with its status.
+    /// Diff mode picks up modified, added (staged), deleted and untracked files — not ignored ones
+    /// — and lists each with its status.
     #[test]
     fn diff_mode_picks_up_modified_added_deleted_untracked() {
         let dir = repo();
@@ -708,9 +698,8 @@ mod tests {
         );
     }
 
-    /// Docket #5: the set is re-read every time — a file written after
-    /// the first rendering (a fix turn) joins it — and an unchanged tree
-    /// renders byte-identically (the loop's stall check depends on it).
+    /// The set is re-read every time — a file written after the first rendering (a fix turn) joins
+    /// it — and an unchanged tree renders byte-identically (the loop's stall check depends on it).
     #[test]
     fn diff_set_grows_when_a_file_is_written() {
         let dir = repo();
@@ -734,9 +723,8 @@ mod tests {
         assert!(second.covers("src/b.rs"));
     }
 
-    /// Docket #5: a workdir below the repo root grades only its own
-    /// subtree, with workdir-relative paths (tools resolve them there),
-    /// and diffs large files against the base from there too.
+    /// A workdir below the repo root grades only its own subtree, with workdir-relative paths
+    /// (tools resolve them there), and diffs large files against the base from there too.
     #[test]
     fn diff_mode_is_scoped_to_a_subdirectory_workdir() {
         let dir = repo();
@@ -792,8 +780,8 @@ mod tests {
         assert!(!out.text.contains("top.rs"), "{}", out.text);
     }
 
-    /// Docket #5: diff mode outside a git work tree, or with a base that
-    /// is not a commit, errors clearly instead of grading nothing.
+    /// Diff mode outside a git work tree, or with a base that is not a commit, errors clearly
+    /// instead of grading nothing.
     #[test]
     fn diff_mode_errors_outside_git_and_on_bad_base() {
         let plain = tempfile::tempdir().unwrap();
@@ -819,9 +807,8 @@ mod tests {
         assert!(err.contains("is not a revision"), "{err}");
     }
 
-    /// Docket #5: a large modified file renders as a numbered diff
-    /// against the base's version (CRLF-insensitive); a large untracked
-    /// one has no base version and renders partially, cut named.
+    /// A large modified file renders as a numbered diff against the base's version (CRLF-
+    /// insensitive); a large untracked one has no base version and renders partially, cut named.
     #[test]
     fn diff_mode_large_file_falls_back_to_unified_diff() {
         let dir = repo();
@@ -853,8 +840,8 @@ mod tests {
         );
     }
 
-    /// Docket #5: past the 20-file cap members are named, never read;
-    /// rows stop at the shared budget with the cut named.
+    /// Past the 20-file cap members are named, never read; rows stop at the shared budget with the
+    /// cut named.
     #[test]
     fn set_budget_overflow_names_omissions() {
         let dir = tempfile::tempdir().unwrap();
@@ -888,9 +875,8 @@ mod tests {
         );
     }
 
-    /// Docket #5 CREATE rule: seed only when every member is a missing
-    /// declared path and the diff is empty; any existing (even empty)
-    /// file, glob match, or changed file is review-first.
+    /// CREATE rule: seed only when every member is a missing declared path and the diff is empty;
+    /// any existing (even empty) file, glob match, or changed file is review-first.
     #[test]
     fn create_rule_needs_every_member_absent_and_no_changes() {
         let dir = repo();

@@ -1,15 +1,12 @@
-//! Adapter matrix smoke (chunk 104, M2): scripted breakpoint + watch +
-//! evaluate per adapter through the production clients. ONE generic
-//! driver over `DapSession` — rows differ only in construction (stdio
-//! vs TCP) and launch arguments. Every row loud-skips when its adapter
-//! is absent (roster: `docs/dap-adapters.md`); v2's node/csharp rows
-//! stay deferred there with evidence, not here as red.
+//! Adapter matrix smoke: scripted breakpoint + watch + evaluate per adapter through the production
+//! clients. ONE generic driver over `DapSession` — rows differ only in construction (stdio vs TCP)
+//! and launch arguments. Every row loud-skips when its adapter is absent (roster: `docs/dap-
+//! adapters.md`); v2's node/csharp rows stay deferred there with evidence, not here as red.
 
 use polymorph_tools::dap::{DapClient, DapSession, DapSpec, DapTcpClient};
 
-/// Headed/TCP gate (chunk 117): the dlv row binds a TCP listener (the
-/// firewall-prompt suspect) — default `cargo test` skips. Set
-/// `POLYMORPH_HEADED=1` to run; skips return green (counts unchanged).
+/// Headed/TCP gate: the dlv row binds a TCP listener (the firewall-prompt suspect) — default `cargo
+/// test` skips. Set `POLYMORPH_HEADED=1` to run; skips return green (counts unchanged).
 fn headed_enabled() -> bool {
     std::env::var("POLYMORPH_HEADED")
         .map(|v| v == "1")
@@ -144,10 +141,9 @@ async fn matrix_go_dlv_break_watch_eval() {
     )
     .unwrap();
     let program = d.path().join("main.go").to_string_lossy().into_owned();
-    // dlv speaks DAP over TCP only: headless on :0, discover, connect.
-    // dlv resolves `program` against ITS cwd — the case tempdir, so
-    // build debris (`__debug_bin*`) lands there and dies with it (never
-    // the harness cwd — caught live as repo litter, fixed same chunk).
+    // Dlv speaks DAP over TCP only: headless on:0, discover, connect. dlv resolves `program`
+    // against ITS cwd — the case tempdir, so build debris (`__debug_bin*`) lands there and dies
+    // with it.
     let spec = DapSpec {
         cmd: "dlv".to_string(),
         args: vec![
@@ -233,8 +229,8 @@ async fn matrix_rust_codelldb_break_watch_eval() {
 }
 
 fn resolve_netcoredbg() -> Option<String> {
-    // Chunk 106: Samsung netcoredbg (MIT) replaces vsdbg (VS-only
-    // license) as the C# row — same stdio DAP posture, no handshake.
+    // Samsung netcoredbg (MIT) replaces vsdbg (VS-only license) as the C# row — same stdio DAP
+    // posture, no handshake.
     if let Ok(p) = std::env::var("DAP_NETCOREDBG") {
         if !p.trim().is_empty() {
             return Some(p);
@@ -312,9 +308,7 @@ async fn matrix_csharp_netcoredbg_break_watch_eval() {
         })
         .next()
         .unwrap();
-    // netcoredbg --interpreter=vscode speaks DAP over stdio with no
-    // license handshake (chunk 106 — the vsdbg row's two blockers are
-    // both gone: MIT binary + standard session flow via drive_break_eval).
+    // Netcoredbg --interpreter=vscode speaks DAP over stdio with no license handshake.
     let mut client = DapClient::spawn(&DapSpec {
         cmd: dbg,
         args: vec!["--interpreter=vscode".to_string()],

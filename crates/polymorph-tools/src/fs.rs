@@ -1,4 +1,4 @@
-//! File tools (Epic B3): read / write / grep / glob.
+//! File tools: read / write / grep / glob.
 //!
 //! - `read_text`: paginated line reads with truncation flags; NUL-byte sniff
 //!   refuses binary files (the model must use `bash` + a hex tool for those).
@@ -11,12 +11,10 @@
 //! Done-criteria trace (v2 B3): property test asserts grep skips exactly the
 //! files a `.gitignore` excludes — see `grep_respects_gitignore` below.
 //!
-//! Harness state (docket #8) never surfaces in a scan: every walker here
-//! skips `.polymorph/` directories and drive event ledgers
-//! ([`is_harness_state`]) plus any caller-named paths (`*_hiding`
-//! variants), so a later fixer cannot discover a failed drive's ledger by
-//! `glob`/`grep`. A `read` of an exact path is not filtered (naming a file
-//! is not discovery).
+//! Harness state never surfaces in a scan: every walker here skips `.polymorph/` directories and
+//! drive event ledgers ([`is_harness_state`]) plus any caller-named paths (`*_hiding` variants), so
+//! a later fixer cannot discover a failed drive's ledger by `glob`/`grep`. A `read` of an exact
+//! path is not filtered (naming a file is not discovery).
 
 use std::path::{Path, PathBuf};
 
@@ -24,9 +22,8 @@ use std::path::{Path, PathBuf};
 /// sessions, archived failed attempts) — never workspace content.
 pub const HARNESS_DIR: &str = ".polymorph";
 
-/// File-name suffix of drive event ledgers (`review drive --events-json`
-/// convention, trap #57). Only files whose head also looks like a ledger
-/// are hidden, so a project's own `*-events.json` fixture stays visible.
+/// File-name suffix of drive event ledgers. Only files whose head also looks like a ledger are
+/// hidden, so a project's own `*-events.json` fixture stays visible.
 pub const EVENTS_LEDGER_SUFFIX: &str = "-events.json";
 
 /// `type` values a drive ledger's events carry (the `events_json_value`
@@ -42,10 +39,9 @@ const LEDGER_EVENT_TYPES: [&str; 8] = [
     "finished",
 ];
 
-/// Whether a walked entry is harness state no fixer scan may surface
-/// (docket #8): a `.polymorph` directory, or a `*-events.json` file whose
-/// first 4 KiB is a JSON array of drive events. Unreadable files are not
-/// hidden (fail-open to the pre-#8 behavior, never to data loss).
+/// Whether a walked entry is harness state no fixer scan may surface: a `.polymorph` directory, or
+/// a `*-events.json` file whose first 4 KiB is a JSON array of drive events. Unreadable files are
+/// not hidden (fail-open to the pre-#8 behavior, never to data loss).
 pub fn is_harness_state(path: &Path, is_dir: bool) -> bool {
     let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
         return false;
@@ -87,15 +83,13 @@ fn same_file(entry: &Path, hidden: &Path) -> bool {
     }
 }
 
-/// The gitignore-aware walker every scan shares, with the harness-state
-/// filter (docket #8) and `hidden` paths pruned. The walk root itself is
-/// never filtered: an explicit `dir: .polymorph` names it.
+/// The gitignore-aware walker every scan shares, with the harness-state filter and `hidden` paths
+/// pruned. The walk root itself is never filtered: an explicit `dir:.polymorph` names it.
 fn scan_walker(dir: &Path, hidden: &[PathBuf]) -> ignore::Walk {
     let hidden = hidden.to_vec();
-    // A walk rooted inside the harness dir (docket #9: `grep` over a
-    // `.polymorph/tool-output/` spill file) is an exact address: ignore
-    // rules do not apply there (that dir's own `*` `.gitignore`, or a
-    // project's `*.log` rule, would otherwise hide every spill file).
+    // A walk rooted inside the harness dir is an exact address: ignore rules do not apply there
+    // (that dir's own `*` `.gitignore`, or a project's `*.log` rule, would otherwise hide every
+    // spill file).
     let in_harness = dir.components().any(|c| c.as_os_str() == HARNESS_DIR);
     // require_git(false): agent tools walk arbitrary dirs, not just repos.
     // With the default (true), gitignore rules are silently skipped outside
@@ -214,8 +208,7 @@ pub fn grep_files(
     grep_files_hiding(pattern, dir, max_hits, &[])
 }
 
-/// [`grep_files`] that also never searches the `hidden` files (docket #8:
-/// a drive's own `--events-json` path, whatever its name).
+/// [`grep_files`] that also never searches the `hidden` files.
 pub fn grep_files_hiding(
     pattern: &str,
     dir: &Path,
@@ -292,7 +285,7 @@ pub fn glob_files(pattern: &str, dir: &Path) -> Result<Vec<PathBuf>, FsError> {
     glob_files_hiding(pattern, dir, &[])
 }
 
-/// [`glob_files`] that also never lists the `hidden` files (docket #8).
+/// [`glob_files`] that also never lists the `hidden` files.
 pub fn glob_files_hiding(
     pattern: &str,
     dir: &Path,
@@ -317,11 +310,8 @@ pub fn glob_files_hiding(
     Ok(out)
 }
 
-/// Glob `pattern` against paths RELATIVE to `dir` (docket #5 artifact
-/// sets: `src/*.rs` names `dir/src/a.rs`, which [`glob_files`] — matching
-/// whole walked paths — never does). Same `globset` matcher and
-/// gitignore-aware walker; regular files only, as `/`-separated relative
-/// spellings, sorted.
+/// Glob `pattern` against paths RELATIVE to `dir`. Same `globset` matcher and gitignore-aware
+/// walker; regular files only, as `/`-separated relative spellings, sorted.
 pub fn glob_relative(pattern: &str, dir: &Path) -> Result<Vec<String>, FsError> {
     let glob = globset::Glob::new(pattern).map_err(|e| FsError::BadPattern {
         pattern: pattern.into(),
@@ -544,8 +534,8 @@ mod tests {
         assert!(glob_relative("[", d.path()).is_err());
     }
 
-    /// Fixture plus harness state (docket #8): a `.polymorph/` tree, a
-    /// drive ledger, and a project fixture that only shares the suffix.
+    /// Fixture plus harness state: a `.polymorph/` tree, a drive ledger, and a project fixture that
+    /// only shares the suffix.
     fn polluted() -> tempfile::TempDir {
         let d = fixture();
         let root = d.path();

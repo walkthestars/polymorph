@@ -1,11 +1,9 @@
-//! Script-command hooks (Epic J1, chunk 87): external commands consulted at
-//! the `Registry::call` boundary, after the in-process handlers (cheap
-//! first, spawn cost second).
+//! Script-command hooks: external commands consulted at the `Registry::call` boundary, after the
+//! in-process handlers (cheap first, spawn cost second).
 //!
-//! Event delivery is environment (`POLYMORPH_HOOK_EVENT=pre|post|stop`,
-//! `POLYMORPH_HOOK_TOOL`, `POLYMORPH_HOOK_ARGS` as JSON, `POLYMORPH_HOOK_OK`
-//! + `POLYMORPH_HOOK_DETAIL` on post) — portable across `cmd` and `sh`
-//!   without quoting layers (traps #9: never nest command strings).
+//! Event delivery is environment (`POLYMORPH_HOOK_EVENT=pre|post|stop`, `POLYMORPH_HOOK_TOOL`,
+//! `POLYMORPH_HOOK_ARGS` as JSON, `POLYMORPH_HOOK_OK` + `POLYMORPH_HOOK_DETAIL` on post) — portable
+//! across `cmd` and `sh` without quoting layers.
 //!
 //! Exit-code semantics (fail-closed): 0 = Allow; 2 = Deny with trimmed
 //! stderr (capped) as the reason; any other code, timeout, or spawn
@@ -13,7 +11,7 @@
 //! observation (stderr traced); their verdicts are ignored — outcome
 //! shapes stay frozen (routing script output into the loop is a queued
 //! refinement, stated not silent). Prompt-action (ask-user) needs an
-//! interactive prompter seam spanning TUI/ACP: queued as its own slice.
+//! interactive prompter seam for surfaces with a human: queued.
 
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
@@ -157,13 +155,9 @@ async fn run_script(
     post: Option<(bool, &str)>,
     cancel: &CancellationToken,
 ) -> anyhow::Result<ScriptOut> {
-    // Env delivery (no argv quoting layers): child inherits process env
-    // PLUS these overrides, applied PER-CHILD (chunk 95 root-cause fix:
-    // process-global `set_var` let parallel hook runs — threads AND
-    // JoinSet-fanned subagents — cross each other's TOOL/ARGS rows, and
-    // pre-hooks inherited STALE OK/DETAIL from earlier post runs).
-    // Values are data (a tool name / JSON blob), never secrets — HookEvents
-    // carry shapes, not values (c79 invariant).
+    // Env delivery (no argv quoting layers): child inherits process env PLUS these overrides,
+    // applied PER-CHILD. Values are data (a tool name / JSON blob), never secrets — HookEvents
+    // carry shapes, not values.
     let mut env = vec![
         ("POLYMORPH_HOOK_EVENT", kind),
         ("POLYMORPH_HOOK_TOOL", tool),
@@ -245,9 +239,9 @@ mod tests {
         }
     }
 
-    // NOTE: script-execution tests below shell out via `cmd /C` (Windows
-    // host + windows-only CI — same platform note as the exec suite).
-    // Keep commands quote-free (traps #9) and fast (well under timeouts).
+    // NOTE: script-execution tests below shell out via `cmd /C` (Windows host + windows-only CI —
+    // same platform note as the exec suite). Keep commands quote-free and fast (well under
+    // timeouts).
 
     #[tokio::test]
     async fn exit_zero_allows() {
@@ -312,8 +306,7 @@ mod tests {
 
     #[tokio::test]
     async fn env_delivers_tool_name() {
-        // Delivery proof: the script decides on the TOOL var (unquoted
-        // comparison — quote-free per traps #9, value has no spaces).
+        // Delivery proof: the script decides on the TOOL var.
         let hook = ScriptHook {
             on: ScriptOn::Pre,
             command: "cmd /C if %POLYMORPH_HOOK_TOOL%==read exit 2".to_string(),
@@ -328,11 +321,8 @@ mod tests {
 
     #[tokio::test]
     async fn concurrent_hooks_observe_own_tool() {
-        // Race pin (chunk-95 root cause: process-global `set_var` let
-        // parallel runs — test threads AND JoinSet-fanned subagents — read
-        // each other's TOOL rows; `env_delivers_tool_name` failed exactly
-        // this way under workspace-parallel load). 16 concurrent runs with
-        // DISTINCT tools; each script denies iff it sees its OWN name.
+        // Race pin. 16 concurrent runs with DISTINCT tools; each script denies iff it sees its OWN
+        // name.
         let mut set = tokio::task::JoinSet::new();
         for i in 0..16u32 {
             let tool = format!("race-tool-{i}");

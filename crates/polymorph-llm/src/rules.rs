@@ -1,6 +1,5 @@
-//! Stream rules (Epic R, chunk 123): regex misfire patterns that abort a
-//! model stream mid-flight and attach the rule's reminder for the retry
-//! (slice 2 re-issues the turn; this slice owns match + abort only).
+//! Stream rules: regex misfire patterns that abort a model stream mid-flight and attach the rule's
+//! reminder for the retry (the retry re-issues the turn; this module owns match + abort only).
 //!
 //! Rules are caller-owned (`&[CompiledRule]` per fold call — no store:
 //! no compaction exists to survive, so persistence would be speculative).
@@ -10,7 +9,7 @@
 //! measured).
 
 /// One stream rule as authored: an id, a Rust-regex pattern, and the
-/// reminder text slice 2 injects as a system reminder on retry.
+/// reminder text injected as a system reminder on retry.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StreamRule {
     pub id: String,

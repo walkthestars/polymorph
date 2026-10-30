@@ -1,6 +1,5 @@
-//! Hashline property matrix (Epic B4/B4b, unit form — true kill -9 fuzzing is
-//! TBM-16). Deterministic xorshift64* (fixed seed): 300 iterations, no network,
-//! no timing dependence.
+//! Hashline property matrix. Deterministic xorshift64* (fixed seed): 300 iterations, no network, no
+//! timing dependence.
 //!
 //! Per iteration, three properties:
 //! 1. VALID: random patch against a random doc applies to EXACTLY the content

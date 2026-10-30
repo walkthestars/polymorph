@@ -1,6 +1,6 @@
 //! Drive machine-seam protocol (S0): the headless half of the
 //! fire-and-forget circuit, moved verbatim out of `polymorph-tui` so
-//! non-TUI consumers can route and classify without the render stack.
+//! consumers can route and classify without a render stack.
 //!
 //! Build-intent classification ([`classify_intent`]), NL loop routing
 //! ([`classify_loop`]), the model-discriminator vocabulary
@@ -44,7 +44,7 @@ pub fn intent_text(intent: &DriveIntent) -> String {
 }
 
 /// Where a natural-language line should execute (NL→loop routing). The
-/// TUI types what it wants; the loop runs where it belongs: quick turns
+/// The caller types what it wants; the loop runs where it belongs: quick turns
 /// stay chat, goals drive, file reviews review, plan files plan-drive.
 /// Eval/bench stay CLI-only (seeded corpora, not conversation).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,7 +56,7 @@ pub enum LoopIntent {
 }
 
 /// Route one prompt line (case-insensitive, whole-word verbs reuse the
-/// `classify_intent` gate — learned intent stays refused, c22 class).
+/// `classify_intent` gate — learned intent stays refused).
 /// Spend-safe by construction: empty review targets and bare keywords
 /// fall back to Chat (cheap), never into a billed loop.
 pub fn classify_loop(prompt: &str) -> LoopIntent {
@@ -90,7 +90,7 @@ pub fn classify_loop(prompt: &str) -> LoopIntent {
             prompt: prompt.to_string(),
         };
     }
-    // Plan files drive per-task: first .md token wins, else PLAN.md.
+    // Plan files drive per-task: first.md token wins, else PLAN.md.
     if lower.contains("plan.md") || (lower.contains("plan") && lower.contains("drive")) {
         let file = trimmed
             .split_whitespace()
@@ -111,8 +111,8 @@ pub fn classify_loop(prompt: &str) -> LoopIntent {
     }
 }
 
-/// Pre-gate classification (D5: dumb-deliberate keyword set, listed here
-/// and under test — learned intent is the refused c22 class).
+/// Pre-gate classification (dumb-deliberate keyword set, listed here
+/// and under test — learned intent is refused).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IntentClass {
     Build,
@@ -226,8 +226,8 @@ pub enum DriveEvent {
         /// `Some(reason)` when the reviewer reply yielded no usable verdict
         /// (an unparseable round; the reason is bounded, one line).
         invalid: Option<String>,
-        /// `Some("create"|"start")` when a harness seed answered the round
-        /// instead of a reviewer call (docket #7).
+        /// `Some("create"|"start")` when a harness seed answered the round instead of a reviewer
+        /// call.
         synthesized: Option<String>,
     },
     Finding {
@@ -256,7 +256,7 @@ pub enum DriveEvent {
     },
 }
 
-/// The drive contract (139c implements it live over drive_plan +
+/// The drive contract (the live implementation over drive_plan +
 /// review run; tests use scripted vecs — seam proven before use).
 pub trait Driver {
     fn drive(
@@ -293,7 +293,7 @@ impl Driver for NoDriver {
     }
 }
 
-/// Status-line budget (`round 2/8 · tools 5/32` — D4 always-displayed).
+/// Status-line budget (`round 2/8 · tools 5/32` always displayed).
 pub fn budget_line(
     rounds_used: usize,
     rounds_max: usize,

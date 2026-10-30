@@ -1,14 +1,11 @@
-//! Drive restore ledger (docket #8): a failed in-place drive leaves the
-//! tree as it found it.
+//! Drive restore ledger: a failed in-place drive leaves the tree as it found it.
 //!
-//! `review drive` runs [`WorkdirSpec::InPlace`](polymorph_delegate::WorkdirSpec)
-//! by default, so a halted attempt used to leave partial edits that later
-//! fixers discovered and adopted (traps #57, #65). The ledger records, on the
-//! FIRST `write`/`edit` of each path in the drive, the file's exact original
-//! bytes (or that it did not exist), and fingerprints the drive's own writes.
-//! On a non-passing outcome [`RestoreLedger::rollback`] puts every original
-//! back (deleting files and now-empty directories the drive created), most
-//! recent first, after copying the drive's version into
+//! `review drive` runs [`WorkdirSpec::InPlace`](polymorph_delegate::WorkdirSpec) by default, so a
+//! halted attempt used to leave partial edits that later fixers discovered and adopted. The ledger
+//! records, on the FIRST `write`/`edit` of each path in the drive, the file's exact original bytes
+//! (or that it did not exist), and fingerprints the drive's own writes. On a non-passing outcome
+//! [`RestoreLedger::rollback`] puts every original back (deleting files and now-empty directories
+//! the drive created), most recent first, after copying the drive's version into
 //! `.polymorph/attempts/<stamp>/` so nothing is lost.
 //!
 //! Safety rules, in order:
@@ -19,20 +16,20 @@
 //!   change detection saw a fixer `bash`/`exec` command change
 //!   ([`crate::command_changes`]), are touched — and a command-changed file
 //!   only where its drive-start original is provable:
-//!   - in a git repo, a path `git status` did not list at drive start was
-//!     clean, so its original is the drive-start `HEAD` blob in the form
-//!     whose length is the file's drive-start size (the checkout form
-//!     through the work tree's filters, `git cat-file --filters`, else the
-//!     stored blob: an `autocrlf` LF file is clean too), or — for
-//!     a file the command created, absent from that `HEAD` — absence: it
-//!     is deleted only while untracked and not ignored;
-//!   - outside git, only absence is provable: a file a command created
-//!     that the drive-start stamp walk did not see is deleted.
+//! - in a git repo, a path `git status` did not list at drive start was
+//!   clean, so its original is the drive-start `HEAD` blob in the form
+//!   whose length is the file's drive-start size (the checkout form
+//!   through the work tree's filters, `git cat-file --filters`, else the
+//!   stored blob: an `autocrlf` LF file is clean too), or — for
+//!   a file the command created, absent from that `HEAD` — absence: it
+//!   is deleted only while untracked and not ignored;
+//! - outside git, only absence is provable: a file a command created
+//!   that the drive-start stamp walk did not see is deleted.
 //!
-//!   Everything else a command changed (dirty at drive start, modified
-//!   outside git, past the caps) is reported NOT RESTORABLE with the
-//!   reason. Files a verify command or an undetected change created are
-//!   never deleted; the guard reports them from `git status` instead.
+//! Everything else a command changed (dirty at drive start, modified
+//! outside git, past the caps) is reported NOT RESTORABLE with the
+//! reason. Files a verify command or an undetected change created are
+//! never deleted; the guard reports them from `git status` instead.
 //! - Files over the per-file or drive-wide byte cap get no snapshot and are
 //!   reported NOT RESTORABLE (left as the drive wrote them). Binary files are
 //!   restored byte-exactly like text (CRLF, BOM and encoding included).
@@ -195,8 +192,8 @@ enum DriveStart {
     Tree(Option<std::collections::HashSet<String>>),
 }
 
-/// Drive-level restore ledger (docket #8). Shared (`Arc`) between the
-/// fixer runner, which records, and the CLI guard, which rolls back.
+/// Drive-level restore ledger. Shared (`Arc`) between the fixer runner, which records, and the CLI
+/// guard, which rolls back.
 #[derive(Debug)]
 pub struct RestoreLedger {
     root: PathBuf,
@@ -212,7 +209,7 @@ pub struct RestoreLedger {
 impl RestoreLedger {
     /// Ledger for an in-place drive rooted at `root`, archiving rolled-back
     /// files under `root/.polymorph/attempts/<unix-secs>-<pid>-<n>/` (`n`
-    /// counts drives in this process: TUI drives share one pid).
+    /// counts drives in this process).
     pub fn new(root: PathBuf) -> Self {
         static DRIVES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let stamp = format!(
@@ -909,8 +906,7 @@ fn missing_ancestors(path: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
-/// What a rollback did (docket #8): printed as a summary and attached to
-/// the drive's terminal event.
+/// What a rollback did: printed as a summary and attached to the drive's terminal event.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct RollbackReport {
     /// Modified files put back to their original bytes.
@@ -1061,7 +1057,7 @@ pub struct RollbackGuard {
     ledger: Arc<RestoreLedger>,
     git_start: Option<BTreeSet<String>>,
     armed: bool,
-    /// Print the drop-path summary to stderr (off under a TUI, which owns
+    /// Print the drop-path summary to stderr (off for callers that own
     /// the screen: the summary then goes to the log only).
     stderr: bool,
 }
@@ -1080,7 +1076,7 @@ impl RollbackGuard {
         }
     }
 
-    /// Log-only drop summary (TUI drives).
+    /// Log-only drop summary.
     pub fn quiet(mut self) -> Self {
         self.stderr = false;
         self
@@ -1122,10 +1118,9 @@ impl Drop for RollbackGuard {
     }
 }
 
-/// Turn decorator (docket #8): after every fix turn — its verify commands
-/// included when this wraps the verify gate — adopt the tracked files'
-/// state as the drive's, so command-made changes to them roll back instead
-/// of reading as conflicts.
+/// Turn decorator: after every fix turn — its verify commands included when this wraps the verify
+/// gate — adopt the tracked files' state as the drive's, so command-made changes to them roll back
+/// instead of reading as conflicts.
 pub struct RestoreRefreshRunner {
     pub inner: Arc<dyn polymorph_delegate::TurnRunner>,
     pub ledger: Arc<RestoreLedger>,

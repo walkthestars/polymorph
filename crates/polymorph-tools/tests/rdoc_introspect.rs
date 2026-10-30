@@ -1,9 +1,7 @@
-//! Tool-level RenderDoc introspection contracts (chunk 113, N1b):
-//! `rdoc_draws/state/diff/script` through `Registry::call` over headed
-//! replays of the triangle fixture. Probe + loud-skip discipline mirrors
-//! `dap_matrix.rs` (roster: `docs/renderdoc.md`). Headed `qrenderdoc`
-//! needs a display; tests skip loud without the binary (headless-CI
-//! support is future work, stated in plan-chunk113).
+//! Tool-level RenderDoc introspection contracts: `rdoc_draws/state/diff/script` through
+//! `Registry::call` over headed replays of the triangle fixture. Probe + loud-skip discipline
+//! mirrors `dap_matrix.rs` (roster: `docs/renderdoc.md`). Headed `qrenderdoc` needs a display;
+//! tests skip loud without the binary (headless-CI support is future work, stated in plan-).
 
 fn resolve_renderdoc() -> Option<String> {
     const INSTALL: &str = "C:/Program Files/RenderDoc/renderdoccmd.exe";
@@ -23,13 +21,11 @@ fn resolve_gcc() -> Option<String> {
     std::path::Path::new(GCC).is_file().then(|| GCC.to_string())
 }
 
-/// Serializes headed GL work in-process (chunk 114 defect — see
-/// rdoc_capture.rs for the full note; same lock shape, per-binary).
+/// Serializes headed GL work in-process.
 static HEADED_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-/// Headed gate (chunk 117): captures pop sample windows and `rdoc_script`
-/// launches the qrenderdoc GUI — default `cargo test` skips. Set
-/// `POLYMORPH_HEADED=1` to run; skips return green (counts unchanged).
+/// Headed gate: captures pop sample windows and `rdoc_script` launches the qrenderdoc GUI — default
+/// `cargo test` skips. Set `POLYMORPH_HEADED=1` to run; skips return green (counts unchanged).
 fn headed_enabled() -> bool {
     std::env::var("POLYMORPH_HEADED")
         .map(|v| v == "1")
@@ -261,10 +257,9 @@ async fn rdoc_script_runs_user_echo() {
 
 #[tokio::test]
 async fn read_renderdoc_url_lists_draws_headed() {
-    // P2 renderdoc:// delegate over the N1b machinery (chunk 121).
-    // Headed (qrenderdoc + sample window) — gated like every headed
-    // test here; committed unrun this chunk (117 precedent: delegate
-    // bodies are live-proven N1b code, only the parse+route is new).
+    // P2 renderdoc:// delegate over the N1b machinery. Headed (qrenderdoc + sample window) — gated
+    // like every headed test here; committed unrun this chunk (117 precedent: delegate bodies are
+    // live-proven N1b code, only the parse+route is new).
     if !headed_enabled() {
         eprintln!(
             "SKIP read_renderdoc_url_lists_draws_headed: headed (set POLYMORPH_HEADED=1 to run)"

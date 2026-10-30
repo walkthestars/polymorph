@@ -1,13 +1,11 @@
-//! Non-interactive shell execution (Epic B1).
+//! Non-interactive shell execution.
 //!
-//! Scope: `tokio::process` only. Interactive PTY (portable-pty/ConPTY) is
-//! Epic B2 and lives in a separate module when it lands — this file must not
-//! grow PTY code paths.
+//! Scope: `tokio::process` only. Interactive PTY (portable-pty/ConPTY) is and lives in a separate
+//! module when it lands — this file must not grow PTY code paths.
 //!
-//! Guarantees: timeout kills the whole child (no orphans); a cancelled token
-//! kills the child and returns `Interrupted`, never partial success.
-//! Output is read incrementally into [`crate::output::StreamCapture`]s
-//! (docket #9): [`run_bash_streamed`] spills large streams to files instead
+//! Guarantees: timeout kills the whole child (no orphans); a cancelled token kills the child and
+//! returns `Interrupted`, never partial success. Output is read incrementally into
+//! [`crate::output::StreamCapture`]s: [`run_bash_streamed`] spills large streams to files instead
 //! of holding them in memory.
 
 use std::time::Duration;
@@ -50,9 +48,8 @@ pub async fn run_bash(
     run_bash_with_env(cmd, timeout, cancel, &[]).await
 }
 
-/// `run_bash` plus per-child env overrides (chunk 95): values ride the
-/// spawned child's environment ONLY — never the process globals (the
-/// `set_var` race: parallel hook runs crossed each other's rows).
+/// `run_bash` plus per-child env overrides: values ride the spawned child's environment ONLY —
+/// never the process globals (the `set_var` race: parallel hook runs crossed each other's rows).
 /// Empty `env` behaves exactly like `run_bash`.
 pub async fn run_bash_with_env(
     cmd: &str,
@@ -63,10 +60,8 @@ pub async fn run_bash_with_env(
     run_shell(cmd, timeout, cancel, env, None).await
 }
 
-/// `run_bash_with_env` in an explicit working directory (docket #2 verify
-/// gate: operator commands run in the drive's workdir, not the process
-/// cwd). Same shell, quoting, timeout and tree-kill guarantees; a missing
-/// `cwd` surfaces as [`ExecError::Spawn`].
+/// `run_bash_with_env` in an explicit working directory. Same shell, quoting, timeout and tree-kill
+/// guarantees; a missing `cwd` surfaces as [`ExecError::Spawn`].
 pub async fn run_bash_in(
     cmd: &str,
     timeout: Duration,
@@ -94,12 +89,10 @@ async fn run_shell(
     })
 }
 
-/// One `bash` run with bounded capture (docket #9): each stream over
-/// `spill.inline_bytes` is written in full to its own file under
-/// `<cwd>/.polymorph/tool-output/` WHILE it is read, and comes back as a
-/// digest (see [`crate::output`]); streams under it come back exactly as
-/// [`run_bash_in`] returns them. Same shell, timeout and tree-kill
-/// guarantees as [`run_bash_in`].
+/// One `bash` run with bounded capture: each stream over `spill.inline_bytes` is written in full to
+/// its own file under `<cwd>/.polymorph/tool-output/` WHILE it is read, and comes back as a digest
+/// (see [`crate::output`]); streams under it come back exactly as [`run_bash_in`] returns them.
+/// Same shell, timeout and tree-kill guarantees as [`run_bash_in`].
 #[derive(Debug)]
 pub struct StreamedRun {
     /// Exit code, or why there is none. On [`ExecError::TimedOut`] the
@@ -204,23 +197,23 @@ async fn run_captured(
     #[cfg(unix)]
     let mut group_guard = GroupKillGuard(pid);
     let status = tokio::select! {
-        _ = cancel.cancelled() => {
-            kill_tree_pid(pid).await;
-            return Err(ExecError::Interrupted);
-        }
-        out = tokio::time::timeout(timeout, &mut wait) => {
-            match out {
-                Ok(Ok(s)) => s,
-                Ok(Err(e)) => return Err(ExecError::Spawn(e)),
-                Err(_) => {
-                    // Tree first, then `wait` is dropped → kill_on_drop
-                    // finishes the direct child.
-                    kill_tree_pid(pid).await;
-                    return Err(ExecError::TimedOut(timeout));
-                }
-            }
-        }
-    };
+           _ = cancel.cancelled() => {
+               kill_tree_pid(pid).await;
+               return Err(ExecError::Interrupted);
+           }
+           out = tokio::time::timeout(timeout, &mut wait) => {
+               match out {
+                   Ok(Ok(s)) => s,
+                   Ok(Err(e)) => return Err(ExecError::Spawn(e)),
+                   Err(_) => {
+    // Tree first, then `wait` is dropped → kill_on_drop
+    // finishes the direct child.
+                       kill_tree_pid(pid).await;
+                       return Err(ExecError::TimedOut(timeout));
+                   }
+               }
+           }
+       };
     #[cfg(unix)]
     {
         group_guard.0 = None;
@@ -276,8 +269,8 @@ async fn kill_tree_pid(pid: Option<u32>) {
 /// `platform_command`, `LspSpec::command`); otherwise there is no such group
 /// and the call is a harmless `ESRCH`. Errors (`ESRCH` once the group is
 /// gone, so double kills are fine) are ignored. `pid` 0/1 and values that
-/// overflow `pid_t` are refused: `kill(0, ..)` would signal OUR group and
-/// `kill(-1, ..)` every process we may signal.
+/// overflow `pid_t` are refused: `kill(0,..)` would signal OUR group and
+/// `kill(-1,..)` every process we may signal.
 pub fn kill_tree_sync(pid: u32) {
     #[cfg(windows)]
     {
@@ -370,12 +363,10 @@ pub fn normalize_windows_cmd(cmd: &str) -> String {
 }
 
 fn platform_command(cmd: &str) -> tokio::process::Command {
-    // kill_on_drop: dropping the wait future (timeout/cancel) kills the
-    // direct child. Tree reaping for grandchildren is `kill_tree_pid`; on
-    // Unix that needs the child to lead its own process group.
-    // Stdio MUST be piped here: the default is inherit, under which
-    // wait_with_output returns empty buffers (exit codes still work — a
-    // trap this module's own tests caught).
+    // Kill_on_drop: dropping the wait future (timeout/cancel) kills the direct child. Tree reaping
+    // for grandchildren is `kill_tree_pid`; on Unix that needs the child to lead its own process
+    // group. Stdio MUST be piped here: the default is inherit, under which wait_with_output returns
+    // empty buffers.
     use std::process::Stdio;
     let mut c = shell_command(cmd);
     c.stdin(Stdio::null())
@@ -591,8 +582,8 @@ mod tests {
         wait_until_dead(&pid_file).await;
     }
 
-    /// Docket #9: under the threshold the streamed run returns exactly
-    /// what `run_bash_in` returns (byte identity for small outputs).
+    /// Under the threshold the streamed run returns exactly what `run_bash_in` returns (byte
+    /// identity for small outputs).
     #[tokio::test]
     async fn streamed_small_output_matches_run_bash_in() {
         let dir = tempfile::tempdir().unwrap();
@@ -612,8 +603,7 @@ mod tests {
         assert!(!dir.path().join(".polymorph").exists());
     }
 
-    /// Docket #9: ~50 MB of output streams to the spill file (every byte)
-    /// while the inline digest stays small.
+    /// ~50 MB of output streams to the spill file (every byte) while the inline digest stays small.
     #[tokio::test]
     async fn streamed_large_output_spills_every_byte() {
         let dir = tempfile::tempdir().unwrap();
@@ -650,7 +640,7 @@ mod tests {
         assert!(run.stderr.is_empty());
     }
 
-    /// Docket #9: a timeout keeps what the command printed before the kill.
+    /// A timeout keeps what the command printed before the kill.
     #[tokio::test]
     async fn streamed_timeout_keeps_partial_output() {
         let dir = tempfile::tempdir().unwrap();

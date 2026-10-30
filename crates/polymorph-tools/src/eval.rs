@@ -1,4 +1,4 @@
-//! Model-output eval skeleton (Epic F5a, offline).
+//! Model-output eval skeleton.
 //!
 //! The B6 corpus scores FIXED patches; this scores RAW MODEL OUTPUT:
 //! extract → apply → byte-compare, with recorded or hand-written outputs
@@ -17,8 +17,7 @@ use std::path::{Path, PathBuf};
 
 use super::hashline::{apply::normalize, apply_text_to_disk, SnapshotStore};
 
-/// Eval format arm (Chunk 28, design `plan-chunk27.md` §4–5): which
-/// extractor/applier scores a case. Recordings stamp it; ABSENCE means
+/// Eval format arm: which extractor/applier scores a case. Recordings stamp it; ABSENCE means
 /// hashline — every pre-format recording replays unchanged (pinned).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum EvalFormat {
@@ -153,9 +152,7 @@ impl CaseReport {
     }
 }
 
-/// Write initial workspace files (shared setup for both scorers — chunk 28:
-/// `score_case` mints hashline tags after this; the str_replace scorer
-/// needs no tags). Caller-owned `root`; setup faults are `ApplyFail`.
+/// Write initial workspace files. Caller-owned `root`; setup faults are `ApplyFail`.
 pub(crate) fn write_initial_files(root: &Path, files: &[(String, String)]) -> Result<(), String> {
     for (name, content) in files {
         let path = root.join(name);
@@ -171,10 +168,8 @@ pub(crate) fn write_initial_files(root: &Path, files: &[(String, String)]) -> Re
     Ok(())
 }
 
-/// Byte-exact workspace comparison shared by both scorers (chunk 28:
-/// factored, not copied — the ONLY thing that may differ between arms is
-/// extract+apply). Includes the no-temp-files check (corpus-driver
-/// precedent). `Ok` = Pass; `Err(msg)` = the `Mismatch` detail.
+/// Byte-exact workspace comparison shared by both scorers. Includes the no-temp-files check
+/// (corpus-driver precedent). `Ok` = Pass; `Err(msg)` = the `Mismatch` detail.
 pub(crate) fn check_workspace(root: &Path, expected: &[(String, String)]) -> Result<(), String> {
     // No temp files may survive a scored run (corpus-driver precedent).
     let mut got: Vec<(String, Vec<u8>)> = Vec::new();
@@ -319,14 +314,12 @@ pub fn gate(sb: &Scoreboard, min_rate: f64) -> Result<(), String> {
     }
 }
 
-/// Rebuild an `EvalCase` from an `eval run/sweep --record` JSON recording
-/// (Epic F5c offline CI replay; v2 shape since F5e). Two shapes, detected
-/// on the `files` key: v2 carries `files` + `expected` as `{name, content}`
-/// arrays (multi-file, absence, rename all expressible); legacy carries
-/// `input` + `expected` strings with the workspace name in `path` (or the
-/// legacy `id` when `path` predates it — F5b/F5c records replay unchanged).
-/// `model`/`instruction`/`outcome` are provenance, ignored for scoring —
-/// the scorer re-derives the outcome, never trusts the recorded one.
+/// Rebuild an `EvalCase` from an `eval run/sweep --record` JSON recording. Two shapes, detected on
+/// the `files` key: v2 carries `files` + `expected` as `{name, content}` arrays (multi-file,
+/// absence, rename all expressible); legacy carries `input` + `expected` strings with the workspace
+/// name in `path` (or the legacy `id` when `path` predates it — F5b/F5c records replay unchanged).
+/// `model`/`instruction`/`outcome` are provenance, ignored for scoring — the scorer re-derives the
+/// outcome, never trusts the recorded one.
 ///
 /// Corrupt recordings are HARD ERRORS naming the field (operator error),
 /// never `CaseOutcome` variants (which describe model output) — a bad file
@@ -387,13 +380,12 @@ pub fn load_recording(json_text: &str) -> Result<EvalCase, String> {
     })
 }
 
-/// Rebuild an `EvalCase` plus its format arm (Chunk 28): the `format`
-/// stamp selects the scorer (`hashline` → `score_case`, `str-replace` →
-/// `score_str_case`). ABSENT stamp defaults hashline — every pre-format
-/// recording replays unchanged. UNKNOWN stamps are hard errors naming the
-/// value (never a score — scoring under the wrong arm would forge data).
-/// Scoring under the non-stamped arm is the cross-format replay the design
-/// forbids; `run_eval_check` dispatches per record through this function.
+/// Rebuild an `EvalCase` plus its format arm: the `format` stamp selects the scorer (`hashline` →
+/// `score_case`, `str-replace` → `score_str_case`). ABSENT stamp defaults hashline — every pre-
+/// format recording replays unchanged. UNKNOWN stamps are hard errors naming the value (never a
+/// score — scoring under the wrong arm would forge data). Scoring under the non-stamped arm is the
+/// cross-format replay the design forbids; `run_eval_check` dispatches per record through this
+/// function.
 pub fn load_recording_with_format(json_text: &str) -> Result<(EvalCase, EvalFormat), String> {
     let v: serde_json::Value =
         serde_json::from_str(json_text).map_err(|e| format!("recording: invalid JSON: {e}"))?;
@@ -465,9 +457,8 @@ mod tests {
         }
     }
 
-    /// Mint over the NORMALIZED fixture content — exactly like score_case's
-    /// setup (terminator-stripped per the line model, traps #20). Minting
-    /// the raw `"orig\n"` forks the tag and every fixture goes stale.
+    /// Mint over the NORMALIZED fixture content — exactly like score_case's setup. Minting the raw
+    /// `"orig\n"` forks the tag and every fixture goes stale.
     fn fixture_tag() -> String {
         let mut store = SnapshotStore::new();
         let norm = normalize(b"orig\n");

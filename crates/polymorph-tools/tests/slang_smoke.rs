@@ -1,8 +1,7 @@
-//! Slang supply-chain smoke (chunk 114, N2a): `slangc` pinned +
-//! working + emitting debug-info SPIR-V (the artifact the future
-//! Vulkan pipeline consumes). Probe + loud-skip discipline mirrors
-//! `dap_matrix.rs` (roster: `docs/renderdoc.md`). No agent tool
-//! consumes `.spv` yet — supply-chain + artifact proof only.
+//! Slang supply-chain smoke: `slangc` pinned + working + emitting debug-info SPIR-V (the artifact
+//! the future Vulkan pipeline consumes). Probe + loud-skip discipline mirrors `dap_matrix.rs`
+//! (roster: `docs/renderdoc.md`). No agent tool consumes `.spv` yet — supply-chain + artifact proof
+//! only.
 
 /// Resolve `slangc`: `SLANGC`, then the winget package under
 /// `%LOCALAPPDATA%`, then PATH. `None` = loud skip (host without slang;
@@ -59,7 +58,7 @@ fn slang_compiles_triangle_shaders_with_debug_info() {
         let bytes = std::fs::read(&out).expect("spv unreadable");
         assert!(!bytes.is_empty(), "{entry} emitted empty spv");
         // Non-Semantic Shader DebugInfo extended-set name rides embedded
-        // in the binary (byte scan — .spv is not UTF-8 text). Absence
+        // in the binary (byte scan —.spv is not UTF-8 text). Absence
         // means `-g` did not do its job: red, not a skip.
         let needle = b"NonSemantic.Shader.DebugInfo.100";
         assert!(

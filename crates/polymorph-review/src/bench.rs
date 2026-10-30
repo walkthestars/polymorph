@@ -1,4 +1,4 @@
-//! Agent-bench corpus + scoring primitives (Epic F6).
+//! Agent-bench corpus + scoring primitives.
 //!
 //! The seeded corpus (TOML manifest, B6-dialect schema) and the LLM-free
 //! machinery around it: loading, tempdir materialization, deadline-bound
@@ -62,17 +62,15 @@ pub fn write_files(dir: &Path, files: &BTreeMap<String, String>) -> anyhow::Resu
     Ok(())
 }
 
-/// Materialize task files as a committable repo (chunk 43): `write_files` +
-/// `git init -b main` + seed commit under a FIXED fallback identity (temp
-/// repos only — never the operator's gitconfig; worktree.rs identity rule
-/// still governs later fixer commits). Worktree children need a repo;
-/// plain `write_files` copies stay non-repos for InPlace arms.
+/// Materialize task files as a committable repo: `write_files` + `git init -b main` + seed commit
+/// under a FIXED fallback identity (temp repos only — never the operator's gitconfig; worktree.rs
+/// identity rule still governs later fixer commits). Worktree children need a repo; plain
+/// `write_files` copies stay non-repos for InPlace arms.
 ///
-/// Build debris discipline (chunk-43 probe catch): the fixer runs `cargo
-/// test` inside the repo, which writes `target/` + `Cargo.lock` — without
-/// an ignore, that dirt trips merge_back's repo-clean pre-check AND bloats
-/// branch commits via `add -A`. A seeded `.gitignore` keeps both clean.
-/// A manifest-shipped `.gitignore` wins when present (never overwritten).
+/// Build debris discipline: the fixer runs `cargo test` inside the repo, which writes `target/` +
+/// `Cargo.lock` — without an ignore, that dirt trips merge_back's repo-clean pre-check AND bloats
+/// branch commits via `add -A`. A seeded `.gitignore` keeps both clean. A manifest-shipped
+/// `.gitignore` wins when present (never overwritten).
 pub fn materialize_repo(dir: &Path, files: &BTreeMap<String, String>) -> anyhow::Result<()> {
     use std::process::{Command, Stdio};
     write_files(dir, files)?;
@@ -111,10 +109,9 @@ pub fn materialize_repo(dir: &Path, files: &BTreeMap<String, String>) -> anyhow:
     Ok(())
 }
 
-/// Run `cargo test` in `dir` with a hard deadline. Returns combined
-/// stdout+stderr output and whether the suite passed. A deadline breach
-/// kills the direct child (plain spawn, no shell — traps #7 never applies)
-/// and reports as a failed run, never a hang.
+/// Run `cargo test` in `dir` with a hard deadline. Returns combined stdout+stderr output and
+/// whether the suite passed. A deadline breach kills the direct child and reports as a failed run,
+/// never a hang.
 pub fn cargo_test(dir: &Path, deadline: Duration) -> (String, bool) {
     let mut child = Command::new("cargo")
         .arg("test")
@@ -159,8 +156,8 @@ pub fn cargo_test(dir: &Path, deadline: Duration) -> (String, bool) {
     }
 }
 
-/// Which harness arm produced a result. Tools are held constant across arms
-/// (the Δ prices REVIEW, never tooling — plan-chunk35 §4.3).
+/// Which harness arm produced a result. Tools are held constant across arms (the Δ prices REVIEW,
+/// never tooling — plan-§4.3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BenchArm {
     Loop,
@@ -199,9 +196,8 @@ pub fn parse_bench_arms(name: &str) -> anyhow::Result<Vec<BenchArm>> {
 /// (boards attribute to a profile, never to "the bench" unqualified).
 pub const SCOPED_PROFILE: &str = "scoped-v1";
 
-/// Discriminator variant (chunk-36 probe): bare-`bash` allow to isolate
-/// whether 100% bash-error is phrasing-shaped (gate) or systematic
-/// (exec env). Destructive denies still apply; everything else identical.
+/// Discriminator variant: bare-`bash` allow to isolate whether 100% bash-error is phrasing-shaped
+/// (gate) or systematic (exec env). Destructive denies still apply; everything else identical.
 pub const SCOPED_BASH_PROFILE: &str = "scoped-v1-bash";
 
 /// Extra destructive bash prefixes refused under the bench profile (on top
@@ -221,10 +217,9 @@ pub fn profile_shell_rule(profile: &str) -> anyhow::Result<&'static str> {
     }
 }
 
-/// Tools-off axis (chunk 41): the single arm's tool list. `true` empties it
-/// (text-only control — without merge-back the workdir evaporates, so 0/10
-/// is the predicted floor, never a failure). Mirrors the `review run`
-/// `--tools` precedent (`tools: if tools { tool_names } else { Vec::new() }`).
+/// Tools-off axis: the single arm's tool list. `true` empties it (text-only control — without
+/// merge-back the workdir evaporates, so 0/10 is the predicted floor, never a failure). Mirrors the
+/// `review run` `--tools` precedent (`tools: if tools { tool_names } else { Vec::new }`).
 pub fn single_tool_list(no_tools: bool, all: &[String]) -> Vec<String> {
     if no_tools {
         Vec::new()
@@ -244,25 +239,22 @@ pub fn single_record_profile(base: &str, no_tools: bool) -> String {
     }
 }
 
-/// Record-profile stamp for worktree-merged single runs (chunk 43): the
-/// runner changed (Branch worktree + merge-back) while tools and profile
-/// stayed constant, so the board attributes the runner. Same
+/// Record-profile stamp for worktree-merged single runs: the runner changed (Branch worktree +
+/// merge-back) while tools and profile stayed constant, so the board attributes the runner. Same
 /// replay-opaque convention as [`single_record_profile`].
 pub fn worktree_record_profile(base: &str) -> String {
     format!("{base}+worktree")
 }
 
-/// Record-profile stamp for loop-worktree runs (chunk 44): the loop fixer
-/// merged per-turn Branch worktrees while tools and profile stayed
-/// constant. Same replay-opaque convention (bench-check never parses the
-/// profile string) so old records replay unchanged.
+/// Record-profile stamp for loop-worktree runs: the loop fixer merged per-turn Branch worktrees
+/// while tools and profile stayed constant. Same replay-opaque convention (bench-check never parses
+/// the profile string) so old records replay unchanged.
 pub fn loop_worktree_record_profile(base: &str) -> String {
     format!("{base}+loop-worktree")
 }
 
-/// Parse the `--preamble` flag (chunk 45): `full` (default, chunk-39 block)
-/// | `minimal` (fence-ban-only ablation). Unknown names bail (fail-fast,
-/// creates nothing — F5d precedent). Returns true for minimal.
+/// Parse the `--preamble` flag: `full` | `minimal` (fence-ban-only ablation). Unknown names bail
+/// (fail-fast, creates nothing — F5d precedent). Returns true for minimal.
 pub fn parse_preamble(name: &str) -> anyhow::Result<bool> {
     match name {
         "full" => Ok(false),
@@ -271,10 +263,9 @@ pub fn parse_preamble(name: &str) -> anyhow::Result<bool> {
     }
 }
 
-/// Record-profile suffix for the preamble axis (chunk 45): minimal runs
-/// stamp `{base}+preamble-min`, composing AFTER any runner stamp (e.g.
-/// `scoped-v1-bash+loop-worktree+preamble-min`). Replay-opaque like all
-/// profile stamps — old records replay unchanged.
+/// Record-profile suffix for the preamble axis: minimal runs stamp `{base}+preamble-min`, composing
+/// AFTER any runner stamp (e.g. `scoped-v1-bash+loop-worktree+preamble-min`). Replay-opaque like
+/// all profile stamps — old records replay unchanged.
 pub fn preamble_record_suffix(base: &str, minimal: bool) -> String {
     if minimal {
         format!("{base}+preamble-min")
@@ -322,12 +313,10 @@ pub fn bench_gate_shell(
     (allow, deny)
 }
 
-/// Score a materialized workdir with the hidden suite: green exit = resolved.
-/// Returns (resolved, one-line summary). A suite that reports nothing
-/// (compile break, timeout, harness fault) scores unresolved with a
-/// `NO-REPORT:` summary — distinct from a reported FAIL (agent-harm datum,
-/// chunk 36). The REVIEWER's verdict never enters here (c33 §1a) — it feeds
-/// the agreement column at record time.
+/// Score a materialized workdir with the hidden suite: green exit = resolved. Returns (resolved,
+/// one-line summary). A suite that reports nothing (compile break, timeout, harness fault) scores
+/// unresolved with a `NO-REPORT:` summary — distinct from a reported FAIL. The REVIEWER's verdict
+/// never enters here — it feeds the agreement column at record time.
 pub fn score_dir(dir: &Path) -> (bool, String) {
     let (out, ok) = cargo_test(dir, CARGO_DEADLINE);
     let summary = match out.lines().find(|l| l.contains("test result:")) {
@@ -516,8 +505,8 @@ mod tests {
 
     #[test]
     fn single_notools_axis_empties_tools_and_suffixes_profile() {
-        // Chunk 41 tools-off axis: empty list (text-only control) + opaque
-        // suffixed stamp (replay-compat: the profile string is never parsed).
+        // Tools-off axis: empty list (text-only control) + opaque suffixed stamp (replay-compat:
+        // the profile string is never parsed).
         let all = vec!["read".to_string(), "edit".to_string()];
         assert_eq!(single_tool_list(false, &all), all);
         assert!(single_tool_list(true, &all).is_empty());
@@ -552,8 +541,8 @@ mod tests {
 
     #[test]
     fn materialize_repo_seeds_a_repo() {
-        // Chunk 43: files + main branch + one seed commit; worktree
-        // children attach to this. Traversal guard inherited from write_files.
+        // Files + main branch + one seed commit; worktree children attach to this. Traversal guard
+        // inherited from write_files.
         let dir = tempfile::tempdir().unwrap();
         let mut files = BTreeMap::new();
         files.insert("src/main.rs".to_string(), "fn main() {}\n".to_string());
@@ -564,7 +553,7 @@ mod tests {
             std::fs::read_to_string(dir.path().join(".gitignore")).unwrap(),
             "/target\nCargo.lock\n"
         );
-        // Manifest-shipped .gitignore wins (never overwritten).
+        // Manifest-shipped.gitignore wins (never overwritten).
         let mut custom = BTreeMap::new();
         custom.insert(".gitignore".to_string(), "mine\n".to_string());
         let dir2 = tempfile::tempdir().unwrap();

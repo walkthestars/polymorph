@@ -1,4 +1,4 @@
-//! Fixture-server LSP tests (Epic L, chunk 92: spawn-positive interop).
+//! Fixture-server LSP tests.
 //!
 //! A REAL child speaks REAL LSP here: `fixtures/lsp_probe_server.py`
 //! (stdlib-only) is spawned through the production `LspClient::spawn`

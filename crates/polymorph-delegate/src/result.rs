@@ -1,10 +1,9 @@
-//! Typed child results (Epic E1c).
+//! Typed child results.
 //!
-//! "No prose to parse": every child turn-loop ends in a [`TypedResult`] —
-//! a status, a human summary, and machine `data`. Callers check shape with
-//! [`validate_data`] (required top-level keys; no new dep). Full
-//! verdict-schema enforcement (fixed findings shape, confidence) stays
-//! Epic F — this is the transport the verdict will ride in.
+//! "No prose to parse": every child turn-loop ends in a [`TypedResult`] — a status, a human
+//! summary, and machine `data`. Callers check shape with [`validate_data`] (required top-level
+//! keys; no new dep). Full verdict-schema enforcement (fixed findings shape, confidence) stays —
+//! this is the transport the verdict will ride in.
 
 /// How a child's drive loop ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -13,7 +12,7 @@ pub enum FinishStatus {
     Completed,
     /// Loop stopped by policy/operator: budget, stall, cancel, depth.
     Stopped { reason: StopReason },
-    /// The runner itself errored (tool crash, provider failure in F, ...).
+    /// The runner itself errored (tool crash, provider failure in F,...).
     Failed { error: String },
 }
 

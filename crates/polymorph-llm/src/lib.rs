@@ -1,20 +1,16 @@
-//! `polymorph-llm` — genai-backed provider abstraction + role routing.
+//! `polymorph-llm` — genai-backed provider abstraction and role routing.
 //!
-//! Chunk 2 (Epics A3 + D1-preview):
-//! - `RoleRouter`: ordered model chain per role, 429 → next-entry fallback.
-//! - `LlmClient::stream_chat`: native-protocol streaming via
-//!   `genai::Client::exec_chat_stream`, deltas folded into a sink,
-//!   `CancellationToken` abort-everywhere (Ctrl-C exits mid-token, no orphans:
-//!   dropping the stream + returning is safe because the HTTP body is owned
-//!   by the cancelled future).
-//! - `drive_stream`: the fold loop, generic over the event stream so unit
-//!   tests pin it down without network.
+//! - `RoleRouter`: ordered model chain per role; 429 falls through to the next entry.
+//! - `LlmClient::stream_chat`: native-protocol streaming through
+//!   `genai::Client::exec_chat_stream`; deltas fold into a sink and `CancellationToken`
+//!   aborts everywhere (dropping the stream is safe because the HTTP body belongs to the
+//!   cancelled future).
+//! - `drive_stream`: the fold loop, generic over the event stream so unit tests pin it
+//!   without a network.
 //!
-//! NOT here yet (Epic H4): wiremock per-provider cassettes, cost ledger.
-//!
-//! Epic D1 (Chunk 7): [`RoleRouter::chain_scoped`] (path pins), [`fallback::Cooldowns`]
-//! (429 cooldown + restore), [`polymorph_core::config::CredentialPool`] round-robin +
-//! one-attempt env injection ([`ScopedEnv`]), and the models.dev [`catalog`].
+//! Path pins (`RoleRouter::chain_scoped`), 429 cooldown and restore
+//! (`fallback::Cooldowns`), credential pooling with one-attempt env injection
+//! (`ScopedEnv`), and the models.dev catalog are in this crate.
 
 pub mod catalog;
 pub mod fallback;
@@ -30,7 +26,7 @@ use std::pin::Pin;
 use std::time::Instant;
 use tokio_util::sync::CancellationToken;
 
-/// One screen of prompt-stability doctrine (0-master §2.8/Hermes invariant):
+/// One screen of prompt-stability doctrine:
 /// the system prompt is built ONCE per call here and never mutated mid-stream.
 pub const DEFAULT_SYSTEM: &str =
     "You are Polymorph, a Rust-native engineering instrument: scientist, engineer, \
@@ -94,8 +90,8 @@ impl RoleRouter {
         polymorph_core::config::chain_for_role(&self.chains, role)
     }
 
-    /// Chain for a role under an optional path scope (Epic D1b): a matching
-    /// pin wins, otherwise the plain role chain. `None` scope = [`Self::chain`].
+    /// Chain for a role under an optional path scope: a matching pin wins, otherwise the plain role
+    /// chain. `None` scope = [`Self::chain`].
     pub fn chain_scoped(&self, role: Role, scope: Option<&str>) -> Vec<String> {
         if let Some(path) = scope {
             if let Some(pinned) = polymorph_core::config::pin_for(&self.pins, path, role) {
@@ -117,13 +113,12 @@ impl RoleRouter {
 /// True iff the error is an HTTP 429 from any adapter, matched structurally
 /// (not by string).
 ///
-/// Two phases, one predicate. Pre-stream: `WebModelCall`/`WebAdapterCall`
-/// wrapping `webc::Error::ResponseFailedStatus { status: 429 }` (the Chunk-2
-/// case). Mid-stream: `WebStream { error }` boxing `Error::HttpError
-/// { status: 429 }` (OBSERVED in genai 0.6.5 `webc/web_stream.rs`: non-2xx
-/// responses are read as bodies and re-raised as boxed `HttpError` inside
-/// the event stream — the status line the mock returns proves it).
-/// Phase is a transport detail; a 429 is a 429, so both map to fallback.
+/// Two phases, one predicate. Pre-stream: `WebModelCall`/`WebAdapterCall` wrapping
+/// `webc::Error::ResponseFailedStatus { status: 429 }`. Mid-stream: `WebStream { error }` boxing
+/// `Error::HttpError { status: 429 }` (OBSERVED in genai 0.6.5 `webc/web_stream.rs`: non-2xx
+/// responses are read as bodies and re-raised as boxed `HttpError` inside the event stream — the
+/// status line the mock returns proves it). Phase is a transport detail; a 429 is a 429, so both
+/// map to fallback.
 pub fn is_rate_limited(err: &genai::Error) -> bool {
     match err {
         genai::Error::WebModelCall { webc_error, .. }
@@ -217,10 +212,9 @@ pub fn is_transient_provider_error(err: &genai::Error) -> bool {
     }
 }
 
-/// Destination for streamed text deltas. The TUI pane / stdout writer
-/// implements this in later epics; tests use `String`.
-/// `Send` is required: sinks are held across awaits inside `TurnRunner`
-/// futures (Epic F2a), which must be `Send` for the bus's spawned tasks.
+/// Destination for streamed text deltas. The stdout writer implements this in later
+/// epics; tests use `String`. `Send` is required: sinks are held across awaits inside `TurnRunner`
+/// futures, which must be `Send` for the bus's spawned tasks.
 pub trait StreamSink: Send {
     fn push_text(&mut self, chunk: &str);
 }
@@ -231,9 +225,8 @@ impl StreamSink for String {
     }
 }
 
-/// Outcome of one streamed turn. `rule_hit` is `Some` only when a slice-1
-/// stream rule fired (Epic R, chunk 123) — slice 2 re-issues with the
-/// reminder; all pre-R paths read `None`.
+/// Outcome of one streamed turn. `rule_hit` is `Some` only when a stream rule fired — the
+/// 2 re-issues with the reminder; all pre-R paths read `None`.
 #[derive(Debug)]
 pub struct StreamOutcome {
     pub text: String,
@@ -241,17 +234,16 @@ pub struct StreamOutcome {
     pub rule_hit: Option<rules::RuleHit>,
 }
 
-/// Typed failure of the [`drive_stream`] fold (Epic D1a). Split so the
-/// managed loop can route upstream provider failures (including mid-stream
-/// HTTP errors) into 429-fallback while keeping fold-contract violations
-/// Timeout for initial stream request/connection.
+/// Typed failure of the [`drive_stream`] fold. Split so the managed loop can route upstream
+/// provider failures (including mid-stream HTTP errors) into 429-fallback while keeping fold-
+/// contract violations Timeout for initial stream request/connection.
 pub const STREAM_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// Timeout between consecutive chunks on an active stream to prevent indefinite hangs.
 pub const STREAM_CHUNK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
-/// (tool-call chunks before Epic B) non-retriable. `Display` preserves the
-/// pre-D strings exactly (`"stream error: ..."` / the tool-call sentence).
+/// Non-retriable. `Display` preserves the pre-D strings exactly (`"stream error:..."` / the tool-
+/// call sentence).
 #[derive(Debug)]
 pub enum DriveError {
     /// The event stream itself errored (network, HTTP status, parse).
@@ -259,8 +251,7 @@ pub enum DriveError {
     Upstream(genai::Error),
     /// The event stream timed out waiting for the next chunk.
     TimedOut(std::time::Duration),
-    /// A tool-call chunk arrived before Epic B wiring. Never retried:
-    /// maps to [`ChatError::StreamFold`].
+    /// A tool-call chunk arrived before wiring. Never retried: maps to [`ChatError::StreamFold`].
     ToolCallsUnsupported,
 }
 
@@ -270,7 +261,7 @@ impl std::fmt::Display for DriveError {
             DriveError::Upstream(e) => write!(f, "stream error: {e}"),
             DriveError::TimedOut(d) => write!(f, "stream chunk timed out after {d:?}"),
             DriveError::ToolCallsUnsupported => {
-                write!(f, "tool calls are not wired until Epic B")
+                write!(f, "tool calls are not wired yet")
             }
         }
     }
@@ -292,44 +283,42 @@ pub async fn drive_stream(
     let mut text = String::new();
     loop {
         tokio::select! {
-            _ = cancel.cancelled() => {
-                return Ok(StreamOutcome { text, aborted: true, rule_hit: None });
-            }
-            event_res = tokio::time::timeout(STREAM_CHUNK_TIMEOUT, stream.next()) => {
-                let event = match event_res {
-                    Ok(e) => e,
-                    Err(_) => return Err(DriveError::TimedOut(STREAM_CHUNK_TIMEOUT)),
-                };
-                match event {
-                    None => return Ok(StreamOutcome { text, aborted: false, rule_hit: None }),
-                    Some(Err(e)) => return Err(DriveError::Upstream(e)),
-                    Some(Ok(ChatStreamEvent::Start)) => {}
-                    Some(Ok(ChatStreamEvent::Chunk(c))) => {
-                        sink.push_text(&c.content);
-                        text.push_str(&c.content);
-                    }
-                    // Reasoning traces are surfaced to the UI pane in Epic J;
-                    // chunk 2 keeps them out of the model-visible transcript.
-                    Some(Ok(ChatStreamEvent::ReasoningChunk(_))) => {}
-                    Some(Ok(ChatStreamEvent::ThoughtSignatureChunk(_))) => {}
-                    Some(Ok(ChatStreamEvent::ToolCallChunk(_))) => {
-                        return Err(DriveError::ToolCallsUnsupported);
-                    }
-                    Some(Ok(ChatStreamEvent::End(_))) => {
-                        return Ok(StreamOutcome { text, aborted: false, rule_hit: None });
-                    }
-                }
-            }
-        }
+                   _ = cancel.cancelled() => {
+                       return Ok(StreamOutcome { text, aborted: true, rule_hit: None });
+                   }
+                   event_res = tokio::time::timeout(STREAM_CHUNK_TIMEOUT, stream.next()) => {
+                       let event = match event_res {
+                           Ok(e) => e,
+                           Err(_) => return Err(DriveError::TimedOut(STREAM_CHUNK_TIMEOUT)),
+                       };
+                       match event {
+                           None => return Ok(StreamOutcome { text, aborted: false, rule_hit: None }),
+                           Some(Err(e)) => return Err(DriveError::Upstream(e)),
+                           Some(Ok(ChatStreamEvent::Start)) => {}
+                           Some(Ok(ChatStreamEvent::Chunk(c))) => {
+                               sink.push_text(&c.content);
+                               text.push_str(&c.content);
+                           }
+        // Reasoning traces are surfaced to the UI pane in; keeps them out of the model-
+        // visible transcript.
+                           Some(Ok(ChatStreamEvent::ReasoningChunk(_))) => {}
+                           Some(Ok(ChatStreamEvent::ThoughtSignatureChunk(_))) => {}
+                           Some(Ok(ChatStreamEvent::ToolCallChunk(_))) => {
+                               return Err(DriveError::ToolCallsUnsupported);
+                           }
+                           Some(Ok(ChatStreamEvent::End(_))) => {
+                               return Ok(StreamOutcome { text, aborted: false, rule_hit: None });
+                           }
+                       }
+                   }
+               }
     }
 }
 
-/// Rule-checked [`drive_stream`] (Epic R, chunk 123): the same fold plus
-/// a misfire-pattern check per text chunk. On hit the stream stops here —
-/// text-so-far, `aborted: false` (`aborted` keeps its cancellation
-/// meaning), the hit attached for slice 2's retry. The bare fold above
-/// stays frozen (empty-rule behavior); the loop shape both spell is the
-/// contract, duplication stated not hidden.
+/// Rule-checked [`drive_stream`]: the same fold plus a misfire-pattern check per text chunk. On hit
+/// the stream stops here — text-so-far, `aborted: false` (`aborted` keeps its cancellation
+/// meaning), the hit attached for the retry. The bare fold above stays frozen (empty-rule
+/// behavior); the loop shape both spell is the contract, duplication stated not hidden.
 pub async fn drive_stream_with_rules(
     mut stream: EventStream,
     cancel: &CancellationToken,
@@ -410,74 +399,73 @@ pub async fn drive_stream_collecting_tools(
     let mut reasoning = String::new();
     loop {
         tokio::select! {
-            _ = cancel.cancelled() => {
-                return Ok(CollectedTurn {
-                    text,
-                    tool_calls: Vec::new(),
-                    reasoning_content: Some(reasoning).filter(|value| !value.is_empty()),
-                    aborted: true,
-                    rule_hit: None,
-                });
-            }
-            event_res = tokio::time::timeout(STREAM_CHUNK_TIMEOUT, stream.next()) => {
-                let event = match event_res {
-                    Ok(e) => e,
-                    Err(_) => return Err(DriveError::TimedOut(STREAM_CHUNK_TIMEOUT)),
-                };
-                match event {
-                    None => {
-                        let tool_calls = extract_fallback_tool_calls(&mut text);
-                        return Ok(CollectedTurn {
-                            text,
-                            tool_calls,
-                            reasoning_content: Some(reasoning).filter(|value| !value.is_empty()),
-                            aborted: false,
-                            rule_hit: None,
-                        })
-                    }
-                    Some(Err(e)) => return Err(DriveError::Upstream(e)),
-                    Some(Ok(ChatStreamEvent::Start)) => {}
-                    Some(Ok(ChatStreamEvent::Chunk(c))) => {
-                        sink.push_text(&c.content);
-                        text.push_str(&c.content);
-                    }
-                    Some(Ok(ChatStreamEvent::ReasoningChunk(c))) => {
-                        reasoning.push_str(&c.content);
-                    }
-                    Some(Ok(ChatStreamEvent::ThoughtSignatureChunk(_))) => {}
-                    // Deliberately NOT accumulated: fragments lack stable
-                    // ids (see struct docs). Complete calls arrive on End.
-                    Some(Ok(ChatStreamEvent::ToolCallChunk(_))) => {}
-                    Some(Ok(ChatStreamEvent::End(mut end))) => {
-                        let reasoning_content = end
-                            .captured_reasoning_content
-                            .take()
-                            .or_else(|| Some(reasoning).filter(|value| !value.is_empty()));
-                        let mut tool_calls = end
-                            .captured_content
-                            .take()
-                            .map(|content| content.into_tool_calls())
-                            .unwrap_or_default();
-                        if tool_calls.is_empty() {
-                            tool_calls = extract_fallback_tool_calls(&mut text);
-                        }
-                        return Ok(CollectedTurn {
-                            text,
-                            tool_calls,
-                            reasoning_content,
-                            aborted: false,
-                            rule_hit: None,
-                        });
-                    }
-                }
-            }
-        }
+                   _ = cancel.cancelled() => {
+                       return Ok(CollectedTurn {
+                           text,
+                           tool_calls: Vec::new(),
+                           reasoning_content: Some(reasoning).filter(|value| !value.is_empty()),
+                           aborted: true,
+                           rule_hit: None,
+                       });
+                   }
+                   event_res = tokio::time::timeout(STREAM_CHUNK_TIMEOUT, stream.next()) => {
+                       let event = match event_res {
+                           Ok(e) => e,
+                           Err(_) => return Err(DriveError::TimedOut(STREAM_CHUNK_TIMEOUT)),
+                       };
+                       match event {
+                           None => {
+                               let tool_calls = extract_fallback_tool_calls(&mut text);
+                               return Ok(CollectedTurn {
+                                   text,
+                                   tool_calls,
+                                   reasoning_content: Some(reasoning).filter(|value| !value.is_empty()),
+                                   aborted: false,
+                                   rule_hit: None,
+                               })
+                           }
+                           Some(Err(e)) => return Err(DriveError::Upstream(e)),
+                           Some(Ok(ChatStreamEvent::Start)) => {}
+                           Some(Ok(ChatStreamEvent::Chunk(c))) => {
+                               sink.push_text(&c.content);
+                               text.push_str(&c.content);
+                           }
+                           Some(Ok(ChatStreamEvent::ReasoningChunk(c))) => {
+                               reasoning.push_str(&c.content);
+                           }
+                           Some(Ok(ChatStreamEvent::ThoughtSignatureChunk(_))) => {}
+        // Deliberately NOT accumulated: fragments lack stable
+        // ids (see struct docs). Complete calls arrive on End.
+                           Some(Ok(ChatStreamEvent::ToolCallChunk(_))) => {}
+                           Some(Ok(ChatStreamEvent::End(mut end))) => {
+                               let reasoning_content = end
+                                   .captured_reasoning_content
+                                   .take()
+                                   .or_else(|| Some(reasoning).filter(|value| !value.is_empty()));
+                               let mut tool_calls = end
+                                   .captured_content
+                                   .take()
+                                   .map(|content| content.into_tool_calls())
+                                   .unwrap_or_default();
+                               if tool_calls.is_empty() {
+                                   tool_calls = extract_fallback_tool_calls(&mut text);
+                               }
+                               return Ok(CollectedTurn {
+                                   text,
+                                   tool_calls,
+                                   reasoning_content,
+                                   aborted: false,
+                                   rule_hit: None,
+                               });
+                           }
+                       }
+                   }
+               }
     }
 }
 
-/// Rule-checked [`drive_stream_collecting_tools`] (Epic R, chunk 123):
-/// same terms as [`drive_stream_with_rules`] — a hit lands before `End`,
-/// so partial calls never exist to drop (empty by construction, matching
+/// Rule-checked [`drive_stream_collecting_tools`]: same terms as [`drive_stream_with_rules`] — a
+/// hit lands before `End`, so partial calls never exist to drop (empty by construction, matching
 /// the cancelled-turn posture).
 pub async fn drive_stream_collecting_tools_with_rules(
     mut stream: EventStream,
@@ -572,7 +560,7 @@ pub fn extract_fallback_tool_calls(text: &mut String) -> Vec<genai::chat::ToolCa
     let mut calls = Vec::new();
     let mut cleaned = text.clone();
 
-    // 1. DeepSeek DSML: <｜tool call begin｜> ... <｜tool call end｜>
+    // 1. DeepSeek DSML: <｜tool call begin｜>... <｜tool call end｜>
     // Handles fullwidth '｜' (\u{FF5C}) and ASCII '|'.
     if let Ok(re_dsml) =
         regex::Regex::new(r"(?s)<[｜\|]tool call begin[｜\|]>(.*?)<[｜\|]tool call end[｜\|]>")
@@ -610,7 +598,7 @@ pub fn extract_fallback_tool_calls(text: &mut String) -> Vec<genai::chat::ToolCa
         cleaned = re_dsml.replace_all(&cleaned, "").to_string();
     }
 
-    // 2. DeepSeek DSML invoke syntax: <｜DSML｜invoke name="write">{"path": ...}</｜DSML｜invoke>
+    // 2. DeepSeek DSML invoke syntax: <｜DSML｜invoke name="write">{"path":...}</｜DSML｜invoke>
     if let Ok(re_dsml_inv) = regex::Regex::new(
         r#"(?s)<[｜\|]DSML[｜\|]invoke\s+name=["']([^"']+)["']\s*>(.*?)</[｜\|]DSML[｜\|]invoke>"#,
     ) {
@@ -632,7 +620,7 @@ pub fn extract_fallback_tool_calls(text: &mut String) -> Vec<genai::chat::ToolCa
         cleaned = re_dsml_inv.replace_all(&cleaned, "").to_string();
     }
 
-    // 3. XML style: <tool_call> ... </tool_call>
+    // 3. XML style: <tool_call>... </tool_call>
     if let Ok(re_xml) = regex::Regex::new(r"(?s)<tool_call>\s*(.*?)\s*</tool_call>") {
         for cap in re_xml.captures_iter(text) {
             let inner = cap.get(1).map(|m| m.as_str().trim()).unwrap_or("");
@@ -733,8 +721,7 @@ fn without_tool_calls(turn: CollectedTurn) -> Result<StreamOutcome, ChatError> {
 pub enum ChatError {
     /// The provider request itself failed (network, auth, 429, bad payload).
     Provider(genai::Error),
-    /// The request succeeded but the stream fold failed (parse, tool-call
-    /// chunk before Epic B, etc.). Never retried on another model: a new
+    /// The request succeeded but the stream fold failed. Never retried on another model: a new
     /// model would just repeat the same fold failure.
     StreamFold(String),
 }
@@ -750,9 +737,9 @@ impl std::fmt::Display for ChatError {
 
 impl std::error::Error for ChatError {}
 
-/// Typed failure of one fallback-loop attempt (Epic D1a). Kept typed so
-/// the managed loop can match 429 per model (cooldown marking) instead of
-/// string-matching, and so tests can assert the exhaustion cause.
+/// Typed failure of one fallback-loop attempt. Kept typed so the managed loop can match 429 per
+/// model (cooldown marking) instead of string-matching, and so tests can assert the exhaustion
+/// cause.
 #[derive(Debug, PartialEq, Eq)]
 pub enum FallbackError {
     /// Attempt was rate-limited; the loop advanced (detail for logs).
@@ -779,11 +766,10 @@ impl std::fmt::Display for FallbackError {
 
 impl std::error::Error for FallbackError {}
 
-/// Process-env guard for one attempt's key injection (Epic D1d): sets
-/// `name=value`, restores the previous value (or removes the var) on drop —
-/// including on early return. Never logged; holds the value in memory only.
-/// Single-turn CLI scope: pools live in the caller's `FallbackState`, used
-/// from one task, so no cross-thread sharing by construction.
+/// Process-env guard for one attempt's key injection: sets `name=value`, restores the previous
+/// value (or removes the var) on drop — including on early return. Never logged; holds the value in
+/// memory only. Single-turn CLI scope: pools live in the caller's `FallbackState`, used from one
+/// task, so no cross-thread sharing by construction.
 struct ScopedEnv {
     name: String,
     prev: Option<String>,
@@ -882,10 +868,9 @@ pub fn spec_for_model(model: &str, providers: &[ProviderEntry]) -> genai::ModelS
     genai::ModelSpec::from(model.to_string())
 }
 
-/// Reasoning-effort level for model turns (chunk 83, `[effort]` table).
-/// Deliberate SUBSET of genai's nine variants: `Budget(u32)` needs a
-/// number (wrong shape for a string table); XHigh/Max/Minimal are unneeded
-/// at our tiers (stated, not hidden). Unknown names refuse loudly.
+/// Reasoning-effort level for model turns. Deliberate SUBSET of genai's nine variants:
+/// `Budget(u32)` needs a number (wrong shape for a string table); XHigh/Max/Minimal are unneeded at
+/// our tiers (stated, not hidden). Unknown names refuse loudly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EffortLevel {
     Low,
@@ -995,13 +980,11 @@ impl LlmClient {
             .await
     }
 
-    /// [`Self::stream_chat_typed`] over an explicit [`genai::ModelSpec`].
-    /// `ModelSpec::Target` (endpoint + auth + model) is how tests point the
-    /// client at a local mock server (first wiremock-in-llm coverage; full
-    /// recorded cassettes stay Epic H4). Production passes `Name` specs.
-    /// Delegates to the messages variant (single-message history, no tools);
-    /// the delegation is byte-identical by construction (empty tools attach
-    /// nothing) and covered by the pre-existing suite.
+    /// [`Self::stream_chat_typed`] over an explicit [`genai::ModelSpec`]. `ModelSpec::Target`
+    /// (endpoint + auth + model) is how tests point the client at a local mock server. Production
+    /// passes `Name` specs. Delegates to the messages variant (single-message history, no tools);
+    /// the delegation is byte-identical by construction (empty tools attach nothing) and covered by
+    /// the pre-existing suite.
     pub async fn stream_chat_typed_spec(
         &self,
         spec: genai::ModelSpec,
@@ -1024,12 +1007,11 @@ impl LlmClient {
         without_tool_calls(turn)
     }
 
-    /// Messages + tools variant of [`Self::stream_chat_typed_spec`]: an
-    /// explicit history and tool definitions ride the same request path
-    /// (system pack stays separate — packs are static, history dynamic).
-    /// Empty `tools` attaches nothing, keeping text-only requests identical.
-    /// `rules` ride to the fold (Epic R, chunk 124): rule-checked turns
-    /// for the fixer loop; text-only callers pass `&[]` (rule-free).
+    /// Messages + tools variant of [`Self::stream_chat_typed_spec`]: an explicit history and tool
+    /// definitions ride the same request path (system pack stays separate — packs are static,
+    /// history dynamic). Empty `tools` attaches nothing, keeping text-only requests identical.
+    /// `rules` ride to the fold: rule-checked turns for the fixer loop; text-only callers pass
+    /// `&[]` (rule-free).
     #[allow(clippy::too_many_arguments)] // rules join the established spec/system/messages/tools/cancel/sink shape
     pub async fn stream_chat_messages_spec(
         &self,
@@ -1066,7 +1048,7 @@ impl LlmClient {
             .await
             .map_err(|e| match e {
                 // Upstream failures (either phase) are provider errors, so
-                // the fallback loop can match 429 structurally (D1a).
+                // the fallback loop can match 429 structurally.
                 DriveError::Upstream(e) => ChatError::Provider(e),
                 DriveError::TimedOut(d) => ChatError::Provider(genai::Error::WebStream {
                     model_iden: genai::ModelIden::new(
@@ -1099,10 +1081,9 @@ impl LlmClient {
             .map_err(|e| anyhow::anyhow!("chat request failed for model '{model}': {e}"))
     }
 
-    /// Single explicit-model turn with best-effort key injection (Epic D1d):
-    /// the provider mapped to `model` donates one pool key under its
-    /// `api_key_env` sink var for this call only; unmapped models keep the
-    /// pre-D ambient-env path. Used by `exec --model` (operator override).
+    /// Single explicit-model turn with best-effort key injection: the provider mapped to `model`
+    /// donates one pool key under its `api_key_env` sink var for this call only; unmapped models
+    /// keep the pre-D ambient-env path. Used by `exec --model` (operator override).
     #[allow(clippy::too_many_arguments)]
     pub async fn stream_chat_single(
         &self,
@@ -1130,12 +1111,11 @@ impl LlmClient {
         .map_err(|e| anyhow::anyhow!("chat request failed for model '{model}': {e}"))
     }
 
-    /// Stream with role-chain fallback: try each model in order, advancing
-    /// past rate-limited entries. Non-429 provider errors and stream-fold
-    /// errors return immediately (retrying those on a new model is wrong).
-    /// Returns the outcome plus the model that produced it.
-    /// Delegates to [`Self::stream_chat_with_specs`] with unmanaged state —
-    /// behavior (including error strings) is unchanged from Chunk 2.
+    /// Stream with role-chain fallback: try each model in order, advancing past rate-limited
+    /// entries. Non-429 provider errors and stream-fold errors return immediately (retrying those
+    /// on a new model is wrong). Returns the outcome plus the model that produced it. Delegates to
+    /// [`Self::stream_chat_with_specs`] with unmanaged state — behavior (including error strings)
+    /// is unchanged from.
     pub async fn stream_chat_with_fallback(
         &self,
         router: &RoleRouter,
@@ -1242,15 +1222,13 @@ impl LlmClient {
         }))
     }
 
-    /// Managed fallback (Epic D1a/D1c/D1d): cooldown-skipping + per-provider
-    /// credential pools + one-attempt env injection, over an optional path
-    /// scope (D1b pins select the chain). `state` persists across calls in
-    /// the process (cooldowns restore by time; pool cursors keep rotating).
-    /// Injection is best-effort and process-local: the resolved key is
-    /// exported under the provider's `api_key_env` name for ONE attempt
-    /// ([`ScopedEnv`] restores afterwards); unmapped providers, missing sink
-    /// vars, empty pools, or resolution errors keep ambient-env behavior
-    /// (traced, never fatal to the attempt).
+    /// Managed fallback: cooldown-skipping + per-provider credential pools + one-attempt env
+    /// injection, over an optional path scope (pins select the chain). `state` persists across
+    /// calls in the process (cooldowns restore by time; pool cursors keep rotating). Injection is
+    /// best-effort and process-local: the resolved key is exported under the provider's
+    /// `api_key_env` name for ONE attempt ([`ScopedEnv`] restores afterwards); unmapped providers,
+    /// missing sink vars, empty pools, or resolution errors keep ambient-env behavior (traced,
+    /// never fatal to the attempt).
     #[allow(clippy::too_many_arguments)]
     pub async fn stream_chat_managed(
         &self,
@@ -1341,10 +1319,10 @@ impl LlmClient {
 
     /// Managed messages variant: THE 429/cooldown/fallback loop (moved body,
     /// same bail strings), over an explicit history + tools. The string
-    /// `stream_chat_managed` delegates here; the pre-existing D1a suite
+    /// `stream_chat_managed` delegates here; the existing suite
     /// covers this loop through that delegation.
     #[allow(clippy::too_many_arguments)]
-    /// `rules` ride to the per-model attempts (Epic R, chunk 124).
+    /// `rules` ride to the per-model attempts.
     pub async fn stream_chat_managed_messages(
         &self,
         router: &RoleRouter,
@@ -1359,9 +1337,8 @@ impl LlmClient {
         sink: &mut dyn StreamSink,
         rules: &[rules::CompiledRule],
     ) -> anyhow::Result<(CollectedTurn, String)> {
-        // Per-role reasoning effort ([effort] table, chunk 83): resolved
-        // ONCE per managed call (not per attempt — cooldown/fallback labels
-        // stay consistent), parsed strictly (unknown names fail the turn).
+        // Per-role reasoning effort: resolved ONCE per managed call (not per attempt —
+        // cooldown/fallback labels stay consistent), parsed strictly (unknown names fail the turn).
         // Explicit-model singles bypass this path and stay raw by design.
         let eff_client = match router.effort_for(role)? {
             Some(level) => self.clone().with_effort(level),
@@ -1439,9 +1416,8 @@ impl LlmClient {
         }
     }
 
-    /// One messages attempt with best-effort key injection (Epic D1d twin of
-    /// the string path inside [`Self::stream_chat_single`]): the mapped
-    /// provider donates one pool key under its sink var for this call only.
+    /// One messages attempt with best-effort key injection: the mapped provider donates one pool
+    /// key under its sink var for this call only.
     #[allow(clippy::too_many_arguments)]
     pub async fn stream_chat_messages_single(
         &self,
@@ -1530,7 +1506,7 @@ mod tests {
 
     #[tokio::test]
     async fn drive_stream_reports_tool_calls_as_error() {
-        // Tool-call chunks before Epic B are a contract error, not silent data.
+        // Tool-call chunks before are a contract error, not silent data.
         let events = vec![
             chunk("partial"),
             Ok(ChatStreamEvent::End(Default::default())),
@@ -1573,7 +1549,7 @@ mod tests {
     async fn with_rules_seeded_misfire_aborts_with_reminder() {
         // The v2 R1 shape, scripted: the misfire text arrives across two
         // chunks (match spans the boundary), the fold stops at the hit —
-        // no End needed, reminder attached for slice 2's retry.
+        // no End needed, reminder attached for the retry.
         let events = vec![
             Ok(ChatStreamEvent::Start),
             chunk("the model will "),
@@ -2063,7 +2039,7 @@ mod tests {
         }
     }
 
-    /// Point a spec at a local mock server (Epic D1 wiremock form).
+    /// Point a spec at a local mock server.
     fn mock_spec(server: &wiremock::MockServer, model: &str) -> genai::ModelSpec {
         use genai::resolver::{AuthData, Endpoint};
         genai::ModelSpec::from_target(genai::ServiceTarget {
@@ -2121,10 +2097,8 @@ mod tests {
 
     #[tokio::test]
     async fn wiremock_effort_reaches_the_wire() {
-        // The `reasoning_effort` field MUST appear in the request body on
-        // the OpenAI chat path (genai serializes it from options — chunk 83
-        // pipes our level there). The mock 404s otherwise, so a fold proves
-        // presence, not just acceptance.
+        // The `reasoning_effort` field MUST appear in the request body on the OpenAI chat path. The
+        // mock 404s otherwise, so a fold proves presence, not just acceptance.
         use wiremock::matchers::{body_string_contains, method, path};
         use wiremock::{Mock, MockServer, ResponseTemplate};
         let server = MockServer::start().await;

@@ -1,22 +1,18 @@
-//! Bus + LLM binding (Epics F2 + F3).
+//! Bus and LLM binding.
 //!
-//! F1 proved the loop over injected traits; this module binds those traits to
+//! The loop runs over injected traits; this module binds those traits to
 //! the delegate bus (fresh child per call = clean context structurally) and
-//! the D1-managed LLM path (role chains, cooldowns, key injection).
+//! the managed LLM path (role chains, cooldowns, key injection).
 //!
-//! Rules:
-//! - Text runners are dumb: system pack + `ctx.brief` → one LLM turn → done.
-//!   Per-round briefs are rendered by the Bus adapters AT SPAWN, so the
-//!   content is always current and reviewers never see history.
-//! - Reviewers stay tool-free by construction (clean context). The FIXER
-//!   wields tools only behind the operator's `--tools` flag
-//!   ([`AgenticFixRunner`]); text-only fixing stays the default. The one
-//!   exception is opt-in: `--reviewer-tools` swaps in the read-only
-//!   [`crate::review_tools::ToolReviewTurnRunner`] (docket #4).
-//! - Workdir is caller-chosen (`InPlace` default; CLI `--repo` is `InPlace`
-//!   on one drive-scoped worktree, `DriveWorktree`; per-child `Worktree`
-//!   specs serve bench/delegate); `keep_worktree` stays false outside the
-//!   bench merge mode (merge-back = F2b/G, untouched).
+//! Rules: - Text runners are dumb: system pack + `ctx.brief` → one LLM turn → done. Per-round
+//! briefs are rendered by the Bus adapters AT SPAWN, so the content is always current and reviewers
+//! never see history. - Reviewers stay tool-free by construction (clean context). The FIXER wields
+//! tools only behind the operator's `--tools` flag ([`AgenticFixRunner`]); text-only fixing stays
+//! the default. The one exception is opt-in: `--reviewer-tools` swaps in the read-only
+//! [`crate::review_tools::ToolReviewTurnRunner`]. - Workdir is caller-chosen (`InPlace` default;
+//! CLI `--repo` is `InPlace` on one drive-scoped worktree, `DriveWorktree`; per-child `Worktree`
+//! specs serve bench/delegate); `keep_worktree` stays false outside the bench merge mode (merge-
+//! back = F2b/G, untouched).
 
 use async_trait::async_trait;
 use polymorph_core::Role;
@@ -29,7 +25,7 @@ use polymorph_core::Verdict;
 /// Where a binding turn's model comes from.
 #[derive(Debug, Clone)]
 pub enum LlmTarget {
-    /// Production: D1-managed role chain (fallback, cooldowns, injection).
+    /// Production: managed role chain (fallback, cooldowns, injection).
     /// `state` is shared across the invocation so cooldowns persist round to
     /// round. `FallbackState` is `!Clone`, hence the mutex.
     Managed {
@@ -39,8 +35,8 @@ pub enum LlmTarget {
         role: Role,
         scope: Option<String>,
     },
-    /// Test seam (chunk-7 precedent): fixed addressable target for wiremock.
-    /// Downstream mapping is identical; only model resolution differs.
+    /// Test seam: fixed addressable target for wiremock. Downstream mapping is identical; only
+    /// model resolution differs.
     Fixed(genai::ModelSpec),
 }
 
@@ -216,24 +212,23 @@ fn render_review_brief(input: &ReviewerInput, artifact_path: Option<&Path>) -> S
     if let Some(p) = artifact_path {
         out.push_str(&format!("\n\nARTIFACT PATH:\n{}", p.display()));
     }
-    // Verdict discipline (chunk 168): a finding that cannot name its
-    // evidence is a hypothesis, not a verdict. The reviewer sees ONLY the
-    // artifact text above — any file it cites must have its content IN
-    // that text. Findings without a file, or naming files outside the
-    // artifact, are dropped, never emitted.
+    // Verdict discipline: a finding that cannot name its evidence is a hypothesis, not a verdict.
+    // The reviewer sees ONLY the artifact text above — any file it cites must have its content IN
+    // that text. Findings without a file, or naming files outside the artifact, are dropped, never
+    // emitted.
     out.push_str(
         "\n\nVERDICT DISCIPLINE:\nEvery finding MUST cite the accused file and line (`line` is a 1-based integer, or null) and quote the accused code in its issue; the quoted content must appear in ARTIFACT UNDER REVIEW above. A finding that cites no file, cites a file whose content is not in the artifact text, or describes a type's fields or signatures without having that type's definition in evidence, is a hypothesis — drop it, do not emit it. When prior-round context is absent, say what was checked, not what was assumed.",
     );
-    // Docket #5: a multi-file artifact set — every listed file is the
-    // artifact. Only for set text, so single-file briefs stay identical.
+    // A multi-file artifact set — every listed file is the artifact. Only for set text, so single-
+    // file briefs stay identical.
     if crate::is_artifact_set(&input.artifact) {
         out.push_str(&format!(
             " Every file under {} is the artifact: findings on any of them are in scope — cite the listed path and the shown line number. A file listed there without content (ABSENT, BINARY, TOO LARGE, UNREADABLE, SKIPPED, OMITTED) has no lines in evidence.",
             crate::ARTIFACT_SET_HEADER
         ));
     }
-    // Docket #1: attached peripheral files are artifact text too. Only
-    // when attached, so briefs without them stay byte-identical.
+    // Attached peripheral files are artifact text too. Only when attached, so briefs without them
+    // stay byte-identical.
     if split_peripheral(&input.artifact).1 {
         out.push_str(&format!(
             " Files under {PERIPHERAL_HEADER} are part of ARTIFACT UNDER REVIEW: findings on them are in scope — cite the listed path and the shown line number. A file listed there without content (DELETED, BINARY, TOO LARGE, UNREADABLE, SKIPPED, OMITTED) has no lines in evidence."
@@ -242,19 +237,17 @@ fn render_review_brief(input: &ReviewerInput, artifact_path: Option<&Path>) -> S
     out
 }
 
-/// CREATE-job signal for the reviewer brief (chunk 168): when the artifact
-/// path names a file that cannot be read AND no current artifact text was
-/// supplied (the CLI maps a missing file to empty for CREATE jobs), tell
-/// the reviewer to judge goal/criteria fit instead of emitting file-missing
-/// findings. Returns `None` in every other case so the brief stays
-/// byte-identical: file exists, content present, or an unresolvable
-/// workdir (a moved path must never prime a false CREATE narrative).
+/// CREATE-job signal for the reviewer brief: when the artifact path names a file that cannot be
+/// read AND no current artifact text was supplied (the CLI maps a missing file to empty for CREATE
+/// jobs), tell the reviewer to judge goal/criteria fit instead of emitting file-missing findings.
+/// Returns `None` in every other case so the brief stays byte-identical: file exists, content
+/// present, or an unresolvable workdir (a moved path must never prime a false CREATE narrative).
 fn create_job_note(
     workdir: &polymorph_delegate::WorkdirSpec,
     path: &Path,
     artifact: &str,
 ) -> Option<String> {
-    // Attached peripheral files (docket #1) are not artifact content.
+    // Attached peripheral files are not artifact content.
     let (artifact, _) = split_peripheral(artifact);
     if !artifact.trim().is_empty() {
         return None;
@@ -271,16 +264,12 @@ fn create_job_note(
 const CREATE_JOB_STATUS: &str =
     "The artifact path does not exist on disk and no current content was provided (CREATE job or deleted path).";
 
-/// Harness-authored round-1 finding for a CREATE job (docket #7): exactly
-/// when [`create_job_note`] fires, the finding that note prescribes the
-/// reviewer to emit — ONE finding that names the target file, states the
-/// required contents (the goal and criteria, which the fix brief carries
-/// verbatim) and proposes the creation. Fed to
-/// [`crate::run_loop_seeded`], it replaces the round-1 reviewer call whose
-/// only legal answer was this finding (traps #65). `None` whenever the
-/// note is (file exists, even empty; content given), so those drives
-/// stay review-first (chunk-166 ruling). Always a
-/// [`crate::SeedKind::Create`] seed.
+/// Harness-authored round-1 finding for a CREATE job: exactly when [`create_job_note`] fires, the
+/// finding that note prescribes the reviewer to emit — ONE finding that names the target file,
+/// states the required contents (the goal and criteria, which the fix brief carries verbatim) and
+/// proposes the creation. Fed to [`crate::run_loop_seeded`], it replaces the round-1 reviewer call
+/// whose only legal answer was this finding. `None` whenever the note is (file exists, even empty;
+/// content given), so those drives stay review-first. Always a [`crate::SeedKind::Create`] seed.
 pub fn create_job_seed(
     workdir: &polymorph_delegate::WorkdirSpec,
     path: &Path,
@@ -305,13 +294,11 @@ pub fn create_job_seed(
     })
 }
 
-/// Classify an edit-call failure for the bench taxonomy (chunk 38):
-/// downcast to the typed [`HashlineError`](polymorph_tools::hashline::HashlineError)
-/// preserved by `.context()` at the call site — TYPED matching, never
-/// string-sniffing (traps-#29 spirit). Stale tags (the prime suspect:
-/// path/tag-spelling drift between read-mint and edit) separate from
-/// malformed patches (parse class) and all other apply rejections.
-/// Non-hashline failures fall through to plain `"error"`.
+/// Classify an edit-call failure for the bench taxonomy: downcast to the typed
+/// [`HashlineError`](polymorph_tools::hashline::HashlineError) preserved by `.context` at the call
+/// site — TYPED matching, never string-sniffing. Stale tags (the prime suspect: path/tag-spelling
+/// drift between read-mint and edit) separate from malformed patches (parse class) and all other
+/// apply rejections. Non-hashline failures fall through to plain `"error"`.
 pub fn classify_edit_error(e: &anyhow::Error) -> &'static str {
     use polymorph_tools::hashline::HashlineError;
     let Some(root) = e.downcast_ref::<HashlineError>() else {
@@ -327,11 +314,11 @@ pub fn classify_edit_error(e: &anyhow::Error) -> &'static str {
     }
 }
 
-/// Max chars of a recorded command summary (docket #6): one line, bounded,
-/// so a heredoc or generated script never floods the ledger or the brief.
+/// Max chars of a recorded command summary: one line, bounded, so a heredoc or generated script
+/// never floods the ledger or the brief.
 const MAX_CMD_SUMMARY_CHARS: usize = 160;
 
-/// Process-running tools whose exit code the ledger records (docket #6).
+/// Process-running tools whose exit code the ledger records.
 fn is_command_tool(name: &str) -> bool {
     matches!(name, "bash" | "exec")
 }
@@ -362,19 +349,17 @@ fn summarize_command(cmd: &str) -> String {
     }
 }
 
-/// Zero-test heuristic (docket #6, traps #59): a test command whose filter
-/// matched nothing exits 0 in under a second and looked identical to a pass.
-/// Returns the matched marker. Label-only — never a verdict, and the
-/// fixer's fed tool text is unchanged (only the reviewer's evidence block
-/// shows it); cargo's `running 0 tests` counts only when NO harness in the
-/// output ran tests (empty doc-test binaries print it on every green run).
+/// Zero-test heuristic: a test command whose filter matched nothing exits 0 in under a second and
+/// looked identical to a pass. Returns the matched marker. Label-only — never a verdict, and the
+/// fixer's fed tool text is unchanged (only the reviewer's evidence block shows it); cargo's
+/// `running 0 tests` counts only when NO harness in the output ran tests (empty doc-test binaries
+/// print it on every green run).
 fn zero_test_marker(output: &str) -> Option<&'static str> {
     zero_test_marker_lines(output.lines())
 }
 
-/// [`zero_test_marker`] over lines (docket #9: a spilled stream is scanned
-/// from its file, never loaded whole). Same answer: a marker anywhere wins
-/// (in `MARKERS` order), else any nonzero `running N tests` clears a zero.
+/// [`zero_test_marker`] over lines. Same answer: a marker anywhere wins (in `MARKERS` order), else
+/// any nonzero `running N tests` clears a zero.
 fn zero_test_marker_lines<S: AsRef<str>>(
     lines: impl IntoIterator<Item = S>,
 ) -> Option<&'static str> {
@@ -412,11 +397,10 @@ fn zero_test_marker_lines<S: AsRef<str>>(
     (saw_zero && !saw_nonzero).then_some("running 0 tests")
 }
 
-/// Zero-test marker of a command result whose output spilled (docket #9):
-/// the digest omits lines, so the full streams are scanned instead — the
-/// spill file line by line, an inline stream as is. `None` when nothing
-/// spilled (the caller's digest-free scan stands) or a file is unreadable
-/// (the digest scan stands too).
+/// Zero-test marker of a command result whose output spilled: the digest omits lines, so the full
+/// streams are scanned instead — the spill file line by line, an inline stream as is. `None` when
+/// nothing spilled (the caller's digest-free scan stands) or a file is unreadable (the digest scan
+/// stands too).
 fn spilled_zero_test_marker(
     result: &serde_json::Value,
     workdir: &Path,
@@ -454,15 +438,13 @@ fn spilled_zero_test_marker(
     Some(zero_test_marker_lines(lines.into_iter().flatten()))
 }
 
-/// Structured ledger fields for one tool call (docket #6), merged into its
-/// `tool_outcomes` entry. Command tools record `cmd` (summary) always, plus
-/// `exit_code` / `zero_tests` when the process ran; successful mutations
-/// record `paths` (write target, or the edit report's non-noop files —
-/// reusable as the turn's mutated-file set). An edit that renamed a file
-/// (`MV`) lists the source then the destination in `paths` and records the
-/// pair in `renamed: [{from, to}]`. Other tools stay `{tool, outcome}`
-/// only, so pre-#6 consumers and ledgers read unchanged. (Files a command
-/// changed are merged in by the runner: [`crate::command_changes`].)
+/// Structured ledger fields for one tool call, merged into its `tool_outcomes` entry. Command tools
+/// record `cmd` (summary) always, plus `exit_code` / `zero_tests` when the process ran; successful
+/// mutations record `paths` (write target, or the edit report's non-noop files — reusable as the
+/// turn's mutated-file set). An edit that renamed a file (`MV`) lists the source then the
+/// destination in `paths` and records the pair in `renamed: [{from, to}]`. Other tools stay `{tool,
+/// outcome}` only, so pre-#6 consumers and ledgers read unchanged. (Files a command changed are
+/// merged in by the runner: [`crate::command_changes`].)
 fn ledger_extras(
     name: &str,
     args: &serde_json::Value,
@@ -506,7 +488,7 @@ fn ledger_extras(
             .unwrap_or_default(),
         "edit" => {
             // `MV` destinations by section path (the report names the
-            // source only; its action reads `Renamed { to: .. }`).
+            // source only; its action reads `Renamed { to:.. }`).
             let moves: Vec<(String, String)> = args
                 .get("patch")
                 .and_then(Value::as_str)
@@ -560,10 +542,8 @@ fn ledger_extras(
     extras
 }
 
-/// Distinct mutated paths across ledger entries, first-mutation order
-/// (docket #6; the per-turn set docket #1 attaches contents for): write/
-/// edit `paths` and the `changed_paths` command change detection saw a
-/// command change.
+/// Distinct mutated paths across ledger entries, first-mutation order: write/ edit `paths` and the
+/// `changed_paths` command change detection saw a command change.
 fn ledger_mutated_paths<'a>(
     entries: impl IntoIterator<Item = &'a serde_json::Value>,
 ) -> Vec<String> {
@@ -590,9 +570,8 @@ fn str_array<'a>(entry: &'a serde_json::Value, key: &str) -> impl Iterator<Item 
         .filter_map(|p| p.as_str())
 }
 
-/// Largest file the fix runner snapshots before mutating it (docket #1):
-/// bigger, binary, or unreadable files get no snapshot (full-content
-/// fallback downstream, never an error).
+/// Largest file the fix runner snapshots before mutating it: bigger, binary, or unreadable files
+/// get no snapshot (full-content fallback downstream, never an error).
 const MAX_SNAPSHOT_BYTES: u64 = 1024 * 1024;
 
 /// Paths a write/edit call is about to touch, read from its arguments
@@ -615,12 +594,10 @@ fn mutation_targets(name: &str, args: &serde_json::Value) -> Vec<String> {
     }
 }
 
-/// Pre-mutation snapshot (docket #1): before a write/edit call, record each
-/// target's content the FIRST time the turn is about to touch it, keyed by
-/// [`attach_identity`] — `{path, content}` with `content: null` when the file
-/// did not exist (created this turn). The executor diffs large peripheral
-/// files against it. Best-effort: oversized, binary, or unreadable targets
-/// record nothing.
+/// Pre-mutation snapshot: before a write/edit call, record each target's content the FIRST time the
+/// turn is about to touch it, keyed by [`attach_identity`] — `{path, content}` with `content: null`
+/// when the file did not exist (created this turn). The executor diffs large peripheral files
+/// against it. Best-effort: oversized, binary, or unreadable targets record nothing.
 fn snapshot_before_mutation(
     workdir: &Path,
     targets: Vec<String>,
@@ -694,11 +671,10 @@ fn render_fix_brief(input: &ExecutorInput) -> String {
     out
 }
 
-/// Caps for the L-actuation (1) diagnostics feed (chunk 98): the brief is
-/// a model prompt, not a log dump — bounded URIs × bounded items × bounded
-/// chars, deterministic BTree order, omitted counts named (never silent).
-/// Empty diagnostics → `None` (caller leaves the brief byte-identical,
-/// preserving every pre-98 matrix when LSP is off).
+/// Caps for the L-actuation (1) diagnostics feed: the brief is a model prompt, not a log dump —
+/// bounded URIs × bounded items × bounded chars, deterministic BTree order, omitted counts named
+/// (never silent). Empty diagnostics → `None` (caller leaves the brief byte-identical, preserving
+/// every prior matrix when LSP is off).
 pub const MAX_LSP_URIS: usize = 8;
 pub const MAX_LSP_ITEMS_PER_URI: usize = 10;
 pub const MAX_LSP_ITEM_CHARS: usize = 300;
@@ -744,17 +720,15 @@ pub fn render_lsp_section(
     Some(out)
 }
 
-/// Count total LSP diagnostic messages (L-actuation 2, chunk 99): the
-/// warn-first merge signal. Pure sum over the last-recorded map — 0 when
-/// LSP is off or clean. Never gates, never denies (deny is queued behind
+/// Count total LSP diagnostic messages: the warn-first merge signal. Pure sum over the last-
+/// recorded map — 0 when LSP is off or clean. Never gates, never denies (deny is queued behind
 /// data); the runner records it on the outcome and warns past it.
 pub fn lsp_findings_count(diagnostics: &std::collections::BTreeMap<String, Vec<String>>) -> usize {
     diagnostics.values().map(|v| v.len()).sum()
 }
 
-/// Dedupe key for a tool-supplied path (docket #3; reused by #1): the
-/// file URI with `./` segments collapsed, case-folded on Windows, so `a.rs`,
-/// `./a.rs`, and the absolute spelling of one file compare equal.
+/// Dedupe key for a tool-supplied path: the file URI with `./` segments collapsed, case-folded on
+/// Windows, so `a.rs`, `./a.rs`, and the absolute spelling of one file compare equal.
 fn path_identity(workdir: &Path, raw: &str) -> String {
     let mut uri = polymorph_tools::lsp::uri_for(workdir, raw);
     while uri.contains("/./") {
@@ -767,28 +741,23 @@ fn path_identity(workdir: &Path, raw: &str) -> String {
     }
 }
 
-/// [`path_identity`] of the file a tool path argument actually names
-/// (docket #1): resolved the way the tools resolve it first, so Git Bash
-/// drive spellings and leading-slash relatives collapse too.
+/// [`path_identity`] of the file a tool path argument actually names: resolved the way the tools
+/// resolve it first, so Git Bash drive spellings and leading-slash relatives collapse too.
 pub(crate) fn attach_identity(workdir: &Path, raw: &str) -> String {
     let resolved = polymorph_tools::resolve_tool_path(workdir, raw);
     path_identity(workdir, &resolved.to_string_lossy())
 }
 
-/// Per-file LSP snapshots for the files this turn mutated (docket #3):
-/// the reviewer-evidence feed and the opt-in error gate's input. One
-/// entry per distinct file — spellings that resolve to the same URI
-/// (`a.rs`, `./a.rs`, absolute; case-folded on Windows) collapse, keyed
-/// by the spelling of the file's LAST mutation. `items` is the pool's
-/// record for exactly the URI that last write consulted (the pool
-/// replaces a URI's record on every write, so this is the latest
-/// snapshot, never history across rounds); `null` when there is none (no
-/// server for the language, or the consult failed — the pool drops the
-/// stale record then). Unmutated files never appear. Files a command
-/// changed count too (their consult ran after the command), except those
-/// past the per-command consult cap: `null` plus `"unconsulted": true`,
-/// never the pool's stale record. A file whose last mutation renamed it
-/// away or (command) deleted it is gone: no entry.
+/// Per-file LSP snapshots for the files this turn mutated: the reviewer-evidence feed and the opt-
+/// in error gate's input. One entry per distinct file — spellings that resolve to the same URI
+/// (`a.rs`, `./a.rs`, absolute; case-folded on Windows) collapse, keyed by the spelling of the
+/// file's LAST mutation. `items` is the pool's record for exactly the URI that last write consulted
+/// (the pool replaces a URI's record on every write, so this is the latest snapshot, never history
+/// across rounds); `null` when there is none (no server for the language, or the consult failed —
+/// the pool drops the stale record then). Unmutated files never appear. Files a command changed
+/// count too (their consult ran after the command), except those past the per-command consult cap:
+/// `null` plus `"unconsulted": true`, never the pool's stale record. A file whose last mutation
+/// renamed it away or (command) deleted it is gone: no entry.
 fn lsp_mutated_snapshots(
     details: &std::collections::BTreeMap<String, Vec<polymorph_tools::lsp::LspDiagnostic>>,
     workdir: &Path,
@@ -854,7 +823,7 @@ fn lsp_mutated_snapshots(
         .collect()
 }
 
-/// One recorded diagnostic row read back from turn data (docket #3).
+/// One recorded diagnostic row read back from turn data.
 struct LspRow<'a> {
     line: Option<u64>,
     severity: Option<u64>,
@@ -930,13 +899,11 @@ fn lsp_tally<'r, 'd: 'r>(rows: impl IntoIterator<Item = &'r LspRow<'d>>) -> Stri
     }
 }
 
-/// LSP lines for the evidence block (docket #3): per mutated file, the
-/// latest snapshot's tally plus its rows as `file:line: severity:
-/// message` (single-line, bounded), errors first. Files with errors sort
-/// first so caps never hide them behind clean files. Capped (10 files, 5
-/// rows per file, 20 rows total) with omissions named. Empty when no
-/// mutated file has a snapshot (LSP off, tool-free or read-only turns),
-/// so those evidence blocks stay byte-identical to pre-#3.
+/// LSP lines for the evidence block: per mutated file, the latest snapshot's tally plus its rows as
+/// `file:line: severity: message` (single-line, bounded), errors first. Files with errors sort
+/// first so caps never hide them behind clean files. Capped (10 files, 5 rows per file, 20 rows
+/// total) with omissions named. Empty when no mutated file has a snapshot (LSP off, tool-free or
+/// read-only turns), so those evidence blocks stay byte-identical to pre-#3.
 fn render_lsp_evidence(data: &serde_json::Value) -> String {
     const MAX_FILES: usize = 10;
     const MAX_ROWS_PER_FILE: usize = 5;
@@ -1031,12 +998,11 @@ fn render_lsp_evidence(data: &serde_json::Value) -> String {
     out
 }
 
-/// Opt-in LSP error gate findings (docket #3): one deterministic P1 per
-/// mutated file whose latest snapshot still carries error-severity
-/// diagnostics (warnings and unspecified severities never gate). Text is
-/// a pure function of the snapshot, so an unchanged error set repeats
-/// verbatim (the survivor/stall escalations see it) and any progress
-/// changes it. Empty when the turn recorded no snapshot.
+/// Opt-in LSP error gate findings: one deterministic P1 per mutated file whose latest snapshot
+/// still carries error-severity diagnostics (warnings and unspecified severities never gate). Text
+/// is a pure function of the snapshot, so an unchanged error set repeats verbatim (the
+/// survivor/stall escalations see it) and any progress changes it. Empty when the turn recorded no
+/// snapshot.
 pub fn lsp_error_findings(data: &serde_json::Value) -> Vec<polymorph_core::Finding> {
     const MAX_CITED: usize = 3;
     let Some(entries) = data.get("lsp_diagnostics").and_then(|v| v.as_array()) else {
@@ -1079,10 +1045,9 @@ pub fn lsp_error_findings(data: &serde_json::Value) -> Vec<polymorph_core::Findi
     findings
 }
 
-/// Shared state of an opt-in harness gate (docket #3 LSP errors, docket
-/// #2 verify commands): a fixer-side decorator ([`LspGateRunner`],
-/// [`VerifyGateRunner`]) records the last fix turn's deterministic veto
-/// findings; [`HarnessGateReviewer`] reads them when a verdict passes.
+/// Shared state of an opt-in harness gate: a fixer-side decorator ([`LspGateRunner`],
+/// [`VerifyGateRunner`]) records the last fix turn's deterministic veto findings;
+/// [`HarnessGateReviewer`] reads them when a verdict passes.
 #[derive(Debug, Default)]
 pub struct HarnessGate {
     last: std::sync::Mutex<Vec<polymorph_core::Finding>>,
@@ -1152,35 +1117,30 @@ impl polymorph_delegate::TurnRunner for LspGateRunner {
     }
 }
 
-/// `Finding.file` of verify-gate findings (docket #2): not a path, so the
-/// evidence block's file-existence check skips it.
+/// `Finding.file` of verify-gate findings: not a path, so the evidence block's file-existence check
+/// skips it.
 pub const VERIFY_FINDING_FILE: &str = "(verify-cmd)";
 
-/// Verify-output digest bounds (docket #2; #9 caveat: no blind byte cap).
-/// Per stream: the last [`VERIFY_TAIL_LINES`] lines, plus up to
-/// [`VERIFY_MAX_DIAG_LINES`] diagnostic-looking lines from before the tail
-/// (each with its next line, where `rustc`/`gcc` put the location), every
-/// gap named with its line count. Lines are char-bounded, never cut
-/// mid-char.
+/// Verify-output digest bounds. Per stream: the last [`VERIFY_TAIL_LINES`] lines, plus up to
+/// [`VERIFY_MAX_DIAG_LINES`] diagnostic-looking lines from before the tail (each with its next
+/// line, where `rustc`/`gcc` put the location), every gap named with its line count. Lines are
+/// char-bounded, never cut mid-char.
 const VERIFY_TAIL_LINES: usize = 20;
 const VERIFY_MAX_DIAG_LINES: usize = 30;
 const VERIFY_LINE_CHARS: usize = 300;
 /// Diagnostic lines cited in a verify-gate finding.
 const VERIFY_CITED_LINES: usize = 3;
 
-// Diagnostic-line heuristic of the verify digest: the one the `bash`
-// spill digest uses too (docket #9 shared it; rendering unchanged).
+// Diagnostic-line heuristic of the verify digest: the one the `bash` spill digest uses too.
 use polymorph_tools::output::is_diagnostic_line;
 
-/// One output line made safe for the evidence block (tabs to spaces,
-/// control characters dropped, char-bounded with `...`; shared with the
-/// docket #9 spill digest).
+/// One output line made safe for the evidence block.
 fn verify_line(line: &str) -> String {
     polymorph_tools::output::clean_line(line, VERIFY_LINE_CHARS)
 }
 
 /// Bounded digest of one output stream: `{"total", "lines"}` where
-/// `lines` holds the kept lines in order with `... (N lines omitted) ...`
+/// `lines` holds the kept lines in order with `... (N lines omitted)...`
 /// markers for every gap. Pure, for unit tests.
 fn verify_digest(text: &str) -> serde_json::Value {
     let lines: Vec<&str> = text.lines().collect();
@@ -1239,12 +1199,11 @@ fn verify_key_lines(stdout: &str, stderr: &str) -> Vec<String> {
     tail
 }
 
-/// Run the operator's verify commands in order in `workdir` (docket #2),
-/// stopping at the first one that does not exit 0 (later ones are recorded
-/// `skipped`: a test run after a failed build only repeats its errors).
-/// One JSON record per command. `None` = cancelled mid-command (the child
-/// tree is already killed). Direct `polymorph_tools::exec` calls: operator
-/// commands never pass the fixer's tool Gate.
+/// Run the operator's verify commands in order in `workdir`, stopping at the first one that does
+/// not exit 0 (later ones are recorded `skipped`: a test run after a failed build only repeats its
+/// errors). One JSON record per command. `None` = cancelled mid-command (the child tree is already
+/// killed). Direct `polymorph_tools::exec` calls: operator commands never pass the fixer's tool
+/// Gate.
 async fn run_verify_cmds(
     cmds: &[String],
     workdir: &Path,
@@ -1315,11 +1274,10 @@ fn verify_status(run: &serde_json::Value) -> String {
     }
 }
 
-/// Verify-gate findings (docket #2): one deterministic P1 for the failing
-/// command (runs stop at the first failure), naming the command, its exit
-/// status and the key output lines — no durations, so an unchanged failure
-/// repeats verbatim (survivor/stall escalations see it). Empty when every
-/// command passed or none ran.
+/// Verify-gate findings: one deterministic P1 for the failing command (runs stop at the first
+/// failure), naming the command, its exit status and the key output lines — no durations, so an
+/// unchanged failure repeats verbatim (survivor/stall escalations see it). Empty when every command
+/// passed or none ran.
 pub fn verify_findings(runs: &[serde_json::Value]) -> Vec<polymorph_core::Finding> {
     runs.iter()
         .filter(|r| {
@@ -1356,12 +1314,10 @@ pub fn verify_findings(runs: &[serde_json::Value]) -> Vec<polymorph_core::Findin
         .collect()
 }
 
-/// Verify-gate block for the evidence (docket #2): every command with its
-/// status and duration, each non-empty stream's digest, and the gate
-/// result. Empty when the turn carries no verify records (gate off renders
-/// exactly as before). The commands ran after the turn's last write, so
-/// they are post-turn ground truth over the in-turn ledger and LSP
-/// snapshots above.
+/// Verify-gate block for the evidence: every command with its status and duration, each non-empty
+/// stream's digest, and the gate result. Empty when the turn carries no verify records (gate off
+/// renders exactly as before). The commands ran after the turn's last write, so they are post-turn
+/// ground truth over the in-turn ledger and LSP snapshots above.
 fn render_verify_evidence(data: &serde_json::Value) -> String {
     let Some(runs) = data.get("verify").and_then(|v| v.as_array()) else {
         return String::new();
@@ -1408,13 +1364,12 @@ fn render_verify_evidence(data: &serde_json::Value) -> String {
     out
 }
 
-/// Fixer-runner decorator for the verify-command gate (docket #2): runs
-/// the inner turn unchanged; when it finishes (`done`), runs the operator's
-/// commands in the turn's workdir (the worktree in `--repo` mode), records
-/// their veto findings, and attaches the records as `data.verify` for the
-/// evidence block. A failed inner turn clears the gate and skips the
-/// commands (the loop escalates on executor failure anyway); a cancel
-/// mid-command kills the tree and fails the turn — never a partial pass.
+/// Fixer-runner decorator for the verify-command gate: runs the inner turn unchanged; when it
+/// finishes (`done`), runs the operator's commands in the turn's workdir (the worktree in `--repo`
+/// mode), records their veto findings, and attaches the records as `data.verify` for the evidence
+/// block. A failed inner turn clears the gate and skips the commands (the loop escalates on
+/// executor failure anyway); a cancel mid-command kills the tree and fails the turn — never a
+/// partial pass.
 pub struct VerifyGateRunner {
     pub inner: Arc<dyn polymorph_delegate::TurnRunner>,
     pub gate: Arc<HarnessGate>,
@@ -1462,14 +1417,11 @@ impl polymorph_delegate::TurnRunner for VerifyGateRunner {
     }
 }
 
-/// Reviewer decorator for the opt-in harness gates (docket #3 LSP errors,
-/// docket #2 verify commands): a passing verdict while any gate holds
-/// findings from the last fix turn becomes a FAIL carrying those
-/// deterministic findings first (gates in `gates` order, the reviewer's own
-/// findings after), so `run_loop` feeds them to the fixer like any
-/// finding. Fail verdicts and errors pass through untouched (the fixer
-/// still sees every gate's evidence in the next brief); empty `gates` is a
-/// pure passthrough.
+/// Reviewer decorator for the opt-in harness gates: a passing verdict while any gate holds findings
+/// from the last fix turn becomes a FAIL carrying those deterministic findings first (gates in
+/// `gates` order, the reviewer's own findings after), so `run_loop` feeds them to the fixer like
+/// any finding. Fail verdicts and errors pass through untouched (the fixer still sees every gate's
+/// evidence in the next brief); empty `gates` is a pure passthrough.
 pub struct HarnessGateReviewer<R> {
     pub inner: R,
     pub gates: Vec<Arc<HarnessGate>>,
@@ -1518,8 +1470,8 @@ impl Reviewer for BusReviewer {
     async fn review(&self, input: ReviewerInput) -> Result<Verdict, ReviewerError> {
         let invalid = |d: String| ReviewerError::Invalid(d);
         let mut brief = render_review_brief(&input, self.artifact_path.as_deref());
-        // CREATE-job annotation (chunk 168): missing file + empty text.
-        // Pure addition — fires only in the gap, never rewrites the brief.
+        // CREATE-job annotation: missing file + empty text. Pure addition — fires only in the gap,
+        // never rewrites the brief.
         if let Some(p) = self.artifact_path.as_deref() {
             if let Some(note) = create_job_note(&self.workdir, p, &input.artifact) {
                 brief.push_str(&note);
@@ -1531,8 +1483,8 @@ impl Reviewer for BusReviewer {
         tracing::debug!(brief = %brief, "review brief");
         let mut spec =
             polymorph_delegate::SpawnSpec::new(Role::Review, brief, self.workdir.clone());
-        // F2a: no tool calls (F3 owns the registry). The opt-in docket #4
-        // tool reviewer enforces its own read-only allowlist in its runner.
+        // F2a: no tool calls (F3 owns the registry). The opt-in tool reviewer enforces its own
+        // read-only allowlist in its runner.
         spec.tools = Vec::new();
         let handle = self
             .bus
@@ -1549,10 +1501,10 @@ impl Reviewer for BusReviewer {
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| invalid("review child returned no verdict_text".to_string()))?;
                 extract_verdict(text).map_err(|e| {
-                    // Log a truncated preview: otherwise the operator can never
-                    // tell fenced-JSON from pure prose (live run #2 hit exactly
-                    // this). Truncated + local-only; the full text stays in the
-                    // child's typed result, never in an event field.
+ // Log a truncated preview: otherwise the operator can never
+ // tell fenced-JSON from pure prose (live run #2 hit exactly
+ // this). Truncated + local-only; the full text stays in the
+ // child's typed result, never in an event field.
                     let preview: String = text.chars().take(300).collect();
                     tracing::warn!(preview = %preview, error = %e, "reviewer verdict failed to parse");
                     invalid(e.to_string())
@@ -1568,15 +1520,13 @@ impl Reviewer for BusReviewer {
     }
 }
 
-/// Verdict text → typed verdict, tolerating a preamble or fences around
-/// the JSON object (shared by [`BusReviewer`] and the docket #4 tool
-/// reviewer's cite-or-drop check, so both judge the same text alike).
+/// Verdict text → typed verdict, tolerating a preamble or fences around the JSON object.
 pub(crate) fn extract_verdict(text: &str) -> Result<Verdict, crate::VerdictError> {
     match parse_verdict(text) {
         Ok(v) => Ok(v),
         Err(orig_err) => {
             // Resilient extraction for real-world LLMs (e.g. OpenCode Go / Muse Spark
-            // emitting leading status banners or markdown code fences ```json ... ```):
+            // emitting leading status banners or markdown code fences ```json... ```):
             if let (Some(start), Some(end)) = (text.find('{'), text.rfind('}')) {
                 if start < end {
                     match parse_verdict(&text[start..=end]) {
@@ -1596,10 +1546,9 @@ pub(crate) fn extract_verdict(text: &str) -> Result<Verdict, crate::VerdictError
     }
 }
 
-/// Tool preamble prepended to the executor system prompt when tools are on
-/// (Epic F3b). Runtime text, NOT a pack file: packs are static, the flag is
-/// dynamic. Documents the six tools + the read→tag→edit flow the runner
-/// enforces. F5 followup: migrate into evaluated packs.
+/// Tool preamble prepended to the executor system prompt when tools are on. Runtime text, NOT a
+/// pack file: packs are static, the flag is dynamic. Documents the six tools + the read→tag→edit
+/// flow the runner enforces. F5 followup: migrate into evaluated packs.
 pub const TOOLS_PREAMBLE: &str =
     "You have tools — use them to inspect the work before rewriting.\n\
 Available: read (files; results carry a `tag`), write, edit (hashline patches ONLY, \
@@ -1618,13 +1567,12 @@ PUT 2:\n\
 On `StaleTag` re-read and re-emit; on parse errors fix the named line.\n\
 When the artifact is ready, reply with the full rewritten text and no further tool calls.\n\n";
 
-/// Minimal preamble for the chunk-45 ablation: tool intro (so the model
-/// still engages tools — without it the run would measure tools-off, not
-/// preamble) + the raw-only fence ban (the hypothesized parse carrier).
-/// Everything else from [`TOOLS_PREAMBLE`] — header/op/sigil shapes, the
-/// example, the StaleTag action — is dropped. If parse holds at zero under
-/// this, the dropped lines are dead weight; if parse returns, they carry
-/// the effect. Pinned by test (presence + absence), never grown silently.
+/// Minimal preamble for the ablation: tool intro (so the model still engages tools — without it the
+/// run would measure tools-off, not preamble) + the raw-only fence ban (the hypothesized parse
+/// carrier). Everything else from [`TOOLS_PREAMBLE`] — header/op/sigil shapes, the example, the
+/// StaleTag action — is dropped. If parse holds at zero under this, the dropped lines are dead
+/// weight; if parse returns, they carry the effect. Pinned by test (presence + absence), never
+/// grown silently.
 pub const TOOLS_PREAMBLE_MIN: &str =
     "You have tools — use them to inspect the work before rewriting.\n\
 Available: read (files; results carry a `tag`), write, edit (hashline patches ONLY, \
@@ -1634,8 +1582,7 @@ adjust and continue. Prefer reading over guessing; never invent file content.\n\
 Edit patches must be raw patch text ONLY — never fences, never prose around the patch.\n\
 When the artifact is ready, reply with the full rewritten text and no further tool calls.\n\n";
 
-/// Select the fixer preamble (chunk 45): pure fn, unit-tested — call sites
-/// pass bools, never sniff strings (traps-#29 spirit).
+/// Select the fixer preamble: pure fn, unit-tested — call sites pass bools, never sniff strings.
 pub fn select_preamble(minimal: bool) -> &'static str {
     if minimal {
         TOOLS_PREAMBLE_MIN
@@ -1684,19 +1631,18 @@ pub trait AgenticTurnFn: Send + Sync {
     ) -> anyhow::Result<polymorph_llm::CollectedTurn>;
 }
 
-/// Rule retries per turn (Epic R, chunk 124): a hit re-issues the same
-/// messages with the reminder injected, then hands up honestly.
+/// Rule retries per turn: a hit re-issues the same messages with the reminder injected, then hands
+/// up honestly.
 pub const DEFAULT_RULE_RETRIES: u32 = 2;
 
-/// Pure retry policy (Epic R, chunk 124): how reminders enter system +
-/// when the budget is spent. Unit-tested; the live loop below applies it.
+/// Pure retry policy: how reminders enter system + when the budget is spent. Unit-tested; the live
+/// loop below applies it.
 pub struct RuleRetryPolicy {
     pub max_retries: u32,
 }
 
 impl RuleRetryPolicy {
-    /// Append the fired rule as a system reminder (matched text capped —
-    /// chunk-98 caps precedent; patterns can match long spans).
+    /// Append the fired rule as a system reminder.
     pub fn inject(system: &str, hit: &polymorph_llm::rules::RuleHit) -> String {
         const MAX_MATCH_ECHO: usize = 200;
         let mut matched = hit.matched.as_str();
@@ -1736,10 +1682,9 @@ impl AgenticTurnFn for LiveAgenticTurn {
         tools: Vec<genai::chat::Tool>,
         cancel: &tokio_util::sync::CancellationToken,
     ) -> anyhow::Result<polymorph_llm::CollectedTurn> {
-        // R retry (chunk 124): a rule hit re-issues the SAME messages
-        // with the reminder injected into system. Spent budget (or a
-        // clean turn) hands up with the hit intact — the reviewer sees
-        // misfire + reminder trail, never an infinite loop.
+        // R retry: a rule hit re-issues the SAME messages with the reminder injected into system.
+        // Spent budget (or a clean turn) hands up with the hit intact — the reviewer sees misfire +
+        // reminder trail, never an infinite loop.
         let policy = RuleRetryPolicy {
             max_retries: self.rule_max_retries,
         };
@@ -1838,8 +1783,8 @@ impl AgenticTurnFn for LiveAgenticTurn {
             };
             match &turn.rule_hit {
                 Some(hit) if policy.should_retry(used) => {
-                    // Permanent attempt telemetry (chunk 125): the JSON
-                    // rolling logs are the retry forensics path (C4).
+                    // Permanent attempt telemetry: the JSON rolling logs are the retry forensics
+                    // path (C4).
                     tracing::info!(attempt = used + 1, rule = %hit.rule_id, "stream rule fired, retrying");
                     system = RuleRetryPolicy::inject(&system, hit);
                     used += 1;
@@ -1853,8 +1798,8 @@ impl AgenticTurnFn for LiveAgenticTurn {
     }
 }
 
-/// Watching-reviewer note severity (Epic S, chunk 126): advisory only —
-/// nothing here ever gates, denies, or rewrites (observe-first, 98/99).
+/// Watching-reviewer note severity: advisory only — nothing here ever gates, denies, or rewrites
+/// (observe-first, 98/99).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AdvisorSeverity {
@@ -1863,28 +1808,25 @@ pub enum AdvisorSeverity {
     Blocker,
 }
 
-/// One watching-reviewer note (Epic S, chunk 126).
+/// One watching-reviewer note.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct AdvisorNote {
     pub severity: AdvisorSeverity,
     pub text: String,
 }
 
-/// Watching-reviewer system (Epic S, chunk 126): short const (not a pack —
-/// eval-gated pack only if the signal warrants, stated).
+/// Watching-reviewer system: short const (not a pack — eval-gated pack only if the signal warrants,
+/// stated).
 const ADVISOR_SYSTEM: &str = "You are a watching reviewer reading one agent turn from a clean context. Reply with zero or more single-line notes, each starting with exactly one of ASIDE:, CONCERN:, BLOCKER:. Asides are observations, concerns want a second look, blockers flag likely-wrong outcomes. No other prose.";
 
 /// Cap on the final text quoted into the advisor brief (caps precedent).
 const MAX_ADVISED_TEXT_CHARS: usize = 4000;
 
-/// Lenient note parser (Epic S, chunk 126): prefixed lines keep their
-/// severity; any other non-empty line degrades to Aside (signal never
-/// dropped for formatting); empties vanish.
+/// Lenient note parser: prefixed lines keep their severity; any other non-empty line degrades to
+/// Aside (signal never dropped for formatting); empties vanish.
 pub fn parse_notes(body: &str) -> Vec<AdvisorNote> {
-    // Literal prefix lengths (not the match's): slicing the original by
-    // the UPPERCASED match length mis-strips the bare-prefix degenerate
-    // (`ASIDE:` alone sliced zero chars — caught by unit test, chunk 126).
-    // ASCII-only prefixes keep byte boundaries exact.
+    // Literal prefix lengths (not the match's): slicing the original by the UPPERCASED match length
+    // mis-strips the bare-prefix degenerate. ASCII-only prefixes keep byte boundaries exact.
     const PREFIXES: [(&str, AdvisorSeverity); 3] = [
         ("ASIDE:", AdvisorSeverity::Aside),
         ("CONCERN:", AdvisorSeverity::Concern),
@@ -1916,9 +1858,8 @@ pub fn parse_notes(body: &str) -> Vec<AdvisorNote> {
     notes
 }
 
-/// Watching reviewer (Epic S, chunk 126): a second model reading one turn
-/// from its own clean context (brief + compact round trace + capped final
-/// text — never the conversation, prompt-stability invariant intact).
+/// Watching reviewer: a second model reading one turn from its own clean context (brief + compact
+/// round trace + capped final text — never the conversation, prompt-stability invariant intact).
 /// Failures are the caller's to absorb (warn + empty, 99 posture).
 pub struct AdvisorRunner {
     pub client: polymorph_llm::LlmClient,
@@ -1927,7 +1868,7 @@ pub struct AdvisorRunner {
 
 impl AdvisorRunner {
     /// Production constructor: advisor-role managed target (role-routed
-    /// chains, D1 machinery — no new routing).
+    /// chains, managed machinery — no new routing).
     pub fn managed(
         router: polymorph_llm::RoleRouter,
         providers: Vec<polymorph_core::config::ProviderEntry>,
@@ -1988,34 +1929,29 @@ impl AdvisorRunner {
     }
 }
 
-/// Tools-wielding fixer (Epic F3b): drives model→tools→results rounds until
-/// the model answers with text (no calls) or `max_tool_rounds` feeds run out.
-/// Denials, unknown tools, and registry errors feed back as tool RESULT text
-/// (recoverable — the model adjusts); only transport/auth failures bail (the
-/// loop maps those to `ExecutorFailed`). Final text — possibly empty — goes
-/// to `data.artifact` for the REVIEWER to judge through normal paths; no new
-/// escalate kind, no special bail.
+/// Tools-wielding fixer: drives model→tools→results rounds until the model answers with text (no
+/// calls) or `max_tool_rounds` feeds run out. Denials, unknown tools, and registry errors feed back
+/// as tool RESULT text (recoverable — the model adjusts); only transport/auth failures bail (the
+/// loop maps those to `ExecutorFailed`). Final text — possibly empty — goes to `data.artifact` for
+/// the REVIEWER to judge through normal paths; no new escalate kind, no special bail.
 pub struct AgenticFixRunner {
     pub turn: Arc<dyn AgenticTurnFn>,
     pub registry: Arc<polymorph_tools::Registry>,
     pub gate: polymorph_tools::Gate,
     pub tools: Vec<String>,
     pub max_tool_rounds: u32,
-    /// Verification bonus rounds past `max_tool_rounds` (docket #7; chunk
-    /// 154 granted exactly one): granted one at a time, only while the
-    /// previous round made progress — a successful write/edit, or a
-    /// command that ran after a not-yet-verified mutation. Bounded, so the
-    /// turn always terminates. 0 = none (the separate one-shot
-    /// pending-mutation bonus still applies).
+    /// Verification bonus rounds past `max_tool_rounds`: granted one at a time, only while the
+    /// previous round made progress — a successful write/edit, or a command that ran after a not-
+    /// yet-verified mutation. Bounded, so the turn always terminates. 0 = none (the separate one-
+    /// shot pending-mutation bonus still applies).
     pub max_bonus_tool_rounds: u32,
-    /// Watching reviewer (Epic S, chunk 126): `None` = pre-S behavior
-    /// exactly (off unless the project opts in — advisor doubles spend).
+    /// Watching reviewer: `None` = pre-S behavior exactly (off unless the project opts in — advisor
+    /// doubles spend).
     pub advisor: Option<AdvisorRunner>,
-    /// Drive restore ledger (docket #8): `Some` records every write/edit
-    /// target's original before the call and the drive's state after it,
-    /// so a failed in-place drive can roll back. `None` = no recording.
+    /// Drive restore ledger: `Some` records every write/edit target's original before the call and
+    /// the drive's state after it, so a failed in-place drive can roll back. `None` = no recording.
     pub restore: Option<Arc<crate::restore::RestoreLedger>>,
-    /// In-turn tool-result history bound (docket #9).
+    /// In-turn tool-result history bound.
     pub history: ToolHistoryBudget,
     /// Command change detection ([`crate::command_changes`]): the workdir is
     /// stamped (at most this many files) right before and after every
@@ -2042,15 +1978,13 @@ pub const DEFAULT_TOOL_HISTORY_KEEP_ROUNDS: u32 = 2;
 /// next to nothing).
 const MIN_COMPACT_BYTES: usize = 1024;
 
-/// Bound on the tool results a fix turn re-sends every round (docket #9).
-/// Once their total exceeds `budget_bytes`, the oldest results outside the
-/// latest `keep_rounds` tool rounds are replaced, oldest first and only
-/// until the total fits again, by a one-paragraph stub naming the tool,
-/// round, outcome, exit code and where the full data is: the result body
-/// saved under `.polymorph/tool-output/`, plus any spill files; for `read`
-/// the file itself (re-readable) and its hashline tag. `budget_bytes == 0`
-/// = off (pre-#9 behavior). `keep_rounds` counts as at least 1: the
-/// latest round's results always reach the model intact.
+/// Bound on the tool results a fix turn re-sends every round. Once their total exceeds
+/// `budget_bytes`, the oldest results outside the latest `keep_rounds` tool rounds are replaced,
+/// oldest first and only until the total fits again, by a one-paragraph stub naming the tool,
+/// round, outcome, exit code and where the full data is: the result body saved under
+/// `.polymorph/tool-output/`, plus any spill files; for `read` the file itself (re-readable) and
+/// its hashline tag. `budget_bytes == 0` = off (pre-#9 behavior). `keep_rounds` counts as at least
+/// 1: the latest round's results always reach the model intact.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ToolHistoryBudget {
     pub budget_bytes: usize,
@@ -2076,7 +2010,7 @@ impl ToolHistoryBudget {
     }
 }
 
-/// One tool result fed into a fix turn's history (docket #9 compaction).
+/// One tool result fed into a fix turn's history.
 pub(crate) struct FedResult {
     /// Index of its message in the turn's `messages`.
     pub(crate) index: usize,
@@ -2094,9 +2028,8 @@ pub(crate) struct FedResult {
     pub(crate) compacted: bool,
 }
 
-/// The stub that replaces a compacted result (docket #9). Everything but a
-/// successful `read` (the file is re-readable) is saved first, so nothing
-/// is lost.
+/// The stub that replaces a compacted result. Everything but a successful `read` (the file is re-
+/// readable) is saved first, so nothing is lost.
 fn compaction_stub(f: &FedResult, workdir: &Path, keep_files: usize) -> String {
     let parsed: Option<serde_json::Value> = serde_json::from_str(&f.body).ok();
     let field = |key: &str| parsed.as_ref().and_then(|v| v.get(key));
@@ -2145,8 +2078,7 @@ fn compaction_stub(f: &FedResult, workdir: &Path, keep_files: usize) -> String {
     stub
 }
 
-/// Compact the oldest eligible results until the history fits the budget
-/// (docket #9; rule on [`ToolHistoryBudget`]). Returns how many were
+/// Compact the oldest eligible results until the history fits the budget. Returns how many were
 /// compacted.
 pub(crate) fn compact_tool_history(
     messages: &mut [genai::chat::ChatMessage],
@@ -2182,9 +2114,8 @@ pub(crate) fn compact_tool_history(
     compacted
 }
 
-/// One tool call through the registry (pre-hooks, Gate, execution),
-/// shared by the fixer and the docket #4 tool reviewer: the result value,
-/// or the fed error text plus its outcome label.
+/// One tool call through the registry (pre-hooks, Gate, execution), shared by the fixer and the
+/// tool reviewer: the result value, or the fed error text plus its outcome label.
 pub(crate) async fn registry_call(
     registry: &polymorph_tools::Registry,
     tc: &genai::chat::ToolCall,
@@ -2195,14 +2126,13 @@ pub(crate) async fn registry_call(
         .await
     {
         Ok(value) => Ok(value),
-        // Typed faults (chunk 37): denials label `denied`, execution
-        // failures label `error`. Fed text is byte-identical to before
-        // (`tool error: ...` in both cases) — observability-only change,
-        // the model sees nothing new.
+        // Typed faults: denials label `denied`, execution failures label `error`. Fed text is byte-
+        // identical to before (`tool error:...` in both cases) — observability-only change, the
+        // model sees nothing new.
         Err(polymorph_tools::CallError::Denied(d)) => Err((format!("tool error: {d}"), "denied")),
         Err(polymorph_tools::CallError::Failed(e)) => {
-            // Edit failures subtype (chunk 38); every other tool keeps
-            // plain `error`. Fed text unchanged either way.
+            // Edit failures subtype; every other tool keeps plain `error`. Fed text unchanged
+            // either way.
             let outcome = if tc.fn_name == "edit" {
                 classify_edit_error(&e)
             } else {
@@ -2214,10 +2144,9 @@ pub(crate) async fn registry_call(
 }
 
 impl AgenticFixRunner {
-    /// Production constructor: live turns over the managed/fixed target.
-    /// The preamble goes on here (once), so scripted tests see raw systems.
-    /// Full [`TOOLS_PREAMBLE`] — the default everywhere except the chunk-45
-    /// bench ablation (which uses [`Self::live_with_preamble`]).
+    /// Production constructor: live turns over the managed/fixed target. The preamble goes on here
+    /// (once), so scripted tests see raw systems. Full [`TOOLS_PREAMBLE`] — the default everywhere
+    /// except the bench ablation (which uses [`Self::live_with_preamble`]).
     pub fn live(
         client: polymorph_llm::LlmClient,
         target: LlmTarget,
@@ -2241,21 +2170,20 @@ impl AgenticFixRunner {
             tools,
             max_tool_rounds,
             max_bonus_tool_rounds: DEFAULT_MAX_BONUS_TOOL_ROUNDS,
-            // S advisor (chunk 126): off at construction; CLI attaches
-            // post-construction when `[advisor] enabled` (both ctors).
+            // S advisor: off at construction; CLI attaches post-construction when `[advisor]
+            // enabled` (both ctors).
             advisor: None,
-            // Docket #8: the CLI attaches a ledger for rollback drives.
+            // The CLI attaches a ledger for rollback drives.
             restore: None,
-            // Docket #9: the CLI overrides it from `[agent]`.
+            // The CLI overrides it from `[agent]`.
             history: ToolHistoryBudget::default(),
             // The CLI overrides it from `[agent] command_change_max_files`.
             command_changes: crate::command_changes::DEFAULT_COMMAND_CHANGE_MAX_FILES,
         }
     }
 
-    /// Ablation constructor (chunk 45): caller-chosen preamble via
-    /// [`select_preamble`] — the bench passes the `--preamble` flag here.
-    /// Every other caller uses [`Self::live`] (full block, unchanged).
+    /// Ablation constructor: caller-chosen preamble via [`select_preamble`] — the bench passes the
+    /// `--preamble` flag here. Every other caller uses [`Self::live`] (full block, unchanged).
     #[allow(clippy::too_many_arguments)] // mirrors `live` + preamble (bench-only ctor)
     pub fn live_with_preamble(
         client: polymorph_llm::LlmClient,
@@ -2289,11 +2217,10 @@ impl AgenticFixRunner {
         }
     }
 
-    /// Outcome class for observability (bench taxonomy): the response text
-    /// still carries detail for the model; this label is the machine-readable
-    /// shape for logs and `TurnOutput.data["tool_outcomes"]`. The third
-    /// element is the call's structured ledger fields ([`ledger_extras`]:
-    /// command summary + exit code, mutated paths — docket #6).
+    /// Outcome class for observability (bench taxonomy): the response text still carries detail for
+    /// the model; this label is the machine-readable shape for logs and
+    /// `TurnOutput.data["tool_outcomes"]`. The third element is the call's structured ledger
+    /// fields.
     async fn execute_tool(
         &self,
         tc: &genai::chat::ToolCall,
@@ -2327,8 +2254,8 @@ impl AgenticFixRunner {
                     Self::attach_tag(&mut value, tc, tool_ctx, &self.registry).await;
                 }
                 let mut extras = ledger_extras(&tc.fn_name, &tc.fn_arguments, Some(&value));
-                // Docket #9: a spilled stream's digest omits lines, so the
-                // zero-test label reads the full spill files instead.
+                // A spilled stream's digest omits lines, so the zero-test label reads the full
+                // spill files instead.
                 if is_command_tool(&tc.fn_name) {
                     if let Some(marker) = spilled_zero_test_marker(&value, &tool_ctx.workdir) {
                         match marker {
@@ -2428,10 +2355,9 @@ impl polymorph_delegate::TurnRunner for AgenticFixRunner {
             ctx.cancel.clone(),
         );
         let genai_tools = to_genai_tools(&self.registry, &self.tools);
-        // L-actuation (1, chunk 98): last-recorded post-write diagnostics
-        // ride the fix-turn brief as a read-only advisory. Empty (LSP off)
-        // leaves the brief byte-identical — every pre-98 matrix preserved.
-        // Reviewers stay tool-free and diagnostics-free (F3b posture stands).
+        // L-actuation: last-recorded post-write diagnostics ride the fix-turn brief as a read-only
+        // advisory. Empty (LSP off) leaves the brief byte-identical — every prior matrix
+        // preserved. Reviewers stay tool-free and diagnostics-free (F3b posture stands).
         let brief = match render_lsp_section(&self.registry.lsp_diagnostics().await) {
             Some(section) => format!("{}\n\n{section}", ctx.brief),
             None => ctx.brief.clone(),
@@ -2443,7 +2369,7 @@ impl polymorph_delegate::TurnRunner for AgenticFixRunner {
         let mut feeds = 0u32;
         let mut dropped = 0u32;
         let mut outcomes: Vec<serde_json::Value> = Vec::new();
-        // Verification bonus rounds spent past `max_tool_rounds` (docket #7).
+        // Verification bonus rounds spent past `max_tool_rounds`.
         let mut bonus_rounds = 0u32;
         let mut granted_mutation_bonus = false;
         let mut mutated_files = false;
@@ -2457,10 +2383,10 @@ impl polymorph_delegate::TurnRunner for AgenticFixRunner {
         // mutated, or verified a mutation no command had run after yet.
         let mut last_round_progress = false;
         let mut unverified_mutation = false;
-        // Docket #1: pre-mutation snapshots (first touch per file).
+        // Pre-mutation snapshots (first touch per file).
         let mut snapshot_seen: Vec<String> = Vec::new();
         let mut pre_mutation: Vec<serde_json::Value> = Vec::new();
-        // Docket #9: every fed tool result, for history compaction.
+        // Every fed tool result, for history compaction.
         let mut fed: Vec<FedResult> = Vec::new();
         let keep_files = self.registry.output_spill().keep_files;
         // Command change detection: once a walk overflows the cap, the
@@ -2575,9 +2501,8 @@ impl polymorph_delegate::TurnRunner for AgenticFixRunner {
                 }
                 if !changes.is_empty() {
                     extras.extend(crate::command_changes::ledger_fields(changes));
-                    // Docket #3 for command-made changes: the server sees
-                    // the changed files too (bounded per command; the rest
-                    // are named unconsulted, never shown stale).
+                    // For command-made changes: the server sees the changed files too (bounded per
+                    // command; the rest are named unconsulted, never shown stale).
                     let mut consult: Vec<String> = Vec::new();
                     let mut unconsulted: Vec<String> = Vec::new();
                     for c in changes {
@@ -2597,10 +2522,9 @@ impl polymorph_delegate::TurnRunner for AgenticFixRunner {
                         extras.insert("lsp_unconsulted".into(), unconsulted.into());
                     }
                 }
-                // Docket #8: record the drive's state after every mutation
-                // (any outcome — a failed edit may have landed partly), track
-                // what a command changed, and adopt the command's bytes in
-                // tracked files.
+                // Record the drive's state after every mutation (any outcome — a failed edit may
+                // have landed partly), track what a command changed, and adopt the command's bytes
+                // in tracked files.
                 if let (Some(ledger), true) = (&self.restore, offered) {
                     if is_mut {
                         ledger.after_mutation(&ctx.workdir, &tc.fn_name, &tc.fn_arguments);
@@ -2656,8 +2580,7 @@ impl polymorph_delegate::TurnRunner for AgenticFixRunner {
                     }
                     last_cmd_sig = Some(sig);
                 }
-                // Array order is call order (docket #6: the evidence block
-                // reads mutation-after-last-command from it).
+                // Array order is call order.
                 let mut entry = serde_json::json!({
                     "tool": tc.fn_name.as_str(),
                     "outcome": outcome,
@@ -2699,8 +2622,8 @@ impl polymorph_delegate::TurnRunner for AgenticFixRunner {
                 messages.push(ChatMessage::from(resp));
             }
             last_round_progress = round_progress;
-            // Docket #9: older results past the budget become stubs before
-            // the history is re-sent; the latest rounds stay intact.
+            // Older results past the budget become stubs before the history is re-sent; the latest
+            // rounds stay intact.
             let compacted = compact_tool_history(
                 &mut messages,
                 &mut fed,
@@ -2719,10 +2642,10 @@ impl polymorph_delegate::TurnRunner for AgenticFixRunner {
             }
         }
 
-        // Chunk 154: Final Answer Synthesis
-        // When intermediate or terminating turns produced only tool calls with empty text,
-        // force a final model synthesis turn with zero tools so the operator receives a
-        // comprehensive textual answer instead of an empty reply or fallback placeholder.
+        // Final Answer Synthesis When intermediate or terminating turns produced only tool calls
+        // with empty text, force a final model synthesis turn with zero tools so the operator
+        // receives a comprehensive textual answer instead of an empty reply or fallback
+        // placeholder.
         if last_text.trim().is_empty() && total_calls > 0 {
             messages.push(ChatMessage::user(
                 "Based on the tool results above, provide your final comprehensive response to the operator."
@@ -2752,17 +2675,15 @@ impl polymorph_delegate::TurnRunner for AgenticFixRunner {
         // J1 Stop hook: the tool loop terminated (observation only — the
         // report below is unchanged, handlers cannot alter the outcome).
         self.registry.fire_stop(summary.clone()).await;
-        // L-actuation (2, chunk 99): warn-first merge signal. Record the
-        // last-recorded diagnostic count on the outcome; warn past a
-        // non-zero remainder, never deny (deny is queued behind data —
-        // the merge arm below stays unconditional).
+        // L-actuation: warn-first merge signal. Record the last-recorded diagnostic count on the
+        // outcome; warn past a non-zero remainder, never deny (deny is queued behind data — the
+        // merge arm below stays unconditional).
         let lsp_findings = lsp_findings_count(&self.registry.lsp_diagnostics().await);
         if lsp_findings > 0 {
             tracing::warn!(lsp_findings, "agentic fix completed with LSP diagnostics");
         }
-        // S advisor (chunk 126): one watching turn over the finished
-        // trace (clean context, never the conversation). Failure absorbs
-        // to warn + empty (99 posture — a sick watcher never holds
+        // S advisor: one watching turn over the finished trace (clean context, never the
+        // conversation). Failure absorbs to warn + empty (99 posture — a sick watcher never holds
         // fixes hostage); notes ride data + logs as their own surface.
         let advisor_notes: Vec<AdvisorNote> = match &self.advisor {
             Some(advisor) => match advisor
@@ -2780,13 +2701,10 @@ impl polymorph_delegate::TurnRunner for AgenticFixRunner {
             },
             None => Vec::new(),
         };
-        // Docket #6: the turn's distinct write/edit targets, alongside the
-        // `mutated_files` bool (kept as-is for the chunk-110 consumers).
-        // Docket #1 reads both, plus `pre_mutation_snapshots`, to attach
-        // peripheral files to the reviewed text.
+        // The turn's distinct write/edit targets, alongside the `mutated_files` bool. reads both,
+        // plus `pre_mutation_snapshots`, to attach peripheral files to the reviewed text.
         let mutated_paths = ledger_mutated_paths(&outcomes);
-        // Docket #3: latest LSP snapshot per file this turn mutated (the
-        // count above stays pool-wide for the chunk-99 consumers).
+        // Latest LSP snapshot per file this turn mutated.
         let lsp_diagnostics = lsp_mutated_snapshots(
             &self.registry.lsp_diagnostic_details().await,
             &ctx.workdir,
@@ -2804,11 +2722,10 @@ impl polymorph_delegate::TurnRunner for AgenticFixRunner {
     }
 }
 
-/// Per-turn merge-back config for loop worktrees (chunk 44, Epic G).
-/// When `BusExecutor.merge` is `Some`, each `execute()` spawns a kept
-/// Branch worktree from `repo` under `parent`, then squash-merges it back
-/// before returning the artifact text. When `None` (default) the executor
-/// spawns `workdir` directly (pre-44 behavior, unchanged).
+/// Per-turn merge-back config for loop worktrees. When `BusExecutor.merge` is `Some`, each
+/// `execute` spawns a kept Branch worktree from `repo` under `parent`, then squash-merges it back
+/// before returning the artifact text. When `None` (default) the executor spawns `workdir` directly
+/// (prior behavior, unchanged).
 ///
 /// Explicit opt-in, never auto-detect: the caller decides whether the case
 /// dir is a repo (bench `materialize_repo`) and passes both paths. The
@@ -2835,58 +2752,45 @@ pub struct BusExecutor {
     /// runner enforces the same allowlist + Gate at call time). Empty =
     /// text-only (pre-F3b behavior, still the default).
     pub tools: Vec<String>,
-    /// Bench cost ledger (F6): per-fix-turn `tool_outcomes` arrays appended
-    /// from child data (AgenticFixRunner records them since chunk 34).
-    /// Text-only children record none. Shared so the bench runner reads
-    /// costs without touching loop semantics.
+    /// Bench cost ledger (F6): per-fix-turn `tool_outcomes` arrays appended from child data. Text-
+    /// only children record none. Shared so the bench runner reads costs without touching loop
+    /// semantics.
     pub tool_outcomes: Arc<std::sync::Mutex<Vec<serde_json::Value>>>,
-    /// Loop-worktree merge mode (chunk 44): `None` = spawn `workdir`
-    /// directly (all pre-44 callers); `Some` = per-call kept Branch +
-    /// squash-merge back into `repo` (bench loop arm behind
-    /// `--loop-worktree`; `review run` and `eval-ab` stay `None`).
+    /// Loop-worktree merge mode: `None` = spawn `workdir` directly (all prior callers); `Some` =
+    /// per-call kept Branch + squash-merge back into `repo` (bench loop arm behind `--loop-
+    /// worktree`; `review run` and `eval-ab` stay `None`).
     pub merge: Option<LoopMergeConfig>,
-    /// Artifact file for the empty-text fallback (chunk 110): when the
-    /// child returns blank text, the executor best-effort re-reads this
-    /// file (InPlace workdirs only) so round-2 grades file work instead
-    /// of an empty string. Mirrors `BusReviewer.artifact_path`. Set only
-    /// in `review run` (bench/eval-ab/plan-drive keep `None` — apparatus
-    /// stability); `None` = pre-110 behavior, unchanged.
+    /// Artifact file for the empty-text fallback: when the child returns blank text, the executor
+    /// best-effort re-reads this file (InPlace workdirs only) so round-2 grades file work instead
+    /// of an empty string. Mirrors `BusReviewer.artifact_path`. Set only in `review run`
+    /// (bench/eval-ab/plan-drive keep `None` — apparatus stability); `None` = prior behavior,
+    /// unchanged.
     pub artifact_path: Option<PathBuf>,
-    /// Peripheral-file attachment (docket #1): `Some` appends every file
-    /// the drive's fix turns mutated other than `artifact_path` (current
-    /// disk content, budgeted) to the scored text under
-    /// [`PERIPHERAL_HEADER`], so the reviewer grades them too. Set only in
-    /// `review run`/`drive` (bench/eval-ab/plan-drive keep `None` —
-    /// apparatus stability); `None`, or no peripheral mutation, leaves the
-    /// scored text byte-identical. One tracker per drive. Content rides
-    /// the prompts only, never logs (C4 posture).
+    /// Peripheral-file attachment: `Some` appends every file the drive's fix turns mutated other
+    /// than `artifact_path` (current disk content, budgeted) to the scored text under
+    /// [`PERIPHERAL_HEADER`], so the reviewer grades them too. Set only in `review run`/`drive`
+    /// (bench/eval-ab/plan-drive keep `None` — apparatus stability); `None`, or no peripheral
+    /// mutation, leaves the scored text byte-identical. One tracker per drive. Content rides the
+    /// prompts only, never logs (C4 posture).
     pub peripherals: Option<PeripheralFiles>,
-    /// Multi-file / worktree-diff review scope (docket #5): `Some` scores
-    /// the set re-read from disk after every fix turn (InPlace workdirs
-    /// only; a `--repo` drive is in place on its worktree) instead of
-    /// `artifact_path` or the child's text, and drops set members from
-    /// the peripheral section. A set that cannot be read (git gone) fails
-    /// the turn loudly. Set
-    /// only by `review run`/`drive` with `--artifact-files`/`--diff`;
-    /// `None` = single-artifact behavior, unchanged.
+    /// Multi-file / worktree-diff review scope: `Some` scores the set re-read from disk after every
+    /// fix turn (InPlace workdirs only; a `--repo` drive is in place on its worktree) instead of
+    /// `artifact_path` or the child's text, and drops set members from the peripheral section. A
+    /// set that cannot be read (git gone) fails the turn loudly. Set only by `review run`/`drive`
+    /// with `--artifact-files`/`--diff`; `None` = single-artifact behavior, unchanged.
     pub artifact_set: Option<crate::ArtifactSet>,
 }
 
-/// Best-effort artifact-file read for the empty-text fallback (chunk
-/// 110): `Some(content)` only when the executor workdir is `InPlace`
-/// (relative paths resolve against it; absolute pass through) and the
-/// file reads as UTF-8. Worktree specs (auto-removed per-child trees,
-/// merge-mode branches owning state via git) and read failures yield
-/// `None` — the caller keeps the child text and warns. Pure (no IO
-/// beyond the read itself) for unit tests; never spawns.
-/// Harness-observed evidence appended to the scored fix text (chunk 165).
-/// The reviewer never sees the tree, so gradeable file facts ride along:
-/// per-finding-file existence + line counts, plus the turn's tool ledger
-/// and the mutated files' LSP diagnostics (docket #3: server messages,
-/// bounded single lines — the chunk-98 fix-brief feed, now graded too).
-/// Static facts only — never file content (C4 secrets posture). Pure IO,
-/// best-effort throughout (unresolvable paths are named MISSING-or-SKIP,
-/// never errors). Capped (20 files) with the omission named.
+/// Best-effort artifact-file read for the empty-text fallback: `Some(content)` only when the
+/// executor workdir is `InPlace` (relative paths resolve against it; absolute pass through) and the
+/// file reads as UTF-8. Worktree specs (auto-removed per-child trees, merge-mode branches owning
+/// state via git) and read failures yield `None` — the caller keeps the child text and warns. Pure
+/// (no IO beyond the read itself) for unit tests; never spawns. Harness-observed evidence appended
+/// to the scored fix text. The reviewer never sees the tree, so gradeable file facts ride along:
+/// per-finding-file existence + line counts, plus the turn's tool ledger and the mutated files' LSP
+/// diagnostics. Static facts only — never file content (C4 secrets posture). Pure IO, best-effort
+/// throughout (unresolvable paths are named MISSING-or-SKIP, never errors). Capped (20 files) with
+/// the omission named.
 fn render_harness_evidence(
     workdir: &polymorph_delegate::WorkdirSpec,
     findings: &[polymorph_core::Finding],
@@ -2920,13 +2824,12 @@ fn render_harness_evidence(
     } else {
         out.push_str("- tools: none recorded this turn\n");
     }
-    // LSP snapshots of the mutated files (docket #3; empty without one).
+    // LSP snapshots of the mutated files.
     out.push_str(&render_lsp_evidence(data));
-    // Verify-gate commands (docket #2; empty when the gate is off).
+    // Verify-gate commands.
     out.push_str(&render_verify_evidence(data));
-    // Finding files: existence + size on disk right now. Verify-gate
-    // findings name a command, and an empty-diff CREATE seed (docket #5)
-    // a changeset, not a file — nothing to stat.
+    // Finding files: existence + size on disk right now. Verify-gate findings name a command, and
+    // an empty-diff CREATE seed a changeset, not a file — nothing to stat.
     let base: Option<std::path::PathBuf> = match workdir {
         polymorph_delegate::WorkdirSpec::InPlace(dir) => Some(dir.clone()),
         _ => None,
@@ -2963,13 +2866,11 @@ fn render_harness_evidence(
     out
 }
 
-/// Command + mutation ledger lines for the evidence block (docket #6):
-/// every bash/exec call in call order with its exit code (nonzero flagged),
-/// whether a write/edit landed AFTER the last command that ran, and the
-/// turn's mutated files. Empty when the turn neither ran a command nor
-/// mutated (read-only and tool-free turns render exactly as pre-#6).
-/// Capped (commands keep the LAST 12, files the first 20) with omissions
-/// named; `#N` is the call's 1-based position in the turn's ledger.
+/// Command + mutation ledger lines for the evidence block: every bash/exec call in call order with
+/// its exit code (nonzero flagged), whether a write/edit landed AFTER the last command that ran,
+/// and the turn's mutated files. Empty when the turn neither ran a command nor mutated (read-only
+/// and tool-free turns render exactly as pre-#6). Capped (commands keep the LAST 12, files the
+/// first 20) with omissions named; `#N` is the call's 1-based position in the turn's ledger.
 ///
 /// Files a command itself changed (harness-detected `changed_paths`) are
 /// mutations that land at the END of that command: the command is named
@@ -3153,19 +3054,17 @@ fn command_change_marker(e: &serde_json::Value) -> String {
     out
 }
 
-/// Peripheral-file attachment header (docket #1, traps #63). Also the
-/// marker [`render_review_brief`] and [`create_job_note`] look for, so a
-/// review without peripheral files renders byte-identically to before.
+/// Peripheral-file attachment header. Also the marker [`render_review_brief`] and
+/// [`create_job_note`] look for, so a review without peripheral files renders byte-identically to
+/// before.
 pub const PERIPHERAL_HEADER: &str = "PERIPHERAL FILES MUTATED THIS DRIVE";
 
-/// Attachment caps (docket #1): the brief is a model prompt, not a tree
-/// dump. Files past [`ATTACH_MAX_FILES`] are listed by name only; each
-/// file shows at most [`ATTACH_FILE_MAX_ROWS`] rows (lines, or diff rows
-/// for large files with a pre-drive snapshot); all files together share
-/// [`ATTACH_BUDGET_ROWS`] rows and [`ATTACH_BUDGET_CHARS`] chars (UTF-8
-/// bytes, so non-ASCII text counts conservatively). A row that does not
-/// fit whole is never cut — rendering stops at the row (or hunk)
-/// boundary and the file's status line names what was omitted.
+/// Attachment caps: the brief is a model prompt, not a tree dump. Files past [`ATTACH_MAX_FILES`]
+/// are listed by name only; each file shows at most [`ATTACH_FILE_MAX_ROWS`] rows (lines, or diff
+/// rows for large files with a pre-drive snapshot); all files together share [`ATTACH_BUDGET_ROWS`]
+/// rows and [`ATTACH_BUDGET_CHARS`] chars (UTF-8 bytes, so non-ASCII text counts conservatively). A
+/// row that does not fit whole is never cut — rendering stops at the row (or hunk) boundary and the
+/// file's status line names what was omitted.
 pub const ATTACH_MAX_FILES: usize = 20;
 pub const ATTACH_FILE_MAX_ROWS: usize = 400;
 pub const ATTACH_BUDGET_ROWS: usize = 1_500;
@@ -3178,7 +3077,7 @@ const ATTACH_DIFF_CONTEXT: usize = 3;
 /// fall back to full content).
 const MAX_BASELINE_BYTES: usize = 16 * 1024 * 1024;
 
-/// Disk state of one attached file after the fix turn (docket #1).
+/// Disk state of one attached file after the fix turn.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AttachedState {
     /// UTF-8 text (BOM dropped).
@@ -3259,13 +3158,11 @@ impl AttachBudget {
     }
 }
 
-/// Render files into a brief section headed `header` (docket #1; a
-/// multi-artifact review mode can reuse it with its own header). Pure:
-/// the caller reads disk ([`read_attached`]). Small files render in full
-/// with `N | ` line numbers; files over [`ATTACH_FILE_MAX_ROWS`] lines
-/// render as a numbered diff when a pre-drive snapshot exists, else their
-/// first rows; deleted, binary, oversized, and unreadable files are named
-/// with their status. Every omission is stated on the file's status line.
+/// Render files into a brief section headed `header`. Pure: the caller reads disk
+/// ([`read_attached`]). Small files render in full with `N | ` line numbers; files over
+/// [`ATTACH_FILE_MAX_ROWS`] lines render as a numbered diff when a pre-drive snapshot exists, else
+/// their first rows; deleted, binary, oversized, and unreadable files are named with their status.
+/// Every omission is stated on the file's status line.
 pub fn render_file_attachments(header: &str, files: &[AttachedFile]) -> String {
     let mut out = format!(
         "\n\n{header} (harness-read from disk after the fix turn; `N | ` prefixes are 1-based file line numbers, not file content):\n"
@@ -3274,10 +3171,9 @@ pub fn render_file_attachments(header: &str, files: &[AttachedFile]) -> String {
     out
 }
 
-/// The section-specific words of an attachment rendering (docket #5): the
-/// peripheral section and the multi-file artifact set share every row,
-/// budget and omission rule, but name their baseline, created and absent
-/// files, and the post-change line numbers, differently.
+/// The section-specific words of an attachment rendering: the peripheral section and the multi-file
+/// artifact set share every row, budget and omission rule, but name their baseline, created and
+/// absent files, and the post-change line numbers, differently.
 pub(crate) struct AttachWords<'a> {
     /// What a baseline is: `DIFF vs {baseline}`, `UNCHANGED vs {baseline}`.
     pub baseline: &'a str,
@@ -3291,7 +3187,7 @@ pub(crate) struct AttachWords<'a> {
     pub now: &'a str,
 }
 
-/// Docket #1's wording, byte for byte.
+/// 's wording, byte for byte.
 const PERIPHERAL_WORDS: AttachWords<'static> = AttachWords {
     baseline: "its pre-drive snapshot",
     no_baseline: "no pre-drive snapshot to diff",
@@ -3425,7 +3321,7 @@ fn render_attached_text(
 
 /// Numbered unified diff of a large file against its baseline (pre-drive
 /// snapshot, or the diff base's version — `words`): `@@` hunks, rows
-/// `N   | ` (context) / `N + | ` (added, current line N) / `  - | `
+/// `N | ` (context) / `N + | ` (added, current line N) / ` - | `
 /// (removed). Cut only at row boundaries, cut point named.
 fn render_attached_diff(
     path: &str,
@@ -3507,13 +3403,12 @@ fn render_attached_diff(
     format!("--- {path}: {status}\n{rows}")
 }
 
-/// Drive-scoped peripheral-file tracker for [`BusExecutor`] (docket #1):
-/// every file a fix turn mutated other than the artifact file, deduped by
-/// [`attach_identity`] (relative / `./` / absolute / Windows case and
-/// separators collapse; first spelling kept, so an untouched file renders
-/// byte-identically round to round). Files stay tracked for the rest of
-/// the drive: a broken file the next turn leaves alone must stay in front
-/// of the reviewer, or the round after a finding on it passes blind.
+/// Drive-scoped peripheral-file tracker for [`BusExecutor`]: every file a fix turn mutated other
+/// than the artifact file, deduped by [`attach_identity`] (relative / `./` / absolute / Windows
+/// case and separators collapse; first spelling kept, so an untouched file renders byte-identically
+/// round to round). Files stay tracked for the rest of the drive: a broken file the next turn
+/// leaves alone must stay in front of the reviewer, or the round after a finding on it passes
+/// blind.
 #[derive(Debug, Default)]
 pub struct PeripheralFiles {
     state: std::sync::Mutex<PeripheralState>,
@@ -3649,8 +3544,8 @@ impl PeripheralFiles {
     }
 }
 
-/// Split reviewed text at the peripheral section (docket #1): the primary
-/// artifact text, and whether peripheral files are attached.
+/// Split reviewed text at the peripheral section: the primary artifact text, and whether peripheral
+/// files are attached.
 fn split_peripheral(artifact: &str) -> (&str, bool) {
     let marker = format!("\n\n{PERIPHERAL_HEADER} (");
     match artifact.find(&marker) {
@@ -3675,9 +3570,8 @@ fn artifact_from_file(workdir: &polymorph_delegate::WorkdirSpec, path: &Path) ->
 #[async_trait]
 impl Executor for BusExecutor {
     async fn execute(&self, input: ExecutorInput) -> anyhow::Result<String> {
-        // Loop-worktree mode (chunk 44): per-call kept Branch worktree from
-        // `repo` under `parent`, merged back on Completed. Default (`None`)
-        // spawns `workdir` directly — all pre-44 behavior unchanged.
+        // Loop-worktree mode: per-call kept Branch worktree from `repo` under `parent`, merged back
+        // on Completed. Default (`None`) spawns `workdir` directly — all prior behavior unchanged.
         let workdir = match &self.merge {
             Some(cfg) => polymorph_delegate::WorkdirSpec::Worktree {
                 repo: cfg.repo.clone(),
@@ -3707,11 +3601,9 @@ impl Executor for BusExecutor {
                 log.extend(arr.iter().cloned());
             }
         }
-        // Merge-back (chunk 44, chunk-43 single-arm precedent): Completed +
-        // kept merges before scoring; trouble warns and scores as-is (never
-        // rewrites the Completed result). Non-Completed discards best-effort
-        // then bails the existing error (failed trees are evidence, never
-        // merged — chunk-42 D2).
+        // Merge-back: Completed + kept merges before scoring; trouble warns and scores as-is (never
+        // rewrites the Completed result). Non-Completed discards best-effort then bails the
+        // existing error.
         if let Some(cfg) = &self.merge {
             match &outcome.result.status {
                 polymorph_delegate::FinishStatus::Completed => {
@@ -3759,16 +3651,13 @@ impl Executor for BusExecutor {
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string())
                     .ok_or_else(|| anyhow::anyhow!("fix child returned no artifact"))?;
-                // Empty-text fallback (chunk 110): the child edited the
-                // file but returned blank text — grade the file work, not
-                // the empty string (the 109 4× empty-artifact pattern).
-                // File-first, always: the child's closing chat text is a
-                // summary at best, and at worst raw tool-call markup
-                // (Frontier SSIM drive, round 3: the reviewer graded DSML
-                // instead of the file on disk) — or, worse still, code that
-                // was never written (drive false-pass, 2026-10-20). When an
-                // artifact path is known, the file decides; the text is used
-                // only when the file cannot be read.
+                // Empty-text fallback: the child edited the file but returned blank text — grade
+                // the file work, not the empty string (the 109 4× empty-artifact pattern). File-
+                // first, always: the child's closing chat text is a summary at best, and at worst
+                // raw tool-call markup (Frontier SSIM drive, round 3: the reviewer graded DSML
+                // instead of the file on disk) — or, worse still, code that was never written
+                // (drive false-pass, 2026-10-20). When an artifact path is known, the file decides;
+                // the text is used only when the file cannot be read.
                 let mutated = outcome
                     .result
                     .data
@@ -3777,8 +3666,8 @@ impl Executor for BusExecutor {
                     .unwrap_or(false);
                 let mut rendered_set: Option<crate::RenderedSet> = None;
                 let mut scored = if let Some(set) = &self.artifact_set {
-                    // Docket #5: the set is the artifact — always graded
-                    // from disk (the child's text is a summary at best).
+                    // The set is the artifact — always graded from disk (the child's text is a
+                    // summary at best).
                     let polymorph_delegate::WorkdirSpec::InPlace(dir) = &self.workdir else {
                         anyhow::bail!("artifact set review needs an in-place workdir");
                     };
@@ -3820,10 +3709,9 @@ impl Executor for BusExecutor {
                 } else {
                     text
                 };
-                // Peripheral files (docket #1, traps #63): the reviewer
-                // otherwise sees only the artifact file and passes drives
-                // whose other edited files are broken. Read from disk now,
-                // after the whole turn (and any verify commands).
+                // Peripheral files: the reviewer otherwise sees only the artifact file and passes
+                // drives whose other edited files are broken. Read from disk now, after the whole
+                // turn (and any verify commands).
                 if let Some(peripherals) = &self.peripherals {
                     let mut files = peripherals.observe(
                         &self.workdir,
@@ -3838,12 +3726,10 @@ impl Executor for BusExecutor {
                         scored.push_str(&render_file_attachments(PERIPHERAL_HEADER, &files));
                     }
                 }
-                // Harness evidence (chunk 165): the reviewer never sees
-                // the tree, so gradeable file facts ride the scored text
-                // — observed by the harness, never model claims. Skipped
-                // when there is nothing to prove (empty findings keeps
-                // every pre-165 matrix byte-identical) — unless the verify
-                // gate ran (docket #2): its results always reach review.
+                // Harness evidence: the reviewer never sees the tree, so gradeable file facts ride
+                // the scored text — observed by the harness, never model claims. Skipped when there
+                // is nothing to prove (empty findings keeps every prior matrix byte-identical) —
+                // unless the verify gate ran: its results always reach review.
                 if !input.findings.is_empty() || outcome.result.data.get("verify").is_some() {
                     scored.push_str(&render_harness_evidence(
                         &self.workdir,
@@ -3912,8 +3798,7 @@ pub fn pack_candidates(
     out
 }
 
-/// Embedded default pack for `path` (Epic A6 install-safe fallback), or
-/// `None` when the path names no built-in pack.
+/// Embedded default pack for `path`, or `None` when the path names no built-in pack.
 ///
 /// A `cargo install`ed binary ships without a checkout, so every on-disk
 /// candidate in [`pack_candidates`] misses. The packs are compiled into
@@ -3952,11 +3837,10 @@ pub fn load_pack(path: &Path) -> anyhow::Result<String> {
             return Ok(text);
         }
     }
-    // Install-safe fallback (Epic A6): a `cargo install`ed binary has no
-    // checkout, so every candidate above misses. Disk still wins wherever it
-    // exists; the compiled-in packs catch the rest. A blank embedded pack is
-    // no better than a blank file, so it falls through to the bail below —
-    // whose text is unchanged.
+    // Install-safe fallback: a `cargo install`ed binary has no checkout, so every candidate above
+    // misses. Disk still wins wherever it exists; the compiled-in packs catch the rest. A blank
+    // embedded pack is no better than a blank file, so it falls through to the bail below — whose
+    // text is unchanged.
     if let Some(text) = embedded_fallback(path).filter(|text| !text.trim().is_empty()) {
         return Ok(text.to_string());
     }
@@ -4132,11 +4016,10 @@ mod tests {
         assert_eq!(v.findings[0].issue, "wired bug");
     }
 
-    /// Live-path Survivor (chunk 70 top-up): wiremock SSE reviewer repeating
-    /// the SAME Fail verdict through the REAL parse/track chain, fixer
-    /// returning the artifact unchanged — asserts `Survivor`@3 with zero
-    /// scripted verdicts. Everything except live-model wording is exercised:
-    /// stream → verdict_text → strict parse → FindingId → tracker.
+    /// Live-path Survivor: wiremock SSE reviewer repeating the SAME Fail verdict through the REAL
+    /// parse/track chain, fixer returning the artifact unchanged — asserts `Survivor`@3 with zero
+    /// scripted verdicts. Everything except live-model wording is exercised: stream → verdict_text
+    /// → strict parse → FindingId → tracker.
     #[tokio::test]
     async fn live_path_survivor_fires_at_three_strikes() {
         use wiremock::matchers::method;
@@ -4378,8 +4261,8 @@ mod tests {
             .is_err());
     }
 
-    /// Empty-text fallback (chunk 110): a child that edits the file but
-    /// returns blank text grades the FILE work, not the empty string.
+    /// Empty-text fallback: a child that edits the file but returns blank text grades the FILE
+    /// work, not the empty string.
     #[tokio::test]
     async fn bus_executor_falls_back_to_file_on_empty_text() {
         let dir = tempfile::tempdir().unwrap();
@@ -4557,8 +4440,8 @@ mod tests {
         }]
     }
 
-    /// Docket #6 invariant: turns that neither ran a command nor mutated
-    /// render byte-identically to pre-#6 (tool-free and read-only ledgers).
+    /// Invariant: turns that neither ran a command nor mutated render byte-identically to pre-#6
+    /// (tool-free and read-only ledgers).
     #[test]
     fn harness_evidence_without_commands_or_mutations_is_unchanged() {
         let dir = tempfile::tempdir().unwrap();
@@ -4630,11 +4513,11 @@ mod tests {
             &wd,
             &one_finding("ghost.py"),
             &serde_json::json!({ "tool_outcomes": [
-                {"tool": "edit", "outcome": "ok", "paths": ["a.py"]},
-                {"tool": "exec", "outcome": "ok", "cmd": "make check"},
-                // All-noop edit after the command: nothing changed.
-                {"tool": "edit", "outcome": "ok", "paths": []},
-            ]}),
+                           {"tool": "edit", "outcome": "ok", "paths": ["a.py"]},
+                           {"tool": "exec", "outcome": "ok", "cmd": "make check"},
+            // All-noop edit after the command: nothing changed.
+                           {"tool": "edit", "outcome": "ok", "paths": []},
+                       ]}),
         );
         assert!(text.contains("  #2 exit unknown: make check\n"), "{text}");
         assert!(
@@ -4986,8 +4869,8 @@ mod tests {
 
     #[test]
     fn review_brief_carries_verdict_discipline() {
-        // Chunk 168: every brief orders findings to cite their evidence or
-        // be dropped — the VkDevice hallucination cited a type it never saw.
+        // Every brief orders findings to cite their evidence or be dropped — the VkDevice
+        // hallucination cited a type it never saw.
         let brief = render_review_brief(
             &ReviewerInput {
                 goal: "g".into(),
@@ -5003,9 +4886,8 @@ mod tests {
 
     #[test]
     fn create_job_note_fires_only_for_missing_file_with_empty_artifact() {
-        // Chunk 168: the 9 "File MISSING" findings came from reviewing ""
-        // without knowing the file was never written (CREATE jobs map
-        // NotFound to empty). The note fires only in that gap.
+        // The 9 "File MISSING" findings came from reviewing "" without knowing the file was never
+        // written (CREATE jobs map NotFound to empty). The note fires only in that gap.
         let dir = tempfile::tempdir().unwrap();
         let inplace = polymorph_delegate::WorkdirSpec::InPlace(dir.path().to_path_buf());
         let missing = std::path::Path::new("ghost-target.rs");
@@ -5026,8 +4908,8 @@ mod tests {
 
     #[test]
     fn fix_brief_carries_criteria_verbatim() {
-        // Regression (Frontier traps #34): the brief carried GOAL and the
-        // findings but never the criteria the reviewer grades against.
+        // Regression: the brief carried GOAL and the findings but never the criteria the reviewer
+        // grades against.
         let criteria = "Signature: f(int) -> int
 Verify:
   gradlew test --tests a.BTest";
@@ -5096,8 +4978,7 @@ v1
 
     #[test]
     fn lsp_section_none_when_empty() {
-        // Chunk 98: LSP off (or clean consult) must leave the brief
-        // byte-identical — never an empty header.
+        // LSP off (or clean consult) must leave the brief byte-identical — never an empty header.
         assert!(render_lsp_section(&std::collections::BTreeMap::new()).is_none());
         let mut all_empty = std::collections::BTreeMap::new();
         all_empty.insert("file:///a.rs".to_string(), Vec::new());
@@ -5152,8 +5033,8 @@ v1
 
     #[tokio::test]
     async fn agentic_runner_enriches_brief_with_seeded_diagnostics() {
-        // Chunk 98 plumbing: seeded pool diagnostics reach the model's
-        // first user message as an advisory; empty pool passes through.
+        // Plumbing: seeded pool diagnostics reach the model's first user message as an advisory;
+        // empty pool passes through.
         use std::collections::BTreeMap;
         struct CaptureTurn {
             seen: std::sync::Mutex<Vec<Vec<genai::chat::ChatMessage>>>,
@@ -5219,7 +5100,7 @@ v1
 
     #[test]
     fn lsp_findings_count_sums_messages() {
-        // Chunk 99: 0 when off/clean; plain sum otherwise.
+        // 0 when off/clean; plain sum otherwise.
         assert_eq!(lsp_findings_count(&std::collections::BTreeMap::new()), 0);
         let mut m = std::collections::BTreeMap::new();
         m.insert("file:///a.rs".to_string(), Vec::new());
@@ -5233,9 +5114,8 @@ v1
 
     #[tokio::test]
     async fn agentic_runner_records_lsp_findings_on_outcome() {
-        // Chunk 99: warn-first signal rides the outcome data — 0 when the
-        // pool is empty, N when seeded. Artifact text is unchanged either
-        // way (advisory only, never a deny).
+        // Warn-first signal rides the outcome data — 0 when the pool is empty, N when seeded.
+        // Artifact text is unchanged either way (advisory only, never a deny).
         async fn run_with_seed(
             seed: std::collections::BTreeMap<String, Vec<String>>,
         ) -> serde_json::Value {
@@ -5476,9 +5356,8 @@ v1
 
     #[test]
     fn genai_tool_definitions_carry_mcp_schemas() {
-        // Chunk 54: enrolled server tools flow to the model through the
-        // same `to_genai_tools` call — instance schemas first, V1 static
-        // second, unknowns still skipped.
+        // Enrolled server tools flow to the model through the same `to_genai_tools` call — instance
+        // schemas first, V1 static second, unknowns still skipped.
         use polymorph_tools::mcp::{enroll_mcp_tools, McpToolInfo};
         let mut r = polymorph_tools::registry::v1_registry();
         enroll_mcp_tools(
@@ -5507,9 +5386,8 @@ v1
 
     #[test]
     fn lsp_tools_opt_in_through_fixer_allowlist() {
-        // Chunk 100 (3A): no binding change — the fixer wields the LSP
-        // tools exactly when the allowlist names them (reviewers keep
-        // `tools = []`, so they never see these). Schemas ride along.
+        // (3A): no binding change — the fixer wields the LSP tools exactly when the allowlist names
+        // them (reviewers keep `tools = []`, so they never see these). Schemas ride along.
         let r = polymorph_tools::registry::v1_registry();
         let tools = to_genai_tools(&r, &["lsp_hover".to_string(), "lsp_references".to_string()]);
         assert_eq!(tools.len(), 2);
@@ -5523,10 +5401,9 @@ v1
 
     #[test]
     fn minimal_preamble_keeps_intro_and_ban_only() {
-        // Chunk 45 ablation: the minimal variant must keep the tool intro
-        // (otherwise the run measures tools-off, not preamble) + the raw-only
-        // ban (the hypothesized carrier) — and NOTHING else. Absence asserts
-        // keep it from silently regrowing the dropped teaching.
+        // Ablation: the minimal variant must keep the tool intro (otherwise the run measures tools-
+        // off, not preamble) + the raw-only ban (the hypothesized carrier) — and NOTHING else.
+        // Absence asserts keep it from silently regrowing the dropped teaching.
         assert!(TOOLS_PREAMBLE_MIN.contains("You have tools"), "tool intro");
         assert!(
             TOOLS_PREAMBLE_MIN.contains("raw patch text ONLY"),
@@ -5549,10 +5426,9 @@ v1
 
     #[test]
     fn tools_preamble_hardens_patch_wellformedness() {
-        // Chunk 39 (parse-dominance: 10/18 edit-parse in c38): the in-loop
-        // fixer sees act.md + this preamble, never the full edit.md grammar.
-        // Pin the teaching that must survive future edits — raw-only,
-        // header shape, op shape, sigil, and the failure actions.
+        // (parse-dominance: 10/18 edit-parse in ): the in-loop fixer sees act.md + this
+        // preamble, never the full edit.md grammar. Pin the teaching that must survive future edits
+        // — raw-only, header shape, op shape, sigil, and the failure actions.
         assert!(
             TOOLS_PREAMBLE.contains("raw patch text ONLY"),
             "fence/prose ban"
@@ -5569,11 +5445,11 @@ v1
 
     #[tokio::test]
     async fn fenced_patch_labels_edit_parse_and_raw_applies() {
-        // Production shape (Registry::call_edit → .context chain →
+        // Production shape (Registry::call_edit →.context chain →
         // classify_edit_error): a fenced patch — the eval-proven default
         // model habit (eval.rs extract_patch tolerates one fence, the tool
         // does not) — must label `edit-parse`, while the identical raw
-        // patch applies. Documents the c38 prime suspect without logging
+        // patch applies. Documents the prime suspect without logging
         // patch text (C4: labels only, never values).
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("a.txt"), "l1\nl2\n").unwrap();
@@ -5640,10 +5516,9 @@ v1
         assert!(fed[0].contains("hello"), "{fed:?}");
     }
 
-    /// Docket #9: past the history budget, older tool results become
-    /// stubs (oldest first) while the latest `keep_rounds` rounds stay
-    /// intact; a `read` stub points back at the file and keeps its tag, any
-    /// other result is saved under `.polymorph/tool-output/` first.
+    /// Past the history budget, older tool results become stubs (oldest first) while the latest
+    /// `keep_rounds` rounds stay intact; a `read` stub points back at the file and keeps its tag,
+    /// any other result is saved under `.polymorph/tool-output/` first.
     #[tokio::test]
     async fn agentic_runner_compacts_old_tool_results_past_the_budget() {
         let dir = tempfile::tempdir().unwrap();
@@ -5731,8 +5606,8 @@ v1
             .all(|f| !f.starts_with("[harness:")));
     }
 
-    /// Docket #9: the stub for a spilled command names exit code and the
-    /// spill files; `budget_bytes == 0` never compacts.
+    /// The stub for a spilled command names exit code and the spill files; `budget_bytes == 0`
+    /// never compacts.
     #[test]
     fn compaction_stub_names_spills_and_off_budget_is_inert() {
         let dir = tempfile::tempdir().unwrap();
@@ -5795,8 +5670,8 @@ v1
         assert_eq!(n, 0);
     }
 
-    /// Docket #9: a spilled command's zero-test label reads the full spill
-    /// file — a `running 5 tests` the digest omitted still clears it.
+    /// A spilled command's zero-test label reads the full spill file — a `running 5 tests` the
+    /// digest omitted still clears it.
     #[test]
     fn zero_test_marker_scans_spill_files() {
         let dir = tempfile::tempdir().unwrap();
@@ -5956,9 +5831,8 @@ v1
         );
     }
 
-    /// Docket #6: a nonzero bash exit is still outcome `ok` (the harness
-    /// ran it) but the ledger now carries the exit code, the command, and
-    /// the write target — and the turn names its mutated paths.
+    /// A nonzero bash exit is still outcome `ok` (the harness ran it) but the ledger now carries
+    /// the exit code, the command, and the write target — and the turn names its mutated paths.
     #[tokio::test]
     async fn agentic_runner_records_exit_code_and_mutated_paths() {
         let dir = tempfile::tempdir().unwrap();
@@ -6048,10 +5922,9 @@ v1
         assert!(outcomes[2].get("repeat_note").is_none(), "{}", outcomes[2]);
     }
 
-    /// Docket #3 end-to-end: a write whose LSP consult cannot run (no
-    /// server) leaves the file with NO snapshot — the stale pre-write
-    /// record is dropped, never shown as this turn's state — and files the
-    /// turn did not mutate never appear, whatever the pool holds for them.
+    /// End-to-end: a write whose LSP consult cannot run (no server) leaves the file with NO
+    /// snapshot — the stale pre-write record is dropped, never shown as this turn's state — and
+    /// files the turn did not mutate never appear, whatever the pool holds for them.
     #[tokio::test]
     async fn agentic_runner_lsp_snapshots_cover_only_this_turns_writes() {
         use polymorph_tools::lsp::{uri_for, LspDiagnostic};
@@ -6090,10 +5963,9 @@ v1
         assert!(lsp_error_findings(data).is_empty());
     }
 
-    /// Docket #3: snapshots are looked up for exactly the mutated files,
-    /// one entry per file (spellings of one URI collapse, the LAST spelling
-    /// wins and selects its own record), failed calls and unmutated files
-    /// excluded, unknown languages recorded as no-snapshot.
+    /// Snapshots are looked up for exactly the mutated files, one entry per file (spellings of one
+    /// URI collapse, the LAST spelling wins and selects its own record), failed calls and unmutated
+    /// files excluded, unknown languages recorded as no-snapshot.
     #[test]
     fn lsp_mutated_snapshots_select_latest_record_per_mutated_file() {
         use polymorph_tools::lsp::{uri_for, LspDiagnostic};
@@ -6132,9 +6004,8 @@ v1
         serde_json::json!({"line": line, "severity": severity, "message": message})
     }
 
-    /// Docket #3 evidence: errors flagged and listed first (files and
-    /// rows), warnings tallied, `file:line: severity: message` rows on one
-    /// line, clean and no-snapshot files named.
+    /// Evidence: errors flagged and listed first (files and rows), warnings tallied, `file:line:
+    /// severity: message` rows on one line, clean and no-snapshot files named.
     #[test]
     fn harness_evidence_renders_lsp_errors_and_warnings() {
         let dir = tempfile::tempdir().unwrap();
@@ -6170,8 +6041,8 @@ v1
         );
     }
 
-    /// Docket #3 caps: 5 rows per file, 20 rows in total, 10 files, every
-    /// omission counted; tallies still cover everything.
+    /// Caps: 5 rows per file, 20 rows in total, 10 files, every omission counted; tallies still
+    /// cover everything.
     #[test]
     fn lsp_evidence_caps_rows_and_files_with_omitted_counts() {
         let files: Vec<serde_json::Value> = (0..12)
@@ -6414,9 +6285,8 @@ v1
         assert_eq!(v, lsp_gate_verdict(polymorph_core::VerdictKind::Fail));
     }
 
-    /// Verify digest (docket #2): the tail stays whole, earlier diagnostic
-    /// lines survive with their location line, every gap is counted, and
-    /// lines are cleaned + char-bounded (never a blind byte cut).
+    /// Verify digest: the tail stays whole, earlier diagnostic lines survive with their location
+    /// line, every gap is counted, and lines are cleaned + char-bounded (never a blind byte cut).
     #[test]
     fn verify_digest_keeps_error_lines_and_tail() {
         let mut text = String::new();
@@ -6727,8 +6597,7 @@ v1
         );
     }
 
-    /// No verify gate: the scored artifact carries no verify block and a
-    /// clean pass stands (gate-off renders as before docket #2).
+    /// No verify gate: the scored artifact carries no verify block and a clean pass stands.
     #[tokio::test]
     async fn verify_gate_off_adds_nothing() {
         use polymorph_core::VerdictKind::{Fail, Pass};
@@ -7098,8 +6967,8 @@ v1
 
     #[tokio::test]
     async fn agentic_runner_synthesizes_response_when_tool_loop_ends_with_empty_text() {
-        // Chunk 154: When tool calls are executed and the loop ends with empty text,
-        // an extra synthesis turn with 0 tools is run to force textual explanation.
+        // When tool calls are executed and the loop ends with empty text, an extra synthesis turn
+        // with 0 tools is run to force textual explanation.
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("a.txt"), "files in dir\n").unwrap();
         let stub = Arc::new(StubAgenticTurn::new(vec![
@@ -7143,8 +7012,8 @@ v1
 
     #[tokio::test]
     async fn agentic_runner_adaptive_continuation_grants_bonus_round_on_mutating_tool() {
-        // Chunk 154: max_tool_rounds is 1, but round 1 executes mutating write.
-        // Adaptive continuation grants 1 bonus round to read/verify.
+        // Max_tool_rounds is 1, but round 1 executes mutating write. Adaptive continuation grants 1
+        // bonus round to read/verify.
         let dir = tempfile::tempdir().unwrap();
         let stub = Arc::new(StubAgenticTurn::new(vec![
             // Round 1 (regular): write tool executed
@@ -7531,8 +7400,8 @@ v1
         assert_eq!(load_pack(&full).unwrap(), "# review\nBe strict.\n");
     }
 
-    /// Epic A6: the packs ship inside the binary, so a runtime path resolves
-    /// with or without the `prompts/` prefix and with either separator.
+    /// The packs ship inside the binary, so a runtime path resolves with or without the `prompts/`
+    /// prefix and with either separator.
     #[test]
     fn embedded_fallback_normalizes_paths() {
         assert_eq!(
@@ -7553,9 +7422,8 @@ v1
         );
     }
 
-    /// Epic A6 wiring: no `prompts` directory exists in this crate or its
-    /// ancestors, so `load_pack` on the CLI default path must return the
-    /// embedded pack verbatim instead of bailing.
+    /// Wiring: no `prompts` directory exists in this crate or its ancestors, so `load_pack` on the
+    /// CLI default path must return the embedded pack verbatim instead of bailing.
     #[test]
     fn load_pack_falls_back_to_the_embedded_pack() {
         let wanted = polymorph_prompts::embedded("muse/muse-spark-1.3/review.md").unwrap();
@@ -7642,9 +7510,8 @@ v1
         );
     }
 
-    /// Loop-worktree merge mode (chunk 44): a fix turn that changes nothing
-    /// merges as an empty-diff no-op (chunk-43 live catch) and returns the
-    /// artifact text; the repo stays clean and no worktree/branch litters.
+    /// Loop-worktree merge mode: a fix turn that changes nothing merges as an empty-diff no-op and
+    /// returns the artifact text; the repo stays clean and no worktree/branch litters.
     #[tokio::test]
     async fn loop_merge_empty_noop_returns_artifact() {
         let repo = tempfile::tempdir().unwrap();
@@ -7770,9 +7637,8 @@ v1
         assert_eq!(String::from_utf8_lossy(&list.stdout).lines().count(), 1);
     }
 
-    /// Loop-worktree merge mode never merges failures (chunk-42 D2): a
-    /// bailing runner discards its dirty tree and `execute()` bails the
-    /// existing error — the repo keeps the pre-fix content.
+    /// Loop-worktree merge mode never merges failures: a bailing runner discards its dirty tree and
+    /// `execute` bails the existing error — the repo keeps the pre-fix content.
     #[tokio::test]
     async fn loop_merge_failure_discards_and_bails() {
         struct DirtyFailRunner;
@@ -7959,8 +7825,8 @@ v1
         );
     }
 
-    /// Docket #1: executor over a stub child that reports `data` (the
-    /// artifact file is `a.txt`, peripheral attachment on).
+    /// Executor over a stub child that reports `data` (the artifact file is `a.txt`, peripheral
+    /// attachment on).
     fn peripheral_executor(dir: &tempfile::TempDir, data: serde_json::Value) -> BusExecutor {
         BusExecutor {
             bus: Arc::new(Bus::flat()),
@@ -7985,9 +7851,8 @@ v1
         }
     }
 
-    /// Docket #1: a peripheral file's post-turn content rides the scored
-    /// text, numbered, after the artifact file — which is never repeated
-    /// in the list, whatever spelling the fixer used for it.
+    /// A peripheral file's post-turn content rides the scored text, numbered, after the artifact
+    /// file — which is never repeated in the list, whatever spelling the fixer used for it.
     #[tokio::test]
     async fn peripheral_file_content_attached_and_artifact_not_duplicated() {
         let dir = tempfile::tempdir().unwrap();
@@ -8010,9 +7875,8 @@ v1
         );
     }
 
-    /// Docket #1: spellings of one file (`./`, absolute, Windows
-    /// separators and case) collapse to one entry, first spelling kept,
-    /// and files stay attached on later turns that leave them alone.
+    /// Spellings of one file (`./`, absolute, Windows separators and case) collapse to one entry,
+    /// first spelling kept, and files stay attached on later turns that leave them alone.
     #[tokio::test]
     async fn peripheral_files_dedupe_spellings_and_persist_across_turns() {
         let dir = tempfile::tempdir().unwrap();
@@ -8049,8 +7913,8 @@ v1
             .is_empty());
     }
 
-    /// Docket #1: a deleted file is reported DELETED, a binary one by size
-    /// only, a worktree drive as SKIPPED — never content, never an error.
+    /// A deleted file is reported DELETED, a binary one by size only, a worktree drive as SKIPPED —
+    /// never content, never an error.
     #[test]
     fn peripheral_files_report_deleted_binary_and_skipped() {
         let dir = tempfile::tempdir().unwrap();
@@ -8098,9 +7962,8 @@ v1
         }
     }
 
-    /// Docket #1 budgets: per-file and total caps cut only at row
-    /// boundaries, every cut is named on the status line, files past the
-    /// budget are listed OMITTED, files past the file cap by name.
+    /// Budgets: per-file and total caps cut only at row boundaries, every cut is named on the
+    /// status line, files past the budget are listed OMITTED, files past the file cap by name.
     #[test]
     fn peripheral_budget_overflow_names_every_omission() {
         // 4 × 400 rows > the 1500-row budget: file 4 is cut at row 300.
@@ -8147,9 +8010,8 @@ v1
         );
     }
 
-    /// Docket #1: a large file with a pre-drive snapshot renders as a
-    /// numbered diff (post-turn line numbers, removed rows unnumbered);
-    /// a created file renders in full and says so.
+    /// A large file with a pre-drive snapshot renders as a numbered diff (post-turn line numbers,
+    /// removed rows unnumbered); a created file renders in full and says so.
     #[test]
     fn peripheral_large_file_with_snapshot_renders_numbered_diff() {
         let old = numbered_text(1000, 4);
@@ -8178,8 +8040,8 @@ v1
         );
     }
 
-    /// Docket #1: no peripheral file → reviewed text and review brief are
-    /// byte-identical to the pre-#1 shapes (golden).
+    /// No peripheral file → reviewed text and review brief are byte-identical to the pre-#1 shapes
+    /// (golden).
     #[tokio::test]
     async fn no_peripheral_files_keeps_scored_text_and_brief_byte_identical() {
         let dir = tempfile::tempdir().unwrap();
@@ -8210,9 +8072,8 @@ v1
         );
     }
 
-    /// Docket #1: with peripheral files attached, VERDICT DISCIPLINE puts
-    /// them in scope; the CREATE-job note still judges only the primary
-    /// artifact text (attachments are not artifact content).
+    /// With peripheral files attached, VERDICT DISCIPLINE puts them in scope; the CREATE-job note
+    /// still judges only the primary artifact text (attachments are not artifact content).
     #[test]
     fn peripheral_section_in_scope_for_discipline_and_create_note() {
         let attached = render_file_attachments(
@@ -8239,8 +8100,8 @@ v1
         assert!(create_job_note(&wd, ghost, &format!("body{attached}")).is_none());
     }
 
-    /// Docket #1: the fix runner snapshots each write/edit target once,
-    /// before its first mutation (`null` = did not exist yet).
+    /// The fix runner snapshots each write/edit target once, before its first mutation (`null` =
+    /// did not exist yet).
     #[tokio::test]
     async fn agentic_runner_snapshots_targets_before_first_mutation() {
         let dir = tempfile::tempdir().unwrap();
@@ -8320,11 +8181,10 @@ v1
         }
     }
 
-    /// Docket #1 end-to-end (traps #63 shape): the fixer repairs the
-    /// artifact but breaks a peripheral file in the same turn. Attached,
-    /// the reviewer catches it, the finding reaches the next fixer brief,
-    /// and the drive passes only once the file is repaired; without the
-    /// attachment the same drive passes blind over the broken file.
+    /// End-to-end: the fixer repairs the artifact but breaks a peripheral file in the same turn.
+    /// Attached, the reviewer catches it, the finding reaches the next fixer brief, and the drive
+    /// passes only once the file is repaired; without the attachment the same drive passes blind
+    /// over the broken file.
     #[tokio::test]
     async fn multi_file_loop_reviewer_catches_broken_peripheral_file() {
         async fn drive(
@@ -8452,9 +8312,9 @@ v1
         dir
     }
 
-    /// Docket #5: in set mode a mutated file that is a set member renders
-    /// once (in the set, whatever the spelling), a non-member still rides
-    /// the peripheral section, and the brief puts the set in scope.
+    /// In set mode a mutated file that is a set member renders once (in the set, whatever the
+    /// spelling), a non-member still rides the peripheral section, and the brief puts the set in
+    /// scope.
     #[tokio::test]
     async fn artifact_set_members_never_duplicated_as_peripheral() {
         let dir = tempfile::tempdir().unwrap();
@@ -8510,12 +8370,10 @@ v1
         );
     }
 
-    /// Docket #5 end-to-end (traps #63 shape, worktree-diff mode): the
-    /// fixer repairs `a.rs` but breaks `src/b.rs` and adds `src/c.rs` in
-    /// the same turn. The diff set grows to all three, the reviewer
-    /// catches the broken second file by `path:line`, and the drive passes
-    /// only after the repair. Single-file grading of the same drive passes
-    /// blind over the broken file.
+    /// End-to-end: the fixer repairs `a.rs` but breaks `src/b.rs` and adds `src/c.rs` in the same
+    /// turn. The diff set grows to all three, the reviewer catches the broken second file by
+    /// `path:line`, and the drive passes only after the repair. Single-file grading of the same
+    /// drive passes blind over the broken file.
     #[tokio::test]
     async fn diff_mode_drive_catches_broken_second_file() {
         async fn drive(
@@ -8650,9 +8508,8 @@ v1
         assert!(b.contains("BROKEN"));
     }
 
-    /// Docket #7: the seed fires exactly when the CREATE note does, names
-    /// the target file, and the note's bytes are unchanged by the shared
-    /// status sentence.
+    /// The seed fires exactly when the CREATE note does, names the target file, and the note's
+    /// bytes are unchanged by the shared status sentence.
     #[test]
     fn create_job_seed_matches_create_note_condition() {
         let dir = tempfile::tempdir().unwrap();
@@ -8750,10 +8607,9 @@ v1
         }
     }
 
-    /// Docket #7 end-to-end: a seeded CREATE loop skips the round-1
-    /// reviewer, runs the first fix turn in round 1, and that turn is
-    /// gated (verify + LSP) and attached (artifact file + peripheral) like
-    /// any later fix turn.
+    /// End-to-end: a seeded CREATE loop skips the round-1 reviewer, runs the first fix turn in
+    /// round 1, and that turn is gated (verify + LSP) and attached (artifact file + peripheral)
+    /// like any later fix turn.
     #[tokio::test]
     async fn seeded_create_round_one_fix_turn_is_gated_and_attached() {
         use polymorph_core::VerdictKind::Pass;
@@ -8841,7 +8697,7 @@ v1
             seen[0]
         );
         assert!(seen[0].contains("- VERIFY RESULT: FAILED"), "{}", seen[0]);
-        // ...and both gates veto the round-2 pass (verify first).
+        //...and both gates veto the round-2 pass (verify first).
         let round2 = &report.rounds_log[1];
         assert_eq!(round2.verdict, crate::RoundVerdict::Fail);
         assert_eq!(round2.findings, 2);
@@ -8858,8 +8714,8 @@ v1
         assert!(seen[1].contains("- VERIFY RESULT: PASSED"), "{}", seen[1]);
     }
 
-    /// Docket #7: verification bonus rounds scale past chunk 154's single
-    /// one while every round mutates or verifies, and stop at the cap.
+    /// Verification bonus rounds scale past 's single one while every round mutates or verifies,
+    /// and stop at the cap.
     #[tokio::test]
     async fn agentic_runner_bonus_rounds_scale_to_cap_while_progressing() {
         let dir = tempfile::tempdir().unwrap();
@@ -8905,8 +8761,8 @@ v1
             std::fs::read_to_string(dir.path().join("a.txt")).unwrap(),
             "four\n"
         );
-        // Docket #6 ledger stays chronological across bonus rounds: the
-        // last write came after the last command that ran.
+        // Ledger stays chronological across bonus rounds: the last write came after the last
+        // command that ran.
         let data = out.data.as_ref().unwrap();
         let ledger = render_command_ledger(data["tool_outcomes"].as_array().unwrap());
         assert!(
@@ -8915,8 +8771,8 @@ v1
         );
     }
 
-    /// Docket #7: progress ends the extension before the cap — a second
-    /// check of an already-verified mutation is not progress.
+    /// Progress ends the extension before the cap — a second check of an already-verified mutation
+    /// is not progress.
     #[tokio::test]
     async fn agentic_runner_bonus_stops_when_rounds_stop_progressing() {
         let dir = tempfile::tempdir().unwrap();
@@ -8955,9 +8811,8 @@ v1
         );
     }
 
-    /// Docket #7: no bonus when the last allowed round neither mutated nor
-    /// verified (reads only), denied tools are never progress, and a cap
-    /// of 0 turns the verification bonus off.
+    /// No bonus when the last allowed round neither mutated nor verified (reads only), denied tools
+    /// are never progress, and a cap of 0 turns the verification bonus off.
     #[tokio::test]
     async fn agentic_runner_no_bonus_without_progress_or_with_zero_cap() {
         let dir = tempfile::tempdir().unwrap();
@@ -9069,13 +8924,13 @@ v1
             data["mutated_paths"],
             serde_json::json!(["old.rs", "new.rs"])
         );
-        // Docket #3: the destination was consulted (no server here: no
-        // snapshot); the source is gone, never a stale record.
+        // The destination was consulted (no server here: no snapshot); the source is gone, never a
+        // stale record.
         assert_eq!(
             data["lsp_diagnostics"],
             serde_json::json!([{"path": "new.rs", "items": null}])
         );
-        // Docket #1: both ends attached, provenance on the status line.
+        // Both ends attached, provenance on the status line.
         let wd = polymorph_delegate::WorkdirSpec::InPlace(root.to_path_buf());
         let files = PeripheralFiles::default().observe(&wd, Some(Path::new("a.txt")), &data);
         assert_eq!(files[1].baseline, Some(Some("fn moved() {}\r\n".into())));
@@ -9083,7 +8938,7 @@ v1
             render_file_attachments(PERIPHERAL_HEADER, &files),
             "\n\nPERIPHERAL FILES MUTATED THIS DRIVE (harness-read from disk after the fix turn; `N | ` prefixes are 1-based file line numbers, not file content):\n--- old.rs: RENAMED to new.rs; DELETED (absent on disk after the turn: deleted, or renamed away; no content)\n--- new.rs: RENAMED from old.rs; FULL (1 lines)\n1 | fn moved() {}\n"
         );
-        // Docket #8: the rename unwinds byte for byte.
+        // The rename unwinds byte for byte.
         let report = ledger.rollback();
         assert_eq!(
             std::fs::read(root.join("old.rs")).unwrap(),
@@ -9304,9 +9159,8 @@ v1
         );
     }
 
-    /// Docket #3 for command-made changes: changed files carry the record
-    /// their post-command consult left; files past the consult cap say so
-    /// (never the pool's stale record); deleted files are gone.
+    /// For command-made changes: changed files carry the record their post-command consult left;
+    /// files past the consult cap say so (never the pool's stale record); deleted files are gone.
     #[test]
     fn lsp_snapshots_cover_command_changes() {
         use polymorph_tools::lsp::{uri_for, LspDiagnostic};

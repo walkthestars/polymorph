@@ -1,4 +1,4 @@
-//! Permission gate (Epic B5): allow/deny lists over tool-call strings.
+//! Permission gate: allow/deny lists over tool-call strings.
 //!
 //! Semantics (contract, tested): `deny` beats `allow` on the same prefix.
 //! Matching is prefix-on-segments: rule `bash:rm` matches `bash:rm`,
@@ -82,7 +82,7 @@ mod tests {
         assert!(open.check("bash:rmrf").is_ok());
         assert!(open.check("bash:rm").is_err());
         assert!(open.check("bash:rm -rf /").is_err());
-        // ...while the same call is legitimately allowed by a broad rule.
+        //...while the same call is legitimately allowed by a broad rule.
         assert!(gate().check("bash:rmrf").is_ok());
     }
 

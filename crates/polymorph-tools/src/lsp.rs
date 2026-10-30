@@ -1,10 +1,10 @@
-//! LSP client substrate (Epic L: chunk 92 framing + spawn + initialize).
+//! LSP client substrate.
 //!
 //! D2: stdio + `Content-Length` framing, client-only v1. Zero new deps —
 //! tokio (child + io + time) and serde_json are resident; the initialize
 //! handshake is minimal hand-rolled JSON (`lsp-types` adoption rides L1b's
 //! op surface, when the 9-op vocabulary actually needs canonical types).
-//! D4/D5 (enforcement + `[[lsp_servers]]`) ride L2/L3; this slice proves
+//! Enforcement and `[[lsp_servers]]` ride this client; the module proves
 //! the transport against a fixture and stops there (stated, not hidden).
 
 use anyhow::Context as _;
@@ -14,19 +14,16 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
 /// timeout, never hang a loop on a sick server (D2 fail-soft direction).
 const CALL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
-/// Push-listen budget after an empty pull (chunk-97 live gap #4):
-/// rust-analyzer publishes asynchronously (empty push first, items right
-/// after), taplo ONLY pushes. Clean files usually settle on the first
-/// matching push + a 500ms grace linger; silent servers cost the budget.
+/// Push-listen budget after an empty pull: rust-analyzer publishes asynchronously (empty push
+/// first, items right after), taplo ONLY pushes. Clean files usually settle on the first matching
+/// push + a 500ms grace linger; silent servers cost the budget.
 const PUSH_BUDGET: std::time::Duration = std::time::Duration::from_secs(10);
 const PUSH_GRACE: std::time::Duration = std::time::Duration::from_millis(500);
 
-/// One recorded diagnostic (docket #3): message plus the position and
-/// severity the wire already carried — the reviewer evidence names
-/// `file:line: severity` and the opt-in error gate needs severity.
-/// `line` is 1-based (LSP `range.start.line` + 1); `severity` is the raw
-/// LSP code (1 error, 2 warning, 3 information, 4 hint; absent = the
-/// server left it to the client — never assumed to be an error).
+/// One recorded diagnostic: message plus the position and severity the wire already carried — the
+/// reviewer evidence names `file:line: severity` and the opt-in error gate needs severity. `line`
+/// is 1-based (LSP `range.start.line` + 1); `severity` is the raw LSP code (1 error, 2 warning, 3
+/// information, 4 hint; absent = the server left it to the client — never assumed to be an error).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LspDiagnostic {
     pub line: Option<u32>,
@@ -210,11 +207,9 @@ pub fn language_of(path: &str) -> Option<&'static str> {
     }
 }
 
-/// Lowercase a leading Windows drive letter (`C:/…` → `c:/…`).
-/// rust-analyzer matches workspace/file URLs case-SENSITIVELY and
-/// canonicalizes lowercase (chunk-97 decisive probe: uppercase drive =
-/// file never attaches, diagnostics forever silent; lowercase = items).
-/// The OS treats the letter case-insensitively, so this is safe everywhere.
+/// Lowercase a leading Windows drive letter (`C:/…` → `c:/…`). rust-analyzer matches workspace/file
+/// URLs case-SENSITIVELY and canonicalizes lowercase. The OS treats the letter case-insensitively,
+/// so this is safe everywhere.
 fn lower_drive(path: &str) -> String {
     let mut chars = path.chars();
     match (chars.next(), chars.next()) {
@@ -225,10 +220,7 @@ fn lower_drive(path: &str) -> String {
     }
 }
 
-/// Pushed-URI equality tolerating server echo-case (chunk-97: servers echo
-/// pushed URIs in their own canonical case — rust-analyzer lowercase,
-/// taplo verbatim — so OBSERVING must be case-insensitive even though
-/// SENDING is per-server per `prefer_verbatim_uri`).
+/// Pushed-URI equality tolerating server echo-case.
 fn uri_eq(a: &str, b: &str) -> bool {
     a == b || a.to_lowercase() == b.to_lowercase()
 }
@@ -250,18 +242,14 @@ pub fn uri_for_verbatim(workdir: &std::path::Path, raw: &str) -> String {
     )
 }
 
-/// Verbatim twin of [`uri_for`] (no case folding): taplo-class servers
-/// compare didOpen/root URIs case-SENSITIVELY against the OS-canonical
-/// (uppercase-drive) form — lowercase input is silently ignored (chunk-97
-/// taplo probes: uppercase in → push with items; lowercase in → nothing).
-/// rust-class servers need the opposite (lowercase drive); the caller
-/// picks per `prefer_verbatim_uri`, each entry probe-backed (stated below).
+/// Verbatim twin of [`uri_for`] (no case folding): taplo-class servers compare didOpen/root URIs
+/// case-SENSITIVELY against the OS-canonical (uppercase-drive) form — lowercase input is silently
+/// ignored. rust-class servers need the opposite (lowercase drive); the caller picks per
+/// `prefer_verbatim_uri`, each entry probe-backed (stated below).
 ///
-/// `true` for languages whose servers are probe-proven to need verbatim
-/// (OS-canonical-case) URIs: `toml` (taplo ignores lowercase-drive input
-/// entirely). Every other language gets lowercase-drive URIs (rust-analyzer
-/// never attaches uppercase-drive files — chunk-97 decisive probe).
-/// Extend ONLY with a passing/failing probe pair per language (stated).
+/// `true` for languages whose servers are probe-proven to need verbatim (OS-canonical-case) URIs:
+/// `toml` (taplo ignores lowercase-drive input entirely). Every other language gets lowercase-drive
+/// URIs. Extend ONLY with a passing/failing probe pair per language (stated).
 pub fn prefer_verbatim_uri(language: &str) -> bool {
     matches!(language, "toml")
 }
@@ -323,9 +311,8 @@ pub struct LspPool {
     /// didOpen versions per URI (monotonic per session; re-sends must
     /// advance or servers may ignore them as stale).
     open_versions: std::collections::BTreeMap<String, i32>,
-    /// Last pulled diagnostics per URI (L4 gutter feed): replaced on
-    /// every pull, never blocking; dropped when a write's consult could
-    /// not refresh it (docket #3: no stale snapshot outlives a write).
+    /// Last pulled diagnostics per URI (L4 gutter feed): replaced on every pull, never blocking;
+    /// dropped when a write's consult could not refresh it.
     diagnostics: std::collections::BTreeMap<String, Vec<LspDiagnostic>>,
 }
 
@@ -405,13 +392,12 @@ impl LspPool {
             .collect()
     }
 
-    /// Last recorded diagnostics per URI with line + severity (docket #3
-    /// reviewer evidence and the opt-in error gate).
+    /// Last recorded diagnostics per URI with line + severity.
     pub fn diagnostic_details(&self) -> std::collections::BTreeMap<String, Vec<LspDiagnostic>> {
         self.diagnostics.clone()
     }
 
-    /// Test-only seed for the chunk-98 brief feed (no server, no IO).
+    /// Test-only seed for the brief feed (no server, no IO).
     pub fn test_seed_diagnostics(&mut self, map: std::collections::BTreeMap<String, Vec<String>>) {
         self.diagnostics = map
             .into_iter()
@@ -422,7 +408,7 @@ impl LspPool {
             .collect();
     }
 
-    /// Test-only structured seed (docket #3 evidence + gate tests).
+    /// Test-only structured seed.
     pub fn test_seed_diagnostic_details(
         &mut self,
         map: std::collections::BTreeMap<String, Vec<LspDiagnostic>>,
@@ -430,21 +416,17 @@ impl LspPool {
         self.diagnostics = map;
     }
 
-    /// Warn-once bookkeeping shared with the write-through fallback
-    /// (chunk 100 reads it for the query path): true on first call per
+    /// Warn-once bookkeeping shared with the write-through fallback: true on first call per
     /// language (the caller warns), false once warned.
     pub fn warned_missing(&mut self, language: &str) -> bool {
         self.warned_fallback.insert(language.to_string())
     }
 
-    /// Post-write consult (L2, D4): server running → `didOpen` (servers
-    /// track open docs; pull without it is spec-gray — chunk-97 live gap:
-    /// real servers answered pulls on unopened files with nothing),
-    /// then diagnostic pull, findings recorded (inform, never block); no
-    /// server → direct write stands + warn ONCE per language; breakage →
-    /// evict + notice. The write already succeeded — this cannot fail it.
-    /// `text` is the just-written content (best-effort read by the caller;
-    /// `None` skips the open and pulls bare). Notify errors are ignored.
+    /// Post-write consult (L2, D4): server running → `didOpen`, then diagnostic pull, findings
+    /// recorded (inform, never block); no server → direct write stands + warn ONCE per language;
+    /// breakage → evict + notice. The write already succeeded — this cannot fail it. `text` is the
+    /// just-written content (best-effort read by the caller; `None` skips the open and pulls bare).
+    /// Notify errors are ignored.
     pub async fn post_write(
         &mut self,
         language: &str,
@@ -457,8 +439,7 @@ impl LspPool {
         let version = text.map(|_| self.next_version(uri));
         let skip_pull = self.push_only.contains(language);
         let Some(client) = self.client_for(language, root).await else {
-            // No consult happened: a snapshot from an earlier write no
-            // longer describes this file (docket #3 — absent, not stale).
+            // No consult happened: a snapshot from an earlier write no longer describes this file.
             self.diagnostics.remove(uri);
             if self.warned_fallback.insert(language.to_string()) {
                 tracing::warn!(language, "lsp fallback: no server, direct write stands");
@@ -525,9 +506,8 @@ impl LspPool {
                     .unwrap_or_default(),
             }
         };
-        // Push-model servers (taplo et al.) report via
-        // `publishDiagnostics` instead of the pull: merge any
-        // queued pushes for THIS uri (chunk-97 live gap #3).
+        // Push-model servers (taplo et al.) report via `publishDiagnostics` instead of the pull:
+        // merge any queued pushes for THIS uri.
         for pushed in client.drain_incoming() {
             let pushed_uri = pushed
                 .pointer("/params/uri")
@@ -548,8 +528,8 @@ impl LspPool {
                 }
             }
         }
-        // Push-model top-up (chunk-97 live gap #4): only when the
-        // pull came back empty — a pull WITH items already answered.
+        // Push-model top-up: only when the pull came back empty — a pull WITH items already
+        // answered.
         if messages.is_empty() {
             for d in client.await_publish(uri, PUSH_BUDGET).await {
                 push_unique(&mut messages, d);
@@ -569,15 +549,11 @@ impl LspPool {
         }
     }
 
-    /// Read-only query for the fixer-allowlist LSP tools (chunk 100,
-    /// L-actuation 3A): didOpen the caller-supplied text (servers track
-    /// open docs; bare requests on unopened files answer nothing — the
-    /// chunk-97 live gap), then one hover/definition/references request.
-    /// No server (no spec, spawn/init failure) → `None` (the caller
-    /// degrades to a model-readable note, never an error — L fail-soft).
-    /// Request failure → evict + notice (the post_write path) + the error
-    /// (the caller names the op). Never writes, never gates (the caller
-    /// gated before any IO).
+    /// Read-only query for the fixer-allowlist LSP tools: didOpen the caller-supplied text, then
+    /// one hover/definition/references request. No server (no spec, spawn/init failure) → `None`
+    /// (the caller degrades to a model-readable note, never an error — L fail-soft). Request
+    /// failure → evict + notice (the post_write path) + the error (the caller names the op). Never
+    /// writes, never gates (the caller gated before any IO).
     #[allow(clippy::too_many_arguments)] // single call site; params map 1:1 onto the three query ops
     pub async fn query(
         &mut self,
@@ -620,12 +596,10 @@ impl LspPool {
         }
     }
 
-    /// Connected AND initialized client, spawning lazily from the spec.
-    /// Spawn OR initialize failure = `None` (the caller degrades to
-    /// fallback — never an error). The initialize was a chunk-97 live gap:
-    /// real servers refuse requests before it (the fixture never cared).
-    /// `root` is the workspace URI (chunk-97 live gap #2: rust-analyzer
-    /// discovers NOTHING under a null root, so pulls come back empty).
+    /// Connected AND initialized client, spawning lazily from the spec. Spawn OR initialize failure
+    /// = `None` (the caller degrades to fallback — never an error). The initialize was a live gap:
+    /// real servers refuse requests before it (the fixture never cared). `root` is the workspace
+    /// URI.
     async fn client_for(&mut self, language: &str, root: Option<&str>) -> Option<&mut LspClient> {
         if !self.clients.contains_key(language) {
             let spec = self.specs.get(language)?.clone();
@@ -700,9 +674,7 @@ pub async fn wire_lsp_servers(
     enrolled
 }
 
-/// Server descriptor: which child to spawn (D5 direction — argv passes as
-/// items, never a shell string, traps-#9 class; the `[[lsp_servers]]`
-/// table maps onto this at L3).
+/// Server descriptor: which child to spawn.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LspSpec {
     pub cmd: String,
@@ -717,8 +689,8 @@ impl LspSpec {
         // hung processes (the `exec.rs` precedent; well-behaved servers
         // like rust-analyzer also exit on pipe close).
         c.kill_on_drop(true);
-        // Unix: lead a fresh process group so `exec::kill_tree_sync` (Drop,
-        // shutdown) reaps wrapper-launched grandchildren too (traps-#60).
+        // Unix: lead a fresh process group so `exec::kill_tree_sync` (Drop, shutdown) reaps
+        // wrapper-launched grandchildren too.
         #[cfg(unix)]
         c.process_group(0);
         c
@@ -828,12 +800,10 @@ impl LspClient {
         std::mem::take(&mut self.incoming)
     }
 
-    /// Answer one server→client request where a safe null exists, else
-    /// queue it for observation. Currently ONLY `workspace/configuration`
-    /// is answered (`[null]` per requested item = "no config", which the
-    /// spec sanctions): taplo-class servers stall their analysis until it
-    /// resolves (chunk-97 live finding — stonewalling it meant silence).
-    /// Anything else stays queued (answering blindly would lie).
+    /// Answer one server→client request where a safe null exists, else queue it for observation.
+    /// Currently ONLY `workspace/configuration` is answered (`[null]` per requested item = "no
+    /// config", which the spec sanctions): taplo-class servers stall their analysis until it
+    /// resolves. Anything else stays queued (answering blindly would lie).
     async fn note_or_respond(&mut self, msg: serde_json::Value) {
         let is_config_request = msg.get("method").and_then(serde_json::Value::as_str)
             == Some("workspace/configuration")
@@ -918,13 +888,10 @@ impl LspClient {
         found
     }
 
-    /// LSP startup sequence: `initialize` (see [`initialize_params`]) then
-    /// the `initialized` notification (process + root + empty
-    /// capabilities v1) then the `initialized` notification. Returns the
-    /// server's result (capabilities + serverInfo — the fixture asserts
-    /// both, a real server's shape is L1b's business). `None` root sends
-    /// JSON null (detached mode — what the pool uses on first spawn, since
-    /// real servers refuse requests before initialize; chunk-97 live gap).
+    /// LSP startup sequence: `initialize` (see [`initialize_params`]) then the `initialized`
+    /// notification (process + root + empty capabilities v1) then the `initialized` notification.
+    /// Returns the server's result (capabilities + serverInfo — the fixture asserts both, a real
+    /// server's shape is L1b's business). `None` root sends JSON null.
     pub async fn initialize(
         &mut self,
         root_uri: Option<&str>,
@@ -1048,13 +1015,11 @@ impl Drop for LspClient {
     }
 }
 
-/// `initialize` params: process + root + empty capabilities v1. A root is
-/// sent both as `rootUri` and as the single `workspaceFolders` entry:
-/// pyright-class servers (basedpyright) build their workspace ONLY from
-/// `workspaceFolders` — given just `rootUri`, every file lands in the
-/// rootless default workspace and in-project imports report as
-/// unresolved/"implicitly relative" ERRORS (live drive probe, docket #3
-/// evidence + `--lsp-error-gate`). `None` keeps both null (detached).
+/// `initialize` params: process + root + empty capabilities v1. A root is sent both as `rootUri`
+/// and as the single `workspaceFolders` entry: pyright-class servers (basedpyright) build their
+/// workspace ONLY from `workspaceFolders` — given just `rootUri`, every file lands in the rootless
+/// default workspace and in-project imports report as unresolved/"implicitly relative" ERRORS.
+/// `None` keeps both null (detached).
 pub fn initialize_params(root_uri: Option<&str>) -> serde_json::Value {
     let folders = root_uri.map(|uri| {
         let name = uri
@@ -1181,8 +1146,8 @@ mod tests {
 
     #[test]
     fn diagnostic_item_parses_line_and_severity() {
-        // Docket #3: 0-based wire line -> 1-based; raw severity code kept;
-        // absent fields stay absent (never guessed); no message -> skipped.
+        // 0-based wire line -> 1-based; raw severity code kept; absent fields stay absent (never
+        // guessed); no message -> skipped.
         let full = serde_json::json!({
             "message": "mismatched types",
             "severity": 1,
@@ -1222,8 +1187,8 @@ mod tests {
 
     #[tokio::test]
     async fn unconsulted_write_drops_the_stale_snapshot() {
-        // Docket #3: a write whose consult could not run (no server here)
-        // leaves NO snapshot for the URI, never the previous write's.
+        // A write whose consult could not run (no server here) leaves NO snapshot for the URI,
+        // never the previous write's.
         let mut pool = LspPool::default();
         let mut seed = std::collections::BTreeMap::new();
         seed.insert(
@@ -1247,8 +1212,8 @@ mod tests {
 
     #[test]
     fn drive_letter_lowercases_for_server_matching() {
-        // Chunk-97 decisive probe: rust-analyzer matches file URLs
-        // case-sensitively (uppercase drive = file never attaches).
+        // Decisive probe: rust-analyzer matches file URLs case-sensitively (uppercase drive = file
+        // never attaches).
         assert_eq!(super::lower_drive("C:/x/y"), "c:/x/y");
         assert_eq!(super::lower_drive("c:/x"), "c:/x");
         assert_eq!(super::lower_drive("/unix/y"), "/unix/y");

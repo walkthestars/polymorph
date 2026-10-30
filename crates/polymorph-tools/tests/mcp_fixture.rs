@@ -1,12 +1,11 @@
-//! Fixture-server MCP tests (Epic H, chunk 56: spawn-positive interop).
+//! Fixture-server MCP tests.
 //!
-//! A REAL child speaks REAL MCP here: `fixtures/mcp_probe_server.py`
-//! (stdlib-only) is spawned through `TokioChildProcess` — the production
-//! path — while loopback duplexes covered the protocol shape in chunk 53.
-//! Needs a Python 3 interpreter: `PYTHON_BIN`, else `python3`/`python` from
-//! `PATH` probed with `--version` (strict `Python 3` match — the broken
-//! WindowsApps alias fails the probe). Absent interpreter: LOUD skip
-//! (`eprintln!` + early return — reported as skip, never a silent pass).
+//! A REAL child speaks REAL MCP here: `fixtures/mcp_probe_server.py` (stdlib-only) is spawned
+//! through `TokioChildProcess` — the production path — while loopback duplexes covered the protocol
+//! shape in. Needs a Python 3 interpreter: `PYTHON_BIN`, else `python3`/`python` from `PATH` probed
+//! with `--version` (strict `Python 3` match — the broken WindowsApps alias fails the probe).
+//! Absent interpreter: LOUD skip (`eprintln!` + early return — reported as skip, never a silent
+//! pass).
 
 use polymorph_tools::mcp::{call_mcp_tool, wire_mcp_servers, McpPool, McpServerSpec};
 use polymorph_tools::{Gate, Registry, ToolCallContext};
@@ -92,7 +91,7 @@ async fn spawn_lists_calls_over_stdio() {
     assert!(err.to_string().contains("boom"), "{err}");
 }
 
-/// Reconnect heals after a break (c52 D5, full sequence): a loopback client
+/// Reconnect heals after a break: a loopback client
 /// is injected, its server is dropped pre-call (immediate EOF — the same
 /// prompt-close the unit break test relies on), the call fails AND evicts,
 /// and the NEXT call transparently respawns the fixture from spec.
@@ -169,12 +168,10 @@ async fn reconnect_heals_after_break() {
     assert_eq!(pool.lock().await.connected(), vec!["probe".to_string()]);
 }
 
-/// Record a wire transcript (H4 foundation, chunk 56): the rmcp client
-/// talks to the fixture through a line-logging proxy, and every frame
-/// lands in `tests/cassettes/mcp_probe.json` (committed). The chunk-57
-/// player replays this file; here we assert its method spine so the
-/// cassette can never silently rot (missing/extra frames fail loudly).
-/// The file is rewritten only with `POLYMORPH_RECORD_CASSETTE=1`.
+/// Record a wire transcript: the rmcp client talks to the fixture through a line-logging proxy, and
+/// every frame lands in `tests/cassettes/mcp_probe.json` (committed). The player replays this file;
+/// here we assert its method spine so the cassette can never silently rot (missing/extra frames
+/// fail loudly). The file is rewritten only with `POLYMORPH_RECORD_CASSETTE=1`.
 #[tokio::test]
 async fn record_transcript_to_cassette() {
     use rmcp::ServiceExt;
@@ -195,7 +192,7 @@ async fn record_transcript_to_cassette() {
     let child_out = child.stdout.take().unwrap();
     // rmcp-side halves face the client transport; proxy halves face the
     // logging forwarders (one task per direction, both concurrent with
-    // the handshake — sequential awaits would deadlock, c53 lesson).
+    // the handshake — sequential awaits would deadlock, lesson).
     let (rmcp_w, proxy_r) = tokio::io::duplex(65536);
     let (proxy_w, rmcp_r) = tokio::io::duplex(65536);
     let frames: std::sync::Arc<tokio::sync::Mutex<Vec<serde_json::Value>>> = Default::default();

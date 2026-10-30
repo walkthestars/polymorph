@@ -1,8 +1,7 @@
-//! Live-server L2/L3 proofs (Epic L, chunk 97): real `[[lsp_servers]]`
-//! config → wire → write → enforcement against INSTALLED servers
-//! (roster: `docs/lsp-servers.md`). Each test loud-skips unless ITS server
-//! resolves (PATH probe, else known absolute dirs) — the fixture suites
-//! stay the always-green floor; these prove the live ceiling.
+//! Live-server L2/L3 proofs: real `[[lsp_servers]]` config → wire → write → enforcement against
+//! INSTALLED servers (roster: `docs/lsp-servers.md`). Each test loud-skips unless ITS server
+//! resolves (PATH probe, else known absolute dirs) — the fixture suites stay the always-green
+//! floor; these prove the live ceiling.
 //!
 //! Asserts are deliberately loose (notice PREFIX + non-empty messages,
 //! never exact counts/text): diagnostic volume varies by server version.

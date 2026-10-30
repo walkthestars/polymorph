@@ -1,13 +1,11 @@
-//! Task model + dependency DAG (Epic G, chunk 46).
+//! Task model + dependency DAG.
 //!
-//! The plan-mode substrate the reviewer loop drives: tasks with dependency
-//! edges, topological ready-order, and cycle rejection. Validation lives at
-//! the boundary (`parse`/`load` re-validate everything from disk — never
-//! trust the file), while [`TaskGraph::add_task`] refuses only what it can
-//! judge locally (duplicates, empty/self/unknown deps). Forward references
-//! are impossible through `add_task` (deps must already exist), so cycle
-//! detection belongs to the whole-graph validators — traps-#23 class:
-//! validation in the validation phase, never mid-write.
+//! The plan-mode substrate the reviewer loop drives: tasks with dependency edges, topological
+//! ready-order, and cycle rejection. Validation lives at the boundary (`parse`/`load` re-validate
+//! everything from disk — never trust the file), while [`TaskGraph::add_task`] refuses only what it
+//! can judge locally (duplicates, empty/self/unknown deps). Forward references are impossible
+//! through `add_task` (deps must already exist), so cycle detection belongs to the whole-graph
+//! validators — class: validation in the validation phase, never mid-write.
 
 use std::collections::{BTreeMap, VecDeque};
 
@@ -129,9 +127,8 @@ impl TaskGraph {
         &self.tasks
     }
 
-    /// Push without local validation — `plan::parse` ONLY, which runs
-    /// whole-graph [`Self::validate`] before returning (forward refs from
-    /// files cannot survive `add_task`, traps-#23). Never use elsewhere.
+    /// Push without local validation — `plan::parse` ONLY, which runs whole-graph
+    /// [`Self::validate`] before returning. Never use elsewhere.
     pub(crate) fn push_unchecked(&mut self, task: Task) {
         self.tasks.push(task);
     }
@@ -268,8 +265,7 @@ impl TaskGraph {
             .collect()
     }
 
-    /// Full topological order (dependency order — the chunk-42 merge-back
-    /// rule for multi-child merges). Insertion order breaks ties.
+    /// Full topological order. Insertion order breaks ties.
     pub fn topo_order(&self) -> Result<Vec<String>, GraphError> {
         self.validate()?;
         let mut indeg: BTreeMap<&str, usize> = BTreeMap::new();
@@ -298,10 +294,8 @@ impl TaskGraph {
         Ok(order)
     }
 
-    /// Order a completed-task subset for merging (chunk-42 D4: dependency
-    /// order, caller stops at the first conflict — no partial merges).
-    /// Unknown ids are refused (fail-fast — silently dropping a branch
-    /// would lose work).
+    /// Order a completed-task subset for merging. Unknown ids are refused (fail-fast — silently
+    /// dropping a branch would lose work).
     pub fn merge_order(&self, ids: &[String]) -> Result<Vec<String>, GraphError> {
         for id in ids {
             if self.pos(id).is_none() {
