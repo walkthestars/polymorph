@@ -8,8 +8,17 @@ cargo-dist-version = "0.32.0"
 # CI backends to support
 ci = "github"
 # The installers to generate for each app
-installers = []
+installers = ["shell", "powershell"]
 # Target platforms to build apps for (Rust target-triple syntax).
-# Windows-only until the CI matrix goes multi-OS (queued with reason) —
-# cross targets are unverifiable from this host.
-targets = ["x86_64-pc-windows-msvc"]
+# Each target builds on its own native GitHub runner; the release workflow's
+# pull_request trigger builds all of them before any tag is pushed.
+targets = [
+    "x86_64-pc-windows-msvc",
+    "x86_64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+]
+# Where the install scripts put the binaries
+install-path = "CARGO_HOME"
+# Do not rewrite PATH-independent updater binaries into the release
+install-updater = false
