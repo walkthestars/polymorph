@@ -10,8 +10,7 @@ ci = "github"
 # The installers to generate for each app
 installers = ["shell", "powershell"]
 # Target platforms to build apps for (Rust target-triple syntax).
-# Each target builds on its own native GitHub runner; the release workflow's
-# pull_request trigger builds all of them before any tag is pushed.
+# Each target builds on its own native GitHub runner.
 targets = [
     "x86_64-pc-windows-msvc",
     "x86_64-unknown-linux-gnu",
@@ -22,3 +21,7 @@ targets = [
 install-path = "CARGO_HOME"
 # Do not rewrite PATH-independent updater binaries into the release
 install-updater = false
+# Build every target on pull requests (and attach the archives to the workflow
+# run) so a broken platform is caught before a tag is pushed. Nothing is
+# published from a pull request.
+pr-run-mode = "upload"
