@@ -34,14 +34,28 @@ evidence.
 
 ## Install
 
-Version 1.0.0 is built and installable from source. The crates.io publication is pending;
-once it ships, the install is:
+Prebuilt binaries for Windows, Linux and macOS. No Rust toolchain needed.
+
+macOS and Linux:
 
 ```bash
-cargo install polymorph-swe      # binary: polymorph
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/walkthestars/polymorph/releases/latest/download/polymorph-swe-installer.sh | sh
 ```
 
-From source today:
+Windows (PowerShell):
+
+```powershell
+irm https://github.com/walkthestars/polymorph/releases/latest/download/polymorph-swe-installer.ps1 | iex
+```
+
+Or download an archive from the
+[releases page](https://github.com/walkthestars/polymorph/releases/latest). Then:
+
+```bash
+polymorph review demo            # offline reviewer loop, no API key needed
+```
+
+From source:
 
 ```bash
 git clone https://github.com/walkthestars/polymorph.git
