@@ -25,3 +25,7 @@ install-updater = false
 # run) so a broken platform is caught before a tag is pushed. Nothing is
 # published from a pull request.
 pr-run-mode = "upload"
+
+# dist 0.32 asks for macos-14 for Apple silicon, which GitHub no longer offers.
+[dist.github-custom-runners]
+aarch64-apple-darwin = "macos-latest"
