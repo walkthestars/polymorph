@@ -29,8 +29,10 @@ advice; if the distinction matters to your organisation, ask your counsel.
   AGPL §13 source-offer obligation to cover your service code.
 - Any use where an enterprise dependency allowlist rejects AGPL. That rejection
   is expected: most default `cargo-deny` policies and many corporate allowlists
-  deny AGPL outright. The commercial licence exists for exactly that case; if you
-  need it, ask before wiring Polymorph into a product.
+  deny AGPL outright. The repository's `deny.toml` reproduces the rejection:
+  `cargo deny check licenses` fails on the AGPL workspace crates under a
+  permissive-only allowlist. The commercial licence exists for exactly that
+  case; if you need it, ask before wiring Polymorph into a product.
 
 ## Why the project can dual-license
 

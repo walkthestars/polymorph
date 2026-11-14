@@ -1,0 +1,33 @@
+# cargo-deny policy for the enterprise allowlist case.
+#
+# The public licence is AGPL-3.0-only, with a commercial licence for embedding.
+# Most enterprise dependency allowlists and default cargo-deny policies reject
+# AGPL outright. This file reproduces that rejection on purpose: it is the
+# measurement behind the licence route in docs/LICENSING.md, not the project's
+# own policy.
+#
+#   cargo deny check licenses
+#
+# The check is expected to fail on the workspace crates. The project's own
+# policy allows AGPL-3.0-only.
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+]
+
+[bans]
+multiple-versions = "warn"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
