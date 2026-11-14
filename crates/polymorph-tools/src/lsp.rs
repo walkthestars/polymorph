@@ -1,6 +1,6 @@
 //! LSP client substrate.
 //!
-//! D2: stdio + `Content-Length` framing, client-only v1. Zero new deps —
+//! Transport: stdio + `Content-Length` framing, client-only v1. Zero new deps —
 //! tokio (child + io + time) and serde_json are resident; the initialize
 //! handshake is minimal hand-rolled JSON (`lsp-types` adoption rides L1b's
 //! op surface, when the 9-op vocabulary actually needs canonical types).
@@ -11,7 +11,7 @@ use anyhow::Context as _;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
 
 /// Per-call ceiling (spawn + handshake + requests): fail naming the
-/// timeout, never hang a loop on a sick server (D2 fail-soft direction).
+/// timeout, never hang a loop on a sick server (fail-soft).
 const CALL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// Push-listen budget after an empty pull: rust-analyzer publishes asynchronously (empty push
@@ -76,7 +76,7 @@ fn push_unique(found: &mut Vec<LspDiagnostic>, d: LspDiagnostic) {
     }
 }
 
-/// Encode one LSP frame: `Content-Length` header + body (D2 transport).
+/// Encode one LSP frame: `Content-Length` header + body.
 pub fn encode_message(body: &serde_json::Value) -> Vec<u8> {
     let text = body.to_string();
     let mut frame = format!("Content-Length: {}\r\n\r\n", text.len()).into_bytes();
@@ -296,9 +296,9 @@ pub fn uri_for(workdir: &std::path::Path, raw: &str) -> String {
     )
 }
 
-/// Lazy per-language pool (L2, D2 shape borrowed from `McpPool`): spawn on
+/// Lazy per-language pool (shape borrowed from `McpPool`): spawn on
 /// first write for a registered language, evict on breakage. Enforcement
-/// NEVER fails a write (D4) — every fault degrades to a notice.
+/// NEVER fails a write — every fault degrades to a notice.
 pub struct LspPool {
     specs: std::collections::BTreeMap<String, LspSpec>,
     clients: std::collections::BTreeMap<String, LspClient>,
@@ -422,7 +422,7 @@ impl LspPool {
         self.warned_fallback.insert(language.to_string())
     }
 
-    /// Post-write consult (L2, D4): server running → `didOpen`, then diagnostic pull, findings
+    /// Post-write consult: server running → `didOpen`, then diagnostic pull, findings
     /// recorded (inform, never block); no server → direct write stands + warn ONCE per language;
     /// breakage → evict + notice. The write already succeeded — this cannot fail it. `text` is the
     /// just-written content (best-effort read by the caller; `None` skips the open and pulls bare).
@@ -698,7 +698,7 @@ impl LspSpec {
 }
 
 /// One connected language server: piped stdio child + request ids.
-/// Client-only v1 (D2): requests, notifications, shutdown — no serving.
+/// Client-only v1: requests, notifications, shutdown — no serving.
 #[derive(Debug)]
 pub struct LspClient {
     child: tokio::process::Child,

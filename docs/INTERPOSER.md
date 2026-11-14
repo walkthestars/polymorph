@@ -22,7 +22,9 @@ is the same ledger as `--events-json` plus `exit_code`, `passed`, and
 
 The server runs `review drive --tools` in a subprocess with `--on-fail rollback`,
 one drive at a time. `repo` is the child's working directory, not the CLI
-`--repo` worktree, so edits land in the tree.
+`--repo` worktree, so edits land in the tree. The server runs with the user's
+privileges: `repo` selects the tree and `verify_cmds` execute as operator-
+trusted commands. Connect only MCP clients you trust with that authority.
 
 ## 1. Install and configure
 
@@ -135,4 +137,4 @@ emit them — do not depend on keys that are not in this table.
 - `--diff` re-reads the worktree every round; on a large tree prefer an explicit
   `--artifact-file`/`--artifact-files` set.
 - Keep ledgers: `--events-json` per drive, and archive `budget` events for cost
-  accounting (S8's receipt surface will formalise this).
+  accounting.

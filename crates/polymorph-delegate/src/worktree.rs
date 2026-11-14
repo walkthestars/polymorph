@@ -47,7 +47,7 @@ impl Worktree {
     }
 
     /// Tear down: `worktree remove --force`, then delete our branch (only
-    /// when WE created it — detached trees have no branch to delete).
+    /// when this process created it — detached trees have no branch to delete).
     pub async fn remove(self) -> anyhow::Result<()> {
         git(
             &self.repo,

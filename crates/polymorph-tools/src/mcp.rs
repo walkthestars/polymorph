@@ -90,7 +90,7 @@ fn valid_server_id(id: &str) -> bool {
     !id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
 }
 
-/// Minimal tool view for enrollment (D2). Carries the server schema for the `Registry::schema`
+/// Minimal tool view for enrollment. Carries the server schema for the `Registry::schema`
 /// extension; the server validates args.
 #[derive(Debug, Clone, PartialEq)]
 pub struct McpToolInfo {
@@ -109,7 +109,7 @@ impl McpToolInfo {
     }
 }
 
-/// Spawn the stdio transport for one server (D1). Thin over
+/// Spawn the stdio transport for one server. Thin over
 /// `TokioChildProcess::builder().spawn()` — no logic, so the only test is
 /// the negative (missing binary fails fast, no hang, no spawn).
 pub fn spawn_stdio_transport(
@@ -150,7 +150,7 @@ pub async fn remote_tool_infos(
     Ok(listed.tools.iter().map(McpToolInfo::from_rmcp).collect())
 }
 
-/// Enroll one server's tools into a registry (D2). Duplicates refuse
+/// Enroll one server's tools into a registry. Duplicates refuse
 /// (`register` bails — programming error, loud, v1 precedent). Schemas
 /// ride alongside for `Registry::schema_of` (the server validates args —
 /// stated, not re-implemented).
@@ -273,7 +273,7 @@ pub async fn call_mcp_tool(
     let result = client.call_tool(params).await;
     let result = match result {
         Err(e) => {
-            // Evict the poisoned client (D5): the transport is broken, so
+            // Evict the poisoned client: the transport is broken, so
             // the next call reconnects from spec instead of failing on a
             // dead handle forever.
             pool.lock().await.clients.remove(server);
@@ -463,7 +463,7 @@ mod tests {
 
     #[tokio::test]
     async fn gate_denies_before_connect() {
-        // D4: the gate speaks before any connect — a denial must leave the
+        // The gate speaks before any connect — a denial must leave the
         // pool untouched (no silent spawns). The spec points at a missing
         // binary, so any connect attempt would fail loudly instead.
         let mut r = Registry::new();
@@ -539,7 +539,7 @@ mod tests {
 
     #[tokio::test]
     async fn evict_on_transport_break() {
-        // D5: a call failing on a dead transport evicts the poisoned
+        // A call failing on a dead transport evicts the poisoned
         // client, so the next call reconnects from spec instead of failing
         // on the dead handle forever. Deterministic: the server side is
         // dropped BEFORE the call, so EOF is immediate (no hang).

@@ -1,6 +1,6 @@
 //! DAP client substrate.
 //!
-//! D1/D2: `tools::dap` module (NOT a new crate — debugging is a tool-execution concern, no new
+//! `tools::dap` module (NOT a new crate — debugging is a tool-execution concern, no new
 //! surface ships), stdio + `Content-Length` framing REUSED from [`crate::lsp`] (`encode_message` /
 //! `read_message` are transport-generic: `Value` in, framed bytes out — zero LSP-specific content),
 //! client-only v1. Zero new deps (offline survey: no DAP-protocol crates in the local cargo cache,
@@ -353,7 +353,7 @@ where
 }
 
 /// One connected debug adapter: piped stdio child + protocol conn.
-/// Client-only v1 (D2): requests + events — no serving.
+/// Client-only v1: requests + events — no serving.
 #[derive(Debug)]
 pub struct DapClient {
     child: tokio::process::Child,

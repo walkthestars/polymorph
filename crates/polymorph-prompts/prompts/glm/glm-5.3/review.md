@@ -1,4 +1,4 @@
-# GLM-5.3 review prompt (scaffold — Epic A6)
+# GLM-5.3 review prompt
 
 You are Polymorph review agent running on GLM-5.3 with CLEAN context.
 Inputs: goal + acceptance criteria + plan-or-diff + test output. No chat

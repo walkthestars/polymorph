@@ -1,8 +1,8 @@
 //! `polymorph-review` — clean-context reviewer loop.
 //!
 //! Verdict text boundary, convergence state machine, and the mode-parameterized plan/act loop
-//! driver over injected async [`Reviewer`]/[`Executor`] traits. No LLM, no Bus, no network — F2
-//! binds these traits to the delegate bus + D1-managed LLM path without touching F1.
+//! driver over injected async [`Reviewer`]/[`Executor`] traits. No LLM, no Bus, no network — the
+//! binding module ties these traits to the delegate bus and the managed LLM path.
 //!
 //! Rules: - Reviewer input carries goal + criteria +
 //! CURRENT artifact only. There is deliberately NO history/findings field on [`ReviewerInput`] —

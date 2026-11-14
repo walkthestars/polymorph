@@ -1984,7 +1984,7 @@ checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
 name = "polymorph-core"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "anyhow",
  "figment",
@@ -2003,7 +2003,7 @@ dependencies = [
 
 [[package]]
 name = "polymorph-delegate"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2019,14 +2019,14 @@ dependencies = [
 
 [[package]]
 name = "polymorph-drive"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "anyhow",
 ]
 
 [[package]]
 name = "polymorph-llm"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "anyhow",
  "futures",
@@ -2047,7 +2047,7 @@ dependencies = [
 
 [[package]]
 name = "polymorph-mcp"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "anyhow",
  "rmcp",
@@ -2060,11 +2060,11 @@ dependencies = [
 
 [[package]]
 name = "polymorph-prompts"
-version = "1.0.0"
+version = "1.0.1"
 
 [[package]]
 name = "polymorph-review"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2088,7 +2088,7 @@ dependencies = [
 
 [[package]]
 name = "polymorph-skills"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "anyhow",
  "serde",
@@ -2101,7 +2101,7 @@ dependencies = [
 
 [[package]]
 name = "polymorph-swe"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2117,6 +2117,7 @@ dependencies = [
  "polymorph-review",
  "polymorph-tasks",
  "polymorph-tools",
+ "rusqlite",
  "serde",
  "serde_json",
  "sha2",
@@ -2132,7 +2133,7 @@ dependencies = [
 
 [[package]]
 name = "polymorph-tasks"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "anyhow",
  "serde",
@@ -2143,7 +2144,7 @@ dependencies = [
 
 [[package]]
 name = "polymorph-tools"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2173,7 +2174,7 @@ dependencies = [
 
 [[package]]
 name = "polymorph-watch"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "anyhow",
  "clap",

@@ -475,7 +475,7 @@ impl Registry {
         }
         // Ask-user hooks: first question wins; sync/script denials above already won. No handlers =
         // one branch (the common path costs nothing). Fires without a prompter = fail-closed Deny
-        // (D2), posted like every other denial.
+        // posted like every other denial.
         if let Some(question) = self.ask.question_for(name, &args) {
             if let HookDecision::Deny { reason } = self.ask.resolve(name, question).await {
                 let denied = CallError::Denied(Denied {
@@ -544,7 +544,7 @@ impl Registry {
     }
 
     /// Register one ask hook: returns the question for a call, or `None`
-    /// to pass. First question wins; resolved through the prompter (D1).
+    /// to pass. First question wins; resolved through the prompter.
     pub fn add_ask_hook<F>(&mut self, handler: F)
     where
         F: Fn(&str, &serde_json::Value) -> Option<String> + Send + Sync + 'static,
@@ -552,7 +552,7 @@ impl Registry {
         self.ask.add_ask_hook(handler);
     }
 
-    /// Attach the interactive prompter. Absent = Ask fails closed (D2).
+    /// Attach the interactive prompter. Absent = Ask fails closed.
     pub fn set_prompter(&mut self, prompter: std::sync::Arc<dyn Prompter>) {
         self.ask.set_prompter(prompter);
     }
@@ -642,7 +642,7 @@ impl Registry {
         self.lsp.lock().await.test_seed_diagnostic_details(map);
     }
 
-    /// Post-write enforcement fan-out (L2, D4): candidate paths from the
+    /// Post-write enforcement fan-out: candidate paths from the
     /// tool args, per-path language routing, pool consult. Best-effort
     /// throughout — unknown extensions skip silently, unparseable patches
     /// are impossible post-success (skipped, not errored). No gate check:
@@ -762,7 +762,7 @@ impl Registry {
             "read" => self.call_read(&args, ctx).await,
             "write" => {
                 let out = call_write(&args, ctx).await?;
-                // L2 write-through (D4): the server sees every write; the
+                // Write-through: the server sees every write; the
                 // write itself already succeeded — enforcement cannot fail
                 // it (post_write returns (), never Err).
                 self.lsp_post_write("write", &args, ctx).await;

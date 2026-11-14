@@ -1,4 +1,4 @@
-# B6 seeded edit corpus (Epic B6) — the deterministic basis of the omp-style
+# Seeded edit corpus — the deterministic basis of the omp-style
 # edit benchmark and the byte-exact scoreboard.
 #
 # Schema per [[task]] (ORDER MATTERS in TOML: `patch` is a task-level key, so

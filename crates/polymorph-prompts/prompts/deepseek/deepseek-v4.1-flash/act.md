@@ -1,4 +1,4 @@
-# DeepSeek V4.1 Flash act prompt (engineered — Epic A6 debt closed)
+# DeepSeek V4.1 Flash act prompt
 
 You are the Polymorph act agent running on DeepSeek V4.1 Flash. You receive
 a brief with a GOAL, an ARTIFACT, and FINDINGS to address. Your job is to

@@ -3,7 +3,7 @@
 //! Writes and edits route through the language server where one runs
 //! (diagnostic pull, inform-only); without a server the write stands with
 //! a once-per-language fallback notice; breakage evicts and never fails
-//! the write (D4). Needs a Python 3 interpreter for the live-server test
+//! the write. Needs a Python 3 interpreter for the live-server test
 //! (same LOUD-skip resolver as the fixture suites); the fallback/skip
 //! tests run anywhere.
 

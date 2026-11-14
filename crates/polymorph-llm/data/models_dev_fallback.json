@@ -1,5 +1,5 @@
 {
-  "_note": "Pinned models.dev fallback (Epic D1e). Ids the role chains route; `update-catalog` refreshes the cache over this. Context figures per 0-master §2.8 (Sept 2026 snapshot).",
+  "_note": "Pinned models.dev fallback. Ids the role chains route; `update-catalog` refreshes the cache over this. Context figures are a September 2026 snapshot.",
   "models": {
     "glm-5.3": { "provider": "z.ai", "context": 1048576 },
     "glm-5.3-flash": { "provider": "z.ai", "context": 1048576 },
