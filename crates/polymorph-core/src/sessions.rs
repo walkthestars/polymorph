@@ -390,6 +390,23 @@ impl Store {
         Ok(())
     }
 
+    /// Delete sessions with `updated_at < cutoff` (unix seconds). Messages,
+    /// reads and plans die with them (FK cascade — the per-connection
+    /// `foreign_keys` PRAGMA in `configure`). Backing for `polymorph clean
+    /// --sessions`; returns the count of deleted session rows.
+    pub async fn delete_sessions_older_than(&self, cutoff: i64) -> Result<usize, StoreError> {
+        self.conn
+            .call(move |c| {
+                c.execute(
+                    "DELETE FROM sessions WHERE updated_at < ?1",
+                    rusqlite::params![cutoff],
+                )
+                .map_err(StoreError::sql)
+            })
+            .await
+            .map_err(call_err)
+    }
+
     /// Append one message; bumps the session's updated_at in the same thread
     /// hop (one round trip, no torn timestamps).
     pub async fn append_message(
@@ -855,6 +872,41 @@ mod tests {
             s.switch_session("ghost").await,
             Err(StoreError::NoSession(_))
         ));
+    }
+
+    #[tokio::test]
+    async fn delete_sessions_older_than_removes_old_and_keeps_new() {
+        let s = Store::open_in_memory().await.unwrap();
+        let old = s.create_session("old").await.unwrap();
+        let fresh = s.create_session("fresh").await.unwrap();
+        s.append_message(&old.id, MessageRole::User, "dies with the session")
+            .await
+            .unwrap();
+        // Backdate the old row through rusqlite directly — the same seam a
+        // real clock drifts through, and the only deterministic way to age it.
+        let oid = old.id.clone();
+        s.conn
+            .call(move |c| {
+                c.execute(
+                    "UPDATE sessions SET updated_at = ?1 WHERE id = ?2",
+                    rusqlite::params![1, oid],
+                )
+                .map_err(StoreError::sql)?;
+                Ok(())
+            })
+            .await
+            .map_err(call_err)
+            .unwrap();
+        // A week-old cutoff: updated_at=1 goes, updated_at=now stays.
+        let cutoff = now_unix() - 7 * 86_400;
+        assert_eq!(s.delete_sessions_older_than(cutoff).await.unwrap(), 1);
+        let list = s.list_sessions().await.unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].id, fresh.id);
+        // The cascade took the old session's messages with it.
+        assert!(s.history(&old.id, 0).await.unwrap().is_empty());
+        // A cutoff before every row deletes nothing — count 0, not an error.
+        assert_eq!(s.delete_sessions_older_than(0).await.unwrap(), 0);
     }
 
     #[tokio::test]

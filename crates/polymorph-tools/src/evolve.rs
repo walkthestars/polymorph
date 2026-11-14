@@ -143,7 +143,7 @@ pub fn render_diff(candidate: &PackCandidate, current: &BTreeMap<String, String>
 /// U1b judging layer + U1c proposer seam: trace→board rebuild, parent-hash (dashed-against) verify,
 /// offline baseline replay, before/after judge reusing [`super::eval::gate`], and the external-
 /// proposer boundary ([`ProposerBrief`], [`Proposer`], [`SimpleMutator`]). Claimed after-boards are
-/// shape- + math-checked here; trust arrives via the key-gated live re-run (129 D3 — stated, not
+/// shape- + math-checked here; trust arrives via the key-gated live re-run (stated, not
 /// hidden).
 ///
 /// sha256 hex over bytes (mirrors the CLI manifest hasher —
@@ -266,7 +266,7 @@ pub fn judge(
     })
 }
 
-/// What crosses the file boundary to an external proposer (129 D2):
+/// What crosses the file boundary to an external proposer:
 /// failure-first traces, current pack contents, dashed-against hashes,
 /// focus case ids. Serialize → file → proposer → [`PackCandidate`]
 /// JSON back. The harness never imports proposer code (no `Cargo.lock`
@@ -286,7 +286,7 @@ pub fn brief_json(brief: &ProposerBrief) -> String {
     serde_json::to_string_pretty(brief).expect("proposer brief serializes")
 }
 
-/// Shape-check a returned candidate (129 D3: id + files + parent rows
+/// Shape-check a returned candidate (id + files + parent rows
 /// must all be present — an underspecified proposal never reaches the
 /// gate). JSON faults name the fault; the gate owns deeper verdicts.
 pub fn parse_candidate(json_text: &str) -> Result<PackCandidate, String> {
@@ -307,7 +307,7 @@ pub fn parse_candidate(json_text: &str) -> Result<PackCandidate, String> {
     Ok(cand)
 }
 
-/// The external-proposer boundary (129 D2/D7): implementors read a
+/// The external-proposer boundary: implementors read a
 /// [`ProposerBrief`] and return a [`PackCandidate`]. Synchronous by
 /// design — proposers are local text transforms; spawning, timeouts,
 /// and scheduling belong to the CI driver, not this trait (stated seam).
@@ -315,10 +315,10 @@ pub trait Proposer {
     fn propose(&self, brief: &ProposerBrief) -> anyhow::Result<PackCandidate>;
 }
 
-/// The v1 proposer (129 D7 fallback): deterministic byte-hygiene —
+/// The v1 proposer (the fallback): deterministic byte-hygiene —
 /// single trailing newline per file, otherwise verbatim copy, parents
 /// carried from the brief. Changes NOTHING model-visible (pipeline
-/// proof only — quality claims explicitly disclaimed, D7).
+/// proof only — quality claims explicitly disclaimed).
 pub struct SimpleMutator {
     pub candidate_id: String,
 }
@@ -860,7 +860,7 @@ mod tests {
     #[test]
     fn chain_end_to_end_green_and_drifted_red() {
         // Full pipeline on scripted boards: export → brief → propose →
-        // parse → chain_verify. Zero network (D7 wiring proof, stated).
+        // parse → chain_verify. Zero network (a wiring proof).
         let board = to_scoreboard(&[trace("a", "Pass", "")]).unwrap();
         let m = SimpleMutator {
             candidate_id: "pipe".into(),
@@ -978,7 +978,7 @@ mod tests {
 
     #[test]
     fn file_boundary_round_trip() {
-        // The D2 crossing itself: brief JSON to disk and back byte-equal.
+        // The file-boundary crossing itself: brief JSON to disk and back byte-equal.
         let d = std::env::temp_dir().join(format!("polymorph-evolve-{}-brief", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();

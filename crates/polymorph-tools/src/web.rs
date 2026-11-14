@@ -138,7 +138,7 @@ fn unknown_code() -> String {
 }
 
 /// Split an optional `#fragment` off a scheme remainder. Fragments never ride HTTP — the caller
-/// fetches without it and echoes it (116-D4: never stripped silently).
+/// fetches without it and echoes it (never stripped silently).
 fn split_fragment(rest: &str) -> (&str, Option<String>) {
     match rest.split_once('#') {
         Some((base, frag)) if !frag.is_empty() => (base, Some(frag.to_string())),

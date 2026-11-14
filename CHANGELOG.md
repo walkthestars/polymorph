@@ -5,6 +5,25 @@ All notable changes to Polymorph are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] — 2026-11-14
+
+### Added
+
+- `polymorph clean`: reclaims `.polymorph/` logs, rollback archives and spilled tool
+  output older than a cutoff (7 days by default), and session rows with `--force`.
+  `--dry-run` reports without deleting.
+- `SECURITY.md`: a data-handling section covering what is stored locally, what is
+  sent to the model provider, and the execution boundary of `--tools`.
+
+### Changed
+
+- Drive logs record turn briefs, tool-call arguments, verdict previews and dropped
+  findings as shapes and counts only. Raw text is written only when
+  `POLYMORPH_FORENSIC_LOGS=1` is set.
+- `docs/INTERPOSER.md` states the trust boundary of the MCP server.
+- Source comments and prompt-pack headers describe behavior instead of citing
+  internal work-item labels. The prompt manifest hashes are updated to match.
+
 ## [1.0.0] — 2026-10-30
 
 ### Added

@@ -26,8 +26,9 @@ use std::path::{Component, Path};
 use std::sync::Arc;
 
 use crate::binding::{
-    compact_tool_history, extract_verdict, registry_call, to_genai_tools, AgenticTurnFn, FedResult,
-    LiveAgenticTurn, LlmTarget, ToolHistoryBudget, DEFAULT_RULE_RETRIES, MAX_CALLS_PER_TURN,
+    compact_tool_history, extract_verdict, forensic_logs_enabled, registry_call, to_genai_tools,
+    AgenticTurnFn, FedResult, LiveAgenticTurn, LlmTarget, ToolHistoryBudget, DEFAULT_RULE_RETRIES,
+    MAX_CALLS_PER_TURN,
 };
 
 /// File inspection tools every tool reviewer gets.
@@ -349,14 +350,28 @@ impl ToolReviewTurnRunner {
                     sent: resp.content.len(),
                     compacted: false,
                 });
-                // Forensics ledger (the fixer's line, reviewer-labelled).
-                tracing::info!(
-                    tool = tc.fn_name.as_str(),
-                    tool_round = round,
-                    args = %tc.fn_arguments,
-                    outcome = outcome,
-                    "review tool call complete"
-                );
+                // Forensics ledger (the fixer's line, reviewer-labelled):
+                // name + shape + outcome by default; the raw argument JSON
+                // stays behind the forensic switch, mirroring the fixer's
+                // redacted tool-call log.
+                let call_args = &tc.fn_arguments;
+                if forensic_logs_enabled(std::env::var("POLYMORPH_FORENSIC_LOGS").ok().as_deref()) {
+                    tracing::info!(
+                        tool = tc.fn_name.as_str(),
+                        tool_round = round,
+                        args = %call_args,
+                        outcome = outcome,
+                        "review tool call complete"
+                    );
+                } else {
+                    tracing::info!(
+                        tool = tc.fn_name.as_str(),
+                        tool_round = round,
+                        args_bytes = call_args.to_string().len(),
+                        outcome = outcome,
+                        "review tool call complete"
+                    );
+                }
                 messages.push(ChatMessage::from(resp));
             }
             let compacted = compact_tool_history(
@@ -396,7 +411,7 @@ impl ToolReviewTurnRunner {
         }
         let (text, dropped) = cite_or_drop(&last_text, &ctx.brief, &ctx.workdir, &report.inspected);
         for line in &dropped {
-            tracing::warn!(finding = %line, "unverified reviewer finding dropped (cite-or-drop)");
+            log_dropped_finding(line);
         }
         report.dropped_findings = dropped;
         Ok(text)
@@ -765,6 +780,21 @@ fn contains_path_token(hay: &str, needle: &str) -> bool {
     false
 }
 
+/// Dropped-finding log redaction: the finding's byte count by default; the
+/// line's text only when forensics are enabled — the same switch and policy
+/// as the brief, tool-call and verdict-preview redaction in `binding.rs`.
+/// Local-only either way; stderr stays at warn.
+fn log_dropped_finding(line: &str) {
+    if forensic_logs_enabled(std::env::var("POLYMORPH_FORENSIC_LOGS").ok().as_deref()) {
+        tracing::warn!(finding = %line, "unverified reviewer finding dropped (cite-or-drop)");
+    } else {
+        tracing::warn!(
+            finding_bytes = line.len(),
+            "unverified reviewer finding dropped (cite-or-drop)"
+        );
+    }
+}
+
 /// The reviewed text a finding may cite without a tool call: the brief
 /// from `ARTIFACT UNDER REVIEW:` on (artifact, path, attachments, notes —
 /// not GOAL/CRITERIA, which name files without showing them).
@@ -831,6 +861,59 @@ mod tests {
     use super::*;
     use polymorph_delegate::{TurnContext, TurnRunner};
     use std::collections::VecDeque;
+
+    /// Source-level guard: the dropped-finding TEXT is logged from exactly
+    /// one place — inside the forensic branch of `log_dropped_finding`; the
+    /// default path keeps only the byte count, and no call site logs raw
+    /// tool arguments either. Needles are assembled from pieces, never
+    /// spelled out, so this test's own source does not count as an
+    /// occurrence.
+    #[test]
+    fn dropped_finding_text_logging_lives_only_inside_the_redaction_branch() {
+        let src = include_str!("review_tools.rs");
+        let raw_field = concat!("finding ", "= ", "%line");
+        let hits: Vec<usize> = src.match_indices(raw_field).map(|(at, _)| at).collect();
+        assert_eq!(
+            hits.len(),
+            1,
+            "the dropped-finding log field must appear exactly once in review_tools.rs"
+        );
+        let helper = src
+            .find("fn log_dropped_finding(")
+            .expect("the log_dropped_finding helper is defined");
+        let helper_end = src[helper..]
+            .find("\nfn ")
+            .map(|offset| helper + offset)
+            .expect("another top-level fn follows the helper");
+        assert!(
+            hits[0] > helper && hits[0] < helper_end,
+            "the dropped-finding log must be inside the helper (byte {} outside {}..{helper_end})",
+            hits[0],
+            helper
+        );
+        // The text sits in the forensic branch: after the switch is read,
+        // before the redacted default.
+        let switch = src[helper..helper_end]
+            .find("forensic_logs_enabled")
+            .map(|offset| helper + offset)
+            .expect("the helper reads the forensic switch");
+        let redacted = src[helper..helper_end]
+            .find("finding_bytes")
+            .map(|offset| helper + offset)
+            .expect("the default branch logs the byte count");
+        assert!(
+            switch < hits[0] && hits[0] < redacted,
+            "the finding text belongs to the forensic branch (byte {} not in {}..{redacted})",
+            hits[0],
+            switch
+        );
+        let call_site = concat!("args ", "= ", "%tc", ".fn_", "arguments");
+        assert_eq!(
+            src.matches(call_site).count(),
+            0,
+            "review tool arguments must stay behind the forensic switch"
+        );
+    }
 
     /// Scripted reviewer model: pops one collected turn per call, records
     /// each history and the tool names it was offered; `fail_first` makes

@@ -39,3 +39,4 @@ polymorph-tools = { version = "1.0.0", path = "../polymorph-tools" }
 [dev-dependencies]
 tempfile.workspace = true
 sha2.workspace = true
+rusqlite.workspace = true

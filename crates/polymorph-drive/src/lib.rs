@@ -1,4 +1,4 @@
-//! Drive machine-seam protocol (S0): the headless half of the
+//! Drive machine-seam protocol: the headless half of the
 //! fire-and-forget circuit, moved verbatim out of `polymorph-tui` so
 //! consumers can route and classify without a render stack.
 //!

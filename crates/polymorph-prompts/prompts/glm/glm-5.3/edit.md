@@ -1,4 +1,4 @@
-# GLM-5.3 edit prompt — hashline format (Epic B4)
+# GLM-5.3 edit prompt — hashline format
 
 > File edits use the hashline patch language ONLY. Never emit str_replace,
 > diff -u, or whole-file rewrites for edits.

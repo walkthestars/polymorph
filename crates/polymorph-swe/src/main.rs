@@ -7,10 +7,13 @@
 //! polymorph review <command> reviewer loops and plan execution
 //! polymorph sessions|config|... sessions, configuration, providers, models,
 //! delegate, eval, update-catalog
+//! polymorph clean reclaim old harness artifacts (logs, attempts, tool-output,
+//!     session rows only with --force)
 
 use clap::{Args, CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
 
+mod clean;
 mod tracing_setup;
 
 #[derive(Debug, Parser)]
@@ -95,6 +98,39 @@ enum Commands {
         /// Override the registry URL (default: models.dev; tests use a mock).
         #[arg(long)]
         url: Option<String>,
+    },
+    /// Reclaim local harness artifacts older than a cutoff: `.polymorph` logs,
+    /// attempts and tool-output by default; `--all` adds session rows (still
+    /// gated on `--force`).
+    Clean {
+        /// Root whose `.polymorph` state is cleaned (default: `.`).
+        #[arg(long, default_value = ".")]
+        root: std::path::PathBuf,
+        /// Delete entries older than N days (0 = everything older than now;
+        /// the newest log is always spared).
+        #[arg(long, default_value_t = 7)]
+        older_than_days: u64,
+        /// Report what would be removed without deleting anything.
+        #[arg(long, action = clap::ArgAction::SetTrue)]
+        dry_run: bool,
+        /// Clean `.polymorph/logs`.
+        #[arg(long, action = clap::ArgAction::SetTrue)]
+        logs: bool,
+        /// Clean `.polymorph/attempts`.
+        #[arg(long, action = clap::ArgAction::SetTrue)]
+        attempts: bool,
+        /// Clean `.polymorph/tool-output`.
+        #[arg(long, action = clap::ArgAction::SetTrue)]
+        tool_output: bool,
+        /// Delete session rows older than the cutoff (requires `--force`).
+        #[arg(long, action = clap::ArgAction::SetTrue)]
+        sessions: bool,
+        /// Consent for `--sessions` — the only class that needs it.
+        #[arg(long, action = clap::ArgAction::SetTrue)]
+        force: bool,
+        /// Select every class (sessions still require `--force`).
+        #[arg(long, action = clap::ArgAction::SetTrue)]
+        all: bool,
     },
 }
 
@@ -578,7 +614,7 @@ struct EvalSweepArgs {
     system_pack: std::path::PathBuf,
     /// Eval format arm (default `hashline`): `str-replace` sweeps the
     /// baseline rival (own pack default, untagged prompts, str scorer +
-    /// D1 named skips for deletion/rename shapes). Records stamp it;
+    /// named skips for deletion/rename shapes). Records stamp it;
     /// `eval check` dispatches per record.
     #[arg(long, default_value = "hashline")]
     format: String,
@@ -674,6 +710,36 @@ async fn async_main() -> anyhow::Result<()> {
         }
         Some(Commands::Eval { cmd }) => run_eval(cmd, &overrides).await,
         Some(Commands::UpdateCatalog { url }) => run_update_catalog(url.as_deref()).await,
+        Some(Commands::Clean {
+            root,
+            older_than_days,
+            dry_run,
+            logs,
+            attempts,
+            tool_output,
+            sessions,
+            force,
+            all,
+        }) => {
+            // Sessions DB: the global `--db` wins, else ROOT/.polymorph/sessions.db
+            // (ROOT-scoped, not CWD-scoped — cleaning a --root elsewhere must not
+            // touch this directory's sessions).
+            clean::run(
+                clean::CleanArgs {
+                    root,
+                    older_than_days,
+                    dry_run,
+                    logs,
+                    attempts,
+                    tool_output,
+                    sessions,
+                    force,
+                    all,
+                },
+                cli.db.as_deref(),
+            )
+            .await
+        }
     }
 }
 
@@ -1943,7 +2009,7 @@ async fn run_plan_drive(
     Ok(())
 }
 
-/// `review run`: live plan/act loop. Bus-backed LLM reviewer + fixer children over the D1-managed
+/// `review run`: live plan/act loop. Bus-backed LLM reviewer + fixer children over the managed
 /// role chains; needs provider auth (the same ambient/injected keys as `exec`). Reviewer always
 /// rides Review and stays tool-free; the fixer rides Act in act mode, Plan in plan mode (`--plan-
 /// pack` system), wielding registry tools only behind `--tools` (text-only fixing stays the
@@ -3537,7 +3603,7 @@ fn sweep_plan(
             ));
         } else if format == polymorph_tools::EvalFormat::StrReplace && t.expected.is_empty() {
             skips.push(format!(
-                "{}: str-replace-unsupported (whole-file deletion has no substitution form; D1 named-skip)",
+                "{}: str-replace-unsupported (whole-file deletion has no substitution form; named skip)",
                 t.id
             ));
         } else if format == polymorph_tools::EvalFormat::StrReplace && {
@@ -3548,7 +3614,7 @@ fn sweep_plan(
             have != want
         } {
             skips.push(format!(
-                "{}: str-replace-unsupported (rename/create has no substitution form; D1 named-skip)",
+                "{}: str-replace-unsupported (rename/create has no substitution form; named skip)",
                 t.id
             ));
         } else {
@@ -4585,7 +4651,7 @@ mod tests {
         assert_eq!(mv.expected, vec![("o.txt".to_string(), "d\n".to_string())]);
         assert_eq!(skips.len(), 1);
         assert!(skips[0].starts_with("rej:") && skips[0].contains("StaleTag"));
-        // Str_replace arm (D1): rem + mv skip NAMED, multi still scores.
+        // Str_replace arm: rem + mv skip NAMED, multi still scores.
         let (cases_s, skips_s) = sweep_plan(tasks, polymorph_tools::EvalFormat::StrReplace);
         assert_eq!(cases_s.len(), 2);
         assert!(cases_s.iter().any(|c| c.id == "good"));
@@ -4680,7 +4746,7 @@ mod tests {
 
     #[test]
     fn sweep_live_corpus_plans_thirteen_with_seven_named_skips_on_str_replace() {
-        // Arm-S live gate (D1): 13 scorable + 7 named skips (5 rejections
+        // Arm-S live gate: 13 scorable + 7 named skips (5 rejections
         // + rem-file + mv-file, which have no substitution form). Same
         // fixture, same instructions — only the arm moved.
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../");
@@ -6337,7 +6403,7 @@ mod tests {
 
     /// Pins the exact bytes `review drive --events-json` writes: every
     /// `DriveEvent` variant through `events_json_value` + pretty JSON (the
-    /// same two calls `run_review_drive` makes), so the S0 crate extraction
+    /// same two calls `run_review_drive` makes), so the drive-crate extraction
     /// can prove byte-identical output. Regenerate with
     /// `POLYMORPH_UPDATE_GOLDEN=1`.
     #[test]

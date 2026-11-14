@@ -1,4 +1,4 @@
-"""Minimal MCP probe server (TEST FIXTURE ONLY, chunk 56).
+"""Minimal MCP probe server (TEST FIXTURE ONLY).
 
 Speaks enough MCP over newline-delimited stdio JSON-RPC for rmcp's client:
 `initialize` (echoes the client's protocolVersion back — negotiation-safe),

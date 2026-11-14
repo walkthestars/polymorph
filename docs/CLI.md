@@ -180,6 +180,23 @@ polymorph sessions switch <ID>
 polymorph sessions delete <ID>
 ```
 
+### `polymorph clean`
+
+Reclaims local harness state under `<ROOT>/.polymorph` that is older than a cutoff.
+Logs, rollback archives (`attempts/`) and spilled tool output are selected by
+default; session rows are deleted only with `--sessions` (or `--all`) and `--force`.
+
+```bash
+polymorph clean --dry-run                 # report only
+polymorph clean                           # logs, attempts, tool-output older than 7 days
+polymorph clean --older-than-days 30      # a different cutoff
+polymorph clean --all --force             # add session rows
+polymorph clean --root /path/to/project   # a different working tree
+```
+
+With `--older-than-days 0` the newest log file is kept. A deletion error names the
+path, the remaining classes still run, and the command exits non-zero.
+
 ### `polymorph config`
 
 - `polymorph config show` — print the merged configuration (user + project + env + CLI).

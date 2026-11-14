@@ -1,4 +1,4 @@
-# Muse Spark 1.3 review prompt (scaffold — Epic A6)
+# Muse Spark 1.3 review prompt
 
 > Review/orchestration role, NOT primary act.
 > Served via OpenCode Go on the Responses surface (`/responses`);

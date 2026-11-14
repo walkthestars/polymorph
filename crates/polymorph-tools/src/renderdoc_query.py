@@ -1,4 +1,4 @@
-# Shipped RenderDoc query driver (chunk 113, N1b) — single file,
+# Shipped RenderDoc query driver — single file,
 # mode-dispatched, include_str!-embedded at compile time (always
 # available to installed binaries, version-locked with the tool).
 # Runs inside `qrenderdoc --script` (embedded 3.8 runtime — host

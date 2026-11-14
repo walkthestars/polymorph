@@ -98,7 +98,7 @@ impl HookRegistry {
 }
 
 /// One ask-user question: which tool wants to run and the handler-supplied question. Owned
-/// throughout; the prompter answers Allow/Deny — there is deliberately NO third sync variant (D1:
+/// throughout; the prompter answers Allow/Deny — there is deliberately NO third sync variant (
 /// the sync boundary never blocks on a human).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PromptRequest {
@@ -155,11 +155,11 @@ pub enum PickOutcome {
 }
 
 /// One ask hook: returns the question to put to the user, or `None` to
-/// pass. Consulted in registration order; the first question wins (D1).
+/// pass. Consulted in registration order; the first question wins.
 type AskHandler = Box<dyn Fn(&str, &serde_json::Value) -> Option<String> + Send + Sync>;
 
 /// Ask-user table + optional prompter. Empty = never asks (all prior
-/// behavior unchanged); fires without a prompter = fail-closed Deny (D2).
+/// behavior unchanged); fires without a prompter = fail-closed Deny.
 #[derive(Default)]
 pub struct AskRegistry {
     handlers: Vec<AskHandler>,
@@ -187,7 +187,7 @@ impl AskRegistry {
     }
 
     /// Attach the interactive prompter (runtime-attached like `add_hook`,
-    /// never via `[[hooks]]` config — scripts cannot Ask, D5).
+    /// never via `[[hooks]]` config — scripts cannot Ask).
     pub fn set_prompter(&mut self, prompter: std::sync::Arc<dyn Prompter>) {
         self.prompter = Some(prompter);
     }
@@ -213,7 +213,7 @@ impl AskRegistry {
         }
     }
 
-    /// Resolve one question through the prompter, or fail closed (D2).
+    /// Resolve one question through the prompter, or fail closed.
     pub async fn resolve(&self, tool: &str, question: String) -> HookDecision {
         match &self.prompter {
             Some(prompter) => {

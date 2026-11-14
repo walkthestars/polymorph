@@ -12,7 +12,7 @@
 use anyhow::Context as _;
 use std::path::Path;
 
-/// Ceiling for one headed capture. The fixture renders 120 frames in seconds on this host; headroom
+/// Ceiling for one headed capture. The fixture renders 120 frames in seconds on a typical workstation; headroom
 /// is for slow GPUs — stated, not measured.
 pub const CAPTURE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 

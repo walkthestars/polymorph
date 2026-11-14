@@ -237,6 +237,84 @@ fn render_review_brief(input: &ReviewerInput, artifact_path: Option<&Path>) -> S
     out
 }
 
+/// Log redaction policy — the single gate for what raw text may reach the
+/// log. The rolling file log (DEBUG floor for our targets) must not persist
+/// a drive's briefs, tool arguments, verdict previews or dropped findings
+/// by default, so the helpers below record only shapes and counts plus a
+/// fixed message; the raw text is logged solely when forensics are
+/// explicitly enabled.
+///
+/// `POLYMORPH_FORENSIC_LOGS` parsing: `1` or `true` (ASCII
+/// case-insensitive, surrounding whitespace ignored) opts in; unset, empty,
+/// `0`, `false` and every other value keep the redaction. Pure — value in,
+/// policy out.
+pub(crate) fn forensic_logs_enabled(raw: Option<&str>) -> bool {
+    match raw {
+        Some(value) => {
+            let value = value.trim();
+            value.eq_ignore_ascii_case("1") || value.eq_ignore_ascii_case("true")
+        }
+        None => false,
+    }
+}
+
+/// Log one turn brief (reviewer or fixer) through the shared redaction
+/// policy: `kind`, `bytes` and `lines` plus a fixed message, never the text
+/// itself. With forensics enabled the full brief is logged as well, under a
+/// `brief` field, so a post-mortem can recover the exact prompt. Local-only
+/// either way; stderr stays at warn.
+fn log_brief(kind: &str, brief: &str) {
+    let bytes = brief.len();
+    let lines = brief.lines().count();
+    if forensic_logs_enabled(std::env::var("POLYMORPH_FORENSIC_LOGS").ok().as_deref()) {
+        tracing::debug!(kind, bytes, lines, brief = %brief, "brief logged in full (forensics)");
+    } else {
+        tracing::debug!(kind, bytes, lines, "brief redacted: text withheld");
+    }
+}
+
+/// Log one agentic fix tool call through the shared redaction policy: the
+/// tool's name, its round, the serialized argument payload's byte count and
+/// the outcome label plus a fixed message. With forensics enabled the raw
+/// argument JSON is logged as well, under an `args` field, so a post-mortem
+/// can recover the exact call. Local-only either way; stderr stays at warn.
+fn log_tool_call(tool: &str, round: u32, args: &serde_json::Value, outcome: &str) {
+    if forensic_logs_enabled(std::env::var("POLYMORPH_FORENSIC_LOGS").ok().as_deref()) {
+        tracing::info!(
+            tool,
+            tool_round = round,
+            args = %args,
+            outcome,
+            "agentic fix tool call complete"
+        );
+    } else {
+        tracing::info!(
+            tool,
+            tool_round = round,
+            args_bytes = args.to_string().len(),
+            outcome,
+            "agentic fix tool call complete (arguments redacted)"
+        );
+    }
+}
+
+/// Log one reviewer verdict parse failure through the shared redaction
+/// policy: the preview's byte count and the parse error plus a fixed
+/// message. With forensics enabled the preview text is logged as well, so
+/// a post-mortem can tell fenced-JSON from pure prose. Local-only either
+/// way; stderr stays at warn.
+fn log_verdict_parse_failure(preview: &str, error: &crate::VerdictError) {
+    if forensic_logs_enabled(std::env::var("POLYMORPH_FORENSIC_LOGS").ok().as_deref()) {
+        tracing::warn!(preview = %preview, error = %error, "reviewer verdict failed to parse");
+    } else {
+        tracing::warn!(
+            preview_bytes = preview.len(),
+            error = %error,
+            "reviewer verdict failed to parse (preview redacted)"
+        );
+    }
+}
+
 /// CREATE-job signal for the reviewer brief: when the artifact path names a file that cannot be
 /// read AND no current artifact text was supplied (the CLI maps a missing file to empty for CREATE
 /// jobs), tell the reviewer to judge goal/criteria fit instead of emitting file-missing findings.
@@ -1477,10 +1555,11 @@ impl Reviewer for BusReviewer {
                 brief.push_str(&note);
             }
         }
-        // Forensics: the rolling file log (DEBUG floor for our targets) is
-        // the only place a drive's exact reviewer brief survives — no
-        // session row is written. Local-only; stderr stays at warn.
-        tracing::debug!(brief = %brief, "review brief");
+        // Redacted brief logging: the rolling file log (DEBUG floor for our
+        // targets) keeps only kind/bytes/lines by default; the exact text
+        // survives solely under POLYMORPH_FORENSIC_LOGS (see `log_brief`).
+        // Local-only; stderr stays at warn.
+        log_brief("review", &brief);
         let mut spec =
             polymorph_delegate::SpawnSpec::new(Role::Review, brief, self.workdir.clone());
         // F2a: no tool calls (F3 owns the registry). The opt-in tool reviewer enforces its own
@@ -1501,12 +1580,14 @@ impl Reviewer for BusReviewer {
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| invalid("review child returned no verdict_text".to_string()))?;
                 extract_verdict(text).map_err(|e| {
- // Log a truncated preview: otherwise the operator can never
- // tell fenced-JSON from pure prose (live run #2 hit exactly
- // this). Truncated + local-only; the full text stays in the
- // child's typed result, never in an event field.
+                    // Log a truncated preview: otherwise the operator can never
+                    // tell fenced-JSON from pure prose (live run #2 hit exactly
+                    // this). Redacted by default — byte count only; the preview
+                    // text survives solely under the forensic switch. The full
+                    // text stays in the child's typed result, never in an event
+                    // field.
                     let preview: String = text.chars().take(300).collect();
-                    tracing::warn!(preview = %preview, error = %e, "reviewer verdict failed to parse");
+                    log_verdict_parse_failure(&preview, &e);
                     invalid(e.to_string())
                 })
             }
@@ -2610,15 +2691,9 @@ impl polymorph_delegate::TurnRunner for AgenticFixRunner {
                 });
                 outcomes.push(entry);
                 // Forensics, not stdout (C4 split logging): name + shape +
-                // outcome only, never secrets (registry never logs values
-                // either).
-                tracing::info!(
-                    tool = tc.fn_name.as_str(),
-                    tool_round = feeds,
-                    args = %tc.fn_arguments,
-                    outcome = outcome,
-                    "agentic fix tool call complete"
-                );
+                // outcome by default; the raw arguments stay behind the
+                // forensic switch (the registry never logs values either).
+                log_tool_call(tc.fn_name.as_str(), feeds, &tc.fn_arguments, outcome);
                 messages.push(ChatMessage::from(resp));
             }
             last_round_progress = round_progress;
@@ -3581,8 +3656,8 @@ impl Executor for BusExecutor {
             None => self.workdir.clone(),
         };
         let brief = render_fix_brief(&input);
-        // Forensics twin of the reviewer's `review brief` line.
-        tracing::debug!(brief = %brief, "fix brief");
+        // Redacted twin of the reviewer's brief log: same helper, same policy.
+        log_brief("fix", &brief);
         let mut spec =
             polymorph_delegate::SpawnSpec::new(input.mode.executor_role(), brief, workdir);
         spec.tools = self.tools.clone();
@@ -3862,6 +3937,134 @@ mod tests {
     use polymorph_core::LoopConfig;
     use polymorph_delegate::{Bus, TurnContext, TurnOutput, TurnRunner};
     use std::collections::VecDeque;
+
+    /// `POLYMORPH_FORENSIC_LOGS` parsing: only `1`/`true` (ASCII
+    /// case-insensitive, surrounding whitespace ignored) opts in; unset,
+    /// empty, `0`, `false` and every other value keep the default
+    /// redaction. Pure — value in, policy out.
+    #[test]
+    fn forensic_logs_env_parsing_admits_only_one_and_true() {
+        assert!(!forensic_logs_enabled(None), "unset stays redacted");
+        assert!(!forensic_logs_enabled(Some("")), "empty stays redacted");
+        assert!(!forensic_logs_enabled(Some("0")));
+        assert!(!forensic_logs_enabled(Some("false")));
+        assert!(!forensic_logs_enabled(Some("FALSE")));
+        assert!(
+            !forensic_logs_enabled(Some("yes")),
+            "unknown values never opt in"
+        );
+        assert!(forensic_logs_enabled(Some("1")));
+        assert!(forensic_logs_enabled(Some("true")));
+        assert!(forensic_logs_enabled(Some("TRUE")));
+        assert!(forensic_logs_enabled(Some("True")));
+        assert!(
+            forensic_logs_enabled(Some(" true ")),
+            "whitespace around the value is ignored"
+        );
+        assert!(forensic_logs_enabled(Some("\ttrue\r\n")));
+        assert!(!forensic_logs_enabled(Some(" 0 ")));
+    }
+
+    /// Source-level guard: the brief TEXT is logged from exactly one place,
+    /// inside `log_brief` — no call site may regress to logging briefs
+    /// wholesale. The needle is assembled from pieces, never spelled out, so
+    /// this test's own source does not count as an occurrence.
+    #[test]
+    fn brief_text_logging_lives_only_inside_log_brief() {
+        let src = include_str!("binding.rs");
+        let needle = concat!("brief ", "= ", "%brief");
+        let hits: Vec<usize> = src.match_indices(needle).map(|(at, _)| at).collect();
+        assert_eq!(
+            hits.len(),
+            1,
+            "the brief-text log field must appear exactly once in binding.rs"
+        );
+        let helper = src
+            .find("fn log_brief(")
+            .expect("the log_brief helper is defined");
+        let helper_end = src[helper..]
+            .find("\nfn ")
+            .map(|offset| helper + offset)
+            .expect("another top-level fn follows the helper");
+        assert!(
+            hits[0] > helper && hits[0] < helper_end,
+            "the one brief-text log must be inside log_brief (byte {} outside {}..{helper_end})",
+            hits[0],
+            helper
+        );
+        // Both brief log sites route through the helper.
+        assert_eq!(src.matches("log_brief(\"review\"").count(), 1);
+        assert_eq!(src.matches("log_brief(\"fix\"").count(), 1);
+    }
+
+    /// Source-level guard: tool ARGUMENTS are logged from exactly one place,
+    /// inside `log_tool_call`, and no call site regresses to logging the raw
+    /// JSON wholesale. Needles are assembled from pieces, never spelled out,
+    /// so this test's own source does not count as an occurrence.
+    #[test]
+    fn tool_argument_logging_lives_only_inside_log_tool_call() {
+        let src = include_str!("binding.rs");
+        let call_site = concat!("args ", "= ", "%tc", ".fn_", "arguments");
+        assert_eq!(
+            src.matches(call_site).count(),
+            0,
+            "call sites must route raw tool arguments through the redaction helper"
+        );
+        let raw_field = concat!("args ", "= ", "%args");
+        let hits: Vec<usize> = src.match_indices(raw_field).map(|(at, _)| at).collect();
+        assert_eq!(
+            hits.len(),
+            1,
+            "the raw-arguments log field must appear exactly once in binding.rs"
+        );
+        let helper = src
+            .find("fn log_tool_call(")
+            .expect("the log_tool_call helper is defined");
+        let helper_end = src[helper..]
+            .find("\nfn ")
+            .map(|offset| helper + offset)
+            .expect("another top-level fn follows the helper");
+        assert!(
+            hits[0] > helper && hits[0] < helper_end,
+            "the raw-args log must be inside log_tool_call (byte {} outside {}..{helper_end})",
+            hits[0],
+            helper
+        );
+        // The agentic fix loop routes its tool telemetry through the helper.
+        assert_eq!(
+            src.matches(concat!("log_tool_", "call(tc.", "fn_name"))
+                .count(),
+            1
+        );
+    }
+
+    /// Source-level guard: the verdict-parse PREVIEW is logged from exactly
+    /// one place, inside `log_verdict_parse_failure` — no call site may
+    /// regress to logging preview text wholesale.
+    #[test]
+    fn verdict_preview_logging_lives_only_inside_log_verdict_parse_failure() {
+        let src = include_str!("binding.rs");
+        let raw_field = concat!("preview ", "= ", "%preview");
+        let hits: Vec<usize> = src.match_indices(raw_field).map(|(at, _)| at).collect();
+        assert_eq!(
+            hits.len(),
+            1,
+            "the preview log field must appear exactly once in binding.rs"
+        );
+        let helper = src
+            .find("fn log_verdict_parse_failure(")
+            .expect("the log_verdict_parse_failure helper is defined");
+        let helper_end = src[helper..]
+            .find("\nfn ")
+            .map(|offset| helper + offset)
+            .expect("another top-level fn follows the helper");
+        assert!(
+            hits[0] > helper && hits[0] < helper_end,
+            "the preview log must be inside the helper (byte {} outside {}..{helper_end})",
+            hits[0],
+            helper
+        );
+    }
 
     fn managed_target() -> LlmTarget {
         LlmTarget::Managed {
