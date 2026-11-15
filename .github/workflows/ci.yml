@@ -49,21 +49,10 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run workspace tests
-        if: runner.os == 'Windows'
         # The solver is provisioned above: a missing `z3` must fail, not skip.
         env:
           POLYMORPH_REQUIRE_Z3: "1"
         run: cargo test --workspace --locked --no-fail-fast
-
-      - name: Run proof-gate tests
-        if: runner.os == 'Linux'
-        # The full suite runs on Windows. Linux covers the proof gate and the
-        # crates that carry it, against the real solver.
-        env:
-          POLYMORPH_REQUIRE_Z3: "1"
-        run: |
-          cargo test --locked --no-fail-fast -p polymorph-ais -p polymorph-drive -p polymorph-mcp -p polymorph-swe -p polymorph-watch
-          cargo test --locked -p polymorph-review --test proof_gate_ledger
 
       - name: MCP proof tool end to end
         # Drives the built binary over MCP; ignored by default because it needs it.

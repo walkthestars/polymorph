@@ -2731,11 +2731,11 @@ mod tests {
     #[tokio::test]
     async fn script_pre_deny_blocks_through_call() {
         // End-to-end boundary proof: script exit-2 denies with typed Deny
-        // + hook-script rule, zero side effects (Windows cmd, see module note).
+        // + hook-script rule, zero side effects.
         let mut r = registry::v1_registry();
         r.apply_script_hooks(&[polymorph_core::config::HookEntry {
             event: "pre".to_string(),
-            command: "cmd /C echo no-writes 1>&2 & exit 2".to_string(),
+            command: script_hooks::tests::deny_cmd("no-writes"),
             timeout_secs: None,
         }])
         .unwrap();
@@ -2759,7 +2759,7 @@ mod tests {
         let mut r = registry::v1_registry();
         r.apply_script_hooks(&[polymorph_core::config::HookEntry {
             event: "post".to_string(),
-            command: "cmd /C exit 2".to_string(),
+            command: script_hooks::tests::exit_cmd(2),
             timeout_secs: None,
         }])
         .unwrap();

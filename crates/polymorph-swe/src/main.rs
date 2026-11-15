@@ -3453,6 +3453,15 @@ async fn run_eval_live(
 /// red but exits 0 gates nothing). Corrupt recordings bail naming the file + field (loader
 /// precedent: operator error, never a model score).
 fn run_eval_check(path: std::path::PathBuf, min_rate: f64) -> anyhow::Result<()> {
+    run_eval_check_in(path, min_rate, &std::env::temp_dir())
+}
+
+/// `run_eval_check` with the scratch parent created under `temp_root`.
+fn run_eval_check_in(
+    path: std::path::PathBuf,
+    min_rate: f64,
+    temp_root: &std::path::Path,
+) -> anyhow::Result<()> {
     let mut files: Vec<std::path::PathBuf> = if path.is_dir() {
         let found: Vec<std::path::PathBuf> = std::fs::read_dir(&path)
             .map_err(|e| anyhow::anyhow!("cannot list {}: {e}", path.display()))?
@@ -3479,8 +3488,7 @@ fn run_eval_check(path: std::path::PathBuf, min_rate: f64) -> anyhow::Result<()>
     // process.
     static CHECK_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let seq = CHECK_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let parent =
-        std::env::temp_dir().join(format!("polymorph-eval-check-{}-{seq}", std::process::id()));
+    let parent = temp_root.join(format!("polymorph-eval-check-{}-{seq}", std::process::id()));
     std::fs::create_dir_all(&parent)
         .map_err(|e| anyhow::anyhow!("cannot create {}: {e}", parent.display()))?;
     // Score inside a closure so EVERY exit (loader bail included) runs past
@@ -4705,42 +4713,42 @@ mod tests {
         })
         .to_string();
         let dir = tempfile::tempdir().unwrap();
+        // The scratch parents go under a root only this test uses, so the
+        // leftover scan below cannot see another test's live directory.
+        let scratch = tempfile::tempdir().unwrap();
+        let check = |path: std::path::PathBuf, min_rate: f64| {
+            run_eval_check_in(path, min_rate, scratch.path())
+        };
         std::fs::write(dir.path().join("good.eval.json"), &good).unwrap();
         // Single file greens; the file need not end `.eval.json` (named).
-        assert!(run_eval_check(dir.path().join("good.eval.json"), 1.0).is_ok());
-        assert!(run_eval_check(dir.path().to_path_buf(), 1.0).is_ok());
+        assert!(check(dir.path().join("good.eval.json"), 1.0).is_ok());
+        assert!(check(dir.path().to_path_buf(), 1.0).is_ok());
         // Mixed board goes red naming the bad id; half-rate holds at 0.5.
         std::fs::write(dir.path().join("bad.eval.json"), &bad).unwrap();
-        let err = run_eval_check(dir.path().to_path_buf(), 1.0)
+        let err = check(dir.path().to_path_buf(), 1.0)
             .unwrap_err()
             .to_string();
         assert!(err.contains("b.txt"), "{err}");
-        assert!(run_eval_check(dir.path().to_path_buf(), 0.5).is_ok());
+        assert!(check(dir.path().to_path_buf(), 0.5).is_ok());
         // Corrupt recording bails naming the file, never scores.
         std::fs::write(dir.path().join("broken.eval.json"), "{nope").unwrap();
-        let err = run_eval_check(dir.path().join("broken.eval.json"), 0.0)
+        let err = check(dir.path().join("broken.eval.json"), 0.0)
             .unwrap_err()
             .to_string();
         assert!(err.contains("broken.eval.json"), "{err}");
         std::fs::remove_file(dir.path().join("broken.eval.json")).unwrap();
-        // Missing path, empty dir, and stray-only dir all refuse. No temp survives ANY exit
-        // (corrupt bail included — the fix): scan for the pid-prefixed parents.
-        let prefix = format!("polymorph-eval-check-{}", std::process::id());
-        let strays: Vec<_> = std::fs::read_dir(std::env::temp_dir())
+        // Missing path, empty dir, and stray-only dir all refuse. No scratch parent survives
+        // any exit, the corrupt bail included.
+        let strays: Vec<_> = std::fs::read_dir(scratch.path())
             .unwrap()
             .filter_map(|e| e.ok())
-            .filter(|e| {
-                e.file_name()
-                    .to_str()
-                    .is_some_and(|n| n.starts_with(&prefix))
-            })
             .collect();
         assert!(strays.is_empty(), "stranded temp: {strays:?}");
-        assert!(run_eval_check(dir.path().join("ghost.json"), 1.0).is_err());
+        assert!(check(dir.path().join("ghost.json"), 1.0).is_err());
         let empty = tempfile::tempdir().unwrap();
-        assert!(run_eval_check(empty.path().to_path_buf(), 0.0).is_err());
+        assert!(check(empty.path().to_path_buf(), 0.0).is_err());
         std::fs::write(empty.path().join("notes.txt"), "stray").unwrap();
-        assert!(run_eval_check(empty.path().to_path_buf(), 0.0).is_err());
+        assert!(check(empty.path().to_path_buf(), 0.0).is_err());
     }
 
     #[test]
