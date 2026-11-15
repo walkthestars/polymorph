@@ -435,7 +435,7 @@ solvers agreeing are harder to fool than one, but both are still trusted.
 polymorph proof backends                 # language, limits, resolved solver
 polymorph proof bench [--json bench.json]
 polymorph proof run --request req.json [--cert-out cert.json] [--events-json events.json] \
-  [--deterministic | --model <MODEL>] [--bmc-depth 6] [--solver "<cmd> {input}"] [--json]
+  [--use-model | --model <MODEL>] [--bmc-depth 6] [--solver "<cmd> {input}"] [--json]
 polymorph proof recheck --cert cert.json --source unit.ais [--source ...] \
   [--digest-only] [--differential "<cmd> {input}"] [--json]
 ```
@@ -560,12 +560,14 @@ Whether a model is called depends on the surface:
 
 | Surface | Model called |
 |---|---|
-| `proof run` | **Yes, by default**, when providers are configured: the `plan` role proposes and the `review` role refines (`--model` pins one model for both). Pass `--deterministic` to never call a model. With no providers configured it prints a note and runs deterministically. |
+| `proof run` | Only with `--use-model` (the `plan` role proposes and the `review` role refines) or `--model <MODEL>` (one model for both). If no providers are configured it prints a note and runs deterministically. |
 | MCP `synthesize_invariants` | Only with `use_model: true`. |
 | `review drive --proof-request` | Never; the gate uses the deterministic pool. |
 | `proof bench` | Never. |
 
-For reproducible, zero-cost runs on the CLI, always pass `--deterministic`.
+`proof run` makes no model call and spends no tokens unless `--use-model` or
+`--model` is passed. `--deterministic` states that default explicitly and is
+refused together with either of them.
 
 **Cost accounting.** Each round records `solver_ms` and `tokens`. Token counts
 come from the provider's usage report when it sends one; otherwise they are a

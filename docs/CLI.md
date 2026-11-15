@@ -244,7 +244,8 @@ described in [PROOF.md](PROOF.md).
 
 ```bash
 polymorph proof run --request request.json --cert-out cert.json   # exit 0 only on `proved`
-polymorph proof run --request request.json --deterministic --json # no model call, full response
+polymorph proof run --request request.json --json                 # full response as JSON
+polymorph proof run --request request.json --use-model            # let a configured model propose
 polymorph proof recheck --cert cert.json --source unit.ais        # re-derive and replay
 polymorph proof recheck --cert cert.json --source unit.ais --differential "cvc5 {input}"
 polymorph proof bench                                             # built-in benchmark
@@ -256,8 +257,9 @@ polymorph proof backends                                          # supported fr
 | `--request <FILE>` | `run` | Request JSON (`-` reads stdin) |
 | `--cert-out <FILE>` | `run` | Write the certificate body |
 | `--events-json <FILE>` | `run` | Write the round ledger |
-| `--deterministic` | `run` | Do not call a model; use the built-in candidate pool only |
-| `--model <MODEL>` | `run` | Pin the proposer model instead of the role chains |
+| `--use-model` | `run` | Let a configured model propose and refine invariants. Off by default: no model is called |
+| `--model <MODEL>` | `run` | Pin one model as proposer and refiner; implies `--use-model` |
+| `--deterministic` | `run` | Never call a model; use the built-in candidate pool only. This is the default; it cannot be combined with `--use-model` or `--model` |
 | `--bmc-depth <N>` | `run` | Bounded model-check depth used to tell a weak invariant from a false property (default `6`) |
 | `--solver <CMD>` | `run` | Solver command line containing `{input}` (default `z3 -smt2 {input}`) |
 | `--source <FILE>` | `recheck` | Source the certificate is bound to; repeat once per pinned file |

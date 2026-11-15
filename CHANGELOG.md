@@ -13,7 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `polymorph proof` and `review drive --proof-request` (experimental): an SMT-checked
   proof gate over the `ais-core` fragment, with re-checkable certificates and
-  `proof_round` / `proof` ledger events. Needs `z3` on `PATH`.
+  `proof_round` / `proof` ledger events. Needs `z3` on `PATH`. `proof run` calls a
+  model only with `--use-model` or `--model`.
 - `deny.toml`: a permissive-only `cargo-deny` policy that reproduces the AGPL rejection
   an enterprise allowlist gives, as described in `docs/LICENSING.md`.
 - MCP tool `synthesize_invariants` (experimental).

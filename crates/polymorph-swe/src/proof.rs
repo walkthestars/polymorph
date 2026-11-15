@@ -37,11 +37,16 @@ pub enum ProofCmd {
         /// Write the round ledger as `ais_round` events here.
         #[arg(long)]
         events_json: Option<PathBuf>,
-        /// Pin the proposer/refiner model (overrides the role chains).
+        /// Let a configured model propose and refine invariants (the `plan`
+        /// role proposes, the `review` role refines). Off by default: the
+        /// deterministic pool is used and no model is called.
+        #[arg(long)]
+        use_model: bool,
+        /// Pin one model as proposer and refiner. Implies `--use-model`.
         #[arg(long)]
         model: Option<String>,
-        /// Do not call a model at all: deterministic pool only.
-        #[arg(long)]
+        /// Never call a model: deterministic pool only. This is the default.
+        #[arg(long, conflicts_with_all = ["use_model", "model"])]
         deterministic: bool,
         /// Bounded model-check depth used to separate "too weak" from "false".
         #[arg(long, default_value_t = 6)]
@@ -102,18 +107,20 @@ pub async fn run(
             request,
             cert_out,
             events_json,
+            use_model,
             model,
-            deterministic,
+            deterministic: _,
             bmc_depth,
             solver,
             json,
         } => {
+            let use_model = wants_model(use_model, model.as_deref());
             run_one(
                 &request,
                 cert_out.as_deref(),
                 events_json.as_deref(),
                 model,
-                deterministic,
+                use_model,
                 bmc_depth,
                 solver,
                 json,
@@ -143,6 +150,12 @@ pub async fn run(
     }
 }
 
+/// Whether `proof run` may call a model. Off unless asked for: a pinned
+/// model is an explicit request to call it.
+fn wants_model(use_model: bool, model: Option<&str>) -> bool {
+    use_model || model.is_some()
+}
+
 fn solver_description() -> String {
     match Checker::resolve(default_solver()) {
         Ok(c) => format!(
@@ -170,7 +183,7 @@ async fn run_one(
     cert_out: Option<&Path>,
     events_json: Option<&Path>,
     model: Option<String>,
-    deterministic: bool,
+    use_model: bool,
     bmc_depth: usize,
     solver: Option<String>,
     json: bool,
@@ -205,7 +218,7 @@ async fn run_one(
 
     let mut cfg = DriverConfig::deterministic(checker);
     cfg.bmc_depth = bmc_depth.clamp(1, 32);
-    if !deterministic {
+    if use_model {
         match build_llm_proposer(model, overrides).await {
             Ok(p) => cfg.proposer = Some(p),
             Err(e) => eprintln!("note: running deterministically ({e})"),
@@ -757,6 +770,43 @@ async fn build_llm_proposer(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[derive(Debug, clap::Parser)]
+    struct ProofCli {
+        #[command(subcommand)]
+        cmd: ProofCmd,
+    }
+
+    fn parse_run(extra: &[&str]) -> Result<(bool, Option<String>), clap::Error> {
+        use clap::Parser;
+        let mut argv = vec!["proof", "run", "--request", "r.json"];
+        argv.extend_from_slice(extra);
+        match ProofCli::try_parse_from(argv)?.cmd {
+            ProofCmd::Run {
+                use_model, model, ..
+            } => Ok((use_model, model)),
+            other => panic!("unexpected parse: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn run_calls_no_model_unless_asked() {
+        // No flag: the deterministic pool, whatever providers are configured.
+        let (use_model, model) = parse_run(&[]).unwrap();
+        assert!(!wants_model(use_model, model.as_deref()));
+        let (use_model, model) = parse_run(&["--deterministic"]).unwrap();
+        assert!(!wants_model(use_model, model.as_deref()));
+
+        // Either opt-in turns the model on.
+        let (use_model, model) = parse_run(&["--use-model"]).unwrap();
+        assert!(wants_model(use_model, model.as_deref()));
+        let (use_model, model) = parse_run(&["--model", "m"]).unwrap();
+        assert!(wants_model(use_model, model.as_deref()));
+
+        // Asking for both is a usage error, not a silent choice.
+        assert!(parse_run(&["--deterministic", "--use-model"]).is_err());
+        assert!(parse_run(&["--deterministic", "--model", "m"]).is_err());
+    }
 
     #[test]
     fn parses_a_documented_reply_and_tolerates_fences() {

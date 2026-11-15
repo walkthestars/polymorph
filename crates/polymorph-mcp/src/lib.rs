@@ -714,6 +714,8 @@ async fn run_synthesize(plan: &SynthesizePlan) -> Result<CallToolResult, ErrorDa
         .arg(plan.bmc_depth.to_string());
     if plan.deterministic {
         cmd.arg("--deterministic");
+    } else {
+        cmd.arg("--use-model");
     }
     if let Some(model) = &plan.model {
         cmd.arg("--model").arg(model);
