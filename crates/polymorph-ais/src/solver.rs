@@ -128,12 +128,24 @@ impl SolverSpec {
         if direct.is_file() {
             return Ok(direct.to_path_buf());
         }
-        which(first).ok_or_else(|| {
-            format!(
-                "solver executable {first:?} was not found (set POLYMORPH_AIS_SOLVER to a command line containing {{input}})"
-            )
-        })
+        which(first).ok_or_else(|| not_found_message(first))
     }
+}
+
+/// The error for a solver that is neither a file nor on `PATH`. For the
+/// default solver it says how to install it, because the release binaries do
+/// not bundle one.
+fn not_found_message(first: &str) -> String {
+    let mut message = format!("solver executable {first:?} was not found.");
+    if first == "z3" {
+        message.push_str(
+            " The proof commands need the z3 SMT solver, which is not bundled.              Install it (Windows: `scoop install z3`; macOS: `brew install z3`;              Debian or Ubuntu: `sudo apt install z3`; or a release from              https://github.com/Z3Prover/z3/releases) and check with `z3 --version`.",
+        );
+    }
+    message.push_str(
+        " Where another solver is accepted, set POLYMORPH_AIS_SOLVER to a command          line containing {input} (docs/PROOF.md, section 2).",
+    );
+    message
 }
 
 /// Follow a scoop-style launcher shim to its target.
@@ -666,4 +678,26 @@ pub fn run_verbatim(checker: &Checker, script: &str) -> Option<SolverRun> {
         });
     }
     Some(parse_segment(&stdout, &[], elapsed_ms, exit_code))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_missing_default_solver_says_how_to_install_it() {
+        let message = not_found_message("z3");
+        assert!(message.contains("\"z3\" was not found"), "{message}");
+        assert!(message.contains("brew install z3"), "{message}");
+        assert!(message.contains("z3 --version"), "{message}");
+        assert!(message.contains("POLYMORPH_AIS_SOLVER"), "{message}");
+    }
+
+    #[test]
+    fn a_missing_custom_solver_gets_no_install_advice() {
+        let message = not_found_message("cvc5");
+        assert!(message.contains("\"cvc5\" was not found"), "{message}");
+        assert!(!message.contains("install"), "{message}");
+        assert!(message.contains("POLYMORPH_AIS_SOLVER"), "{message}");
+    }
 }

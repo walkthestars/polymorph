@@ -5735,6 +5735,9 @@ v1
     /// any other result is saved under `.polymorph/tool-output/` first.
     #[tokio::test]
     async fn agentic_runner_compacts_old_tool_results_past_the_budget() {
+        // Two reads of the file alone exceed this, whatever the platform's
+        // path lengths add to the grep results.
+        const BUDGET: usize = 24 * 1024;
         let dir = tempfile::tempdir().unwrap();
         let big: String = (1..=300)
             .map(|i| format!("line {i} of the big file, padded for size\n"))
@@ -5767,7 +5770,7 @@ v1
         let mut runner =
             agentic_runner(stub.clone(), vec!["read".into(), "grep".into()], vec![], 10);
         runner.history = ToolHistoryBudget {
-            budget_bytes: 40 * 1024,
+            budget_bytes: BUDGET,
             keep_rounds: 2,
         };
         let out = runner.run_turn(agentic_ctx(&dir, "fix it")).await.unwrap();
@@ -5813,8 +5816,8 @@ v1
         // stay whole even though they alone exceed the budget.
         assert!(fed[2].contains("`read` from tool round 2"), "{}", fed[2]);
         assert!(fed[3].contains("`grep` from tool round 2"), "{}", fed[3]);
-        assert!(fed[4..].iter().map(String::len).sum::<usize>() > 40 * 1024);
-        // An earlier history (after round 2) was still under budget.
+        assert!(fed[4..].iter().map(String::len).sum::<usize>() > BUDGET);
+        // After round 2 nothing was compacted: both rounds were kept rounds.
         assert!(fed_responses(&seen[2])
             .iter()
             .all(|f| !f.starts_with("[harness:")));
@@ -7654,15 +7657,17 @@ v1
     fn pack_candidates_order_and_dedup() {
         use std::path::{Path as P, PathBuf as B};
         let pack = P::new("prompts/muse/muse-spark-1.3/review.md");
+        // A root that is absolute on the platform the test runs on.
+        let r = if cfg!(windows) { "C:" } else { "" };
 
         assert_eq!(
             pack_candidates(
-                P::new("C:/abs/pack.md"),
+                P::new(&format!("{r}/abs/pack.md")),
                 Some(P::new("D:/p")),
-                Some(P::new("C:/w")),
+                Some(P::new(&format!("{r}/w"))),
                 None
             ),
-            vec![B::from("C:/abs/pack.md")],
+            vec![B::from(format!("{r}/abs/pack.md"))],
             "an absolute pack path is used as given"
         );
 
@@ -7683,21 +7688,29 @@ v1
         let from_cwd = pack_candidates(
             pack,
             None,
-            Some(P::new("C:/repo/crates/x")),
-            Some(P::new("C:/bin")),
+            Some(P::new(&format!("{r}/repo/crates/x"))),
+            Some(P::new(&format!("{r}/bin"))),
         );
         assert_eq!(
             from_cwd,
             vec![
                 B::from("prompts/muse/muse-spark-1.3/review.md"),
-                B::from("C:/repo/crates/x/prompts/muse/muse-spark-1.3/review.md"),
-                B::from("C:/repo/crates/prompts/muse/muse-spark-1.3/review.md"),
-                B::from("C:/repo/prompts/muse/muse-spark-1.3/review.md"),
-                B::from("C:/prompts/muse/muse-spark-1.3/review.md"),
-                B::from("C:/bin/prompts/muse/muse-spark-1.3/review.md"),
-                B::from("C:/bin/../prompts/muse/muse-spark-1.3/review.md"),
-                B::from("C:/bin/../../prompts/muse/muse-spark-1.3/review.md"),
-                B::from("C:/bin/../../../prompts/muse/muse-spark-1.3/review.md"),
+                B::from(format!(
+                    "{r}/repo/crates/x/prompts/muse/muse-spark-1.3/review.md"
+                )),
+                B::from(format!(
+                    "{r}/repo/crates/prompts/muse/muse-spark-1.3/review.md"
+                )),
+                B::from(format!("{r}/repo/prompts/muse/muse-spark-1.3/review.md")),
+                B::from(format!("{r}/prompts/muse/muse-spark-1.3/review.md")),
+                B::from(format!("{r}/bin/prompts/muse/muse-spark-1.3/review.md")),
+                B::from(format!("{r}/bin/../prompts/muse/muse-spark-1.3/review.md")),
+                B::from(format!(
+                    "{r}/bin/../../prompts/muse/muse-spark-1.3/review.md"
+                )),
+                B::from(format!(
+                    "{r}/bin/../../../prompts/muse/muse-spark-1.3/review.md"
+                )),
             ],
             "cwd-relative, then the ancestor walk nearest-first, then the exe fallbacks"
         );

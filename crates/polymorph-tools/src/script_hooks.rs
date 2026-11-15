@@ -186,7 +186,7 @@ fn capped(s: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     fn cancel() -> CancellationToken {
@@ -208,7 +208,7 @@ mod tests {
     fn entry_validation() {
         let good = polymorph_core::config::HookEntry {
             event: "pre".to_string(),
-            command: "cmd /C exit 0".to_string(),
+            command: exit_cmd(0),
             timeout_secs: None,
         };
         let hook = validate_entry(&good).unwrap();
@@ -239,15 +239,41 @@ mod tests {
         }
     }
 
-    // NOTE: script-execution tests below shell out via `cmd /C` (Windows host + windows-only CI —
-    // same platform note as the exec suite). Keep commands quote-free and fast (well under
-    // timeouts).
+    // The hook command goes to the platform shell, so the test commands are
+    // written once per shell. Keep them quote-free and fast.
+
+    /// A command that exits with `code`.
+    pub(crate) fn exit_cmd(code: u8) -> String {
+        if cfg!(windows) {
+            format!("cmd /C exit {code}")
+        } else {
+            format!("exit {code}")
+        }
+    }
+
+    /// A command that prints `word` on stderr and exits 2.
+    pub(crate) fn deny_cmd(word: &str) -> String {
+        if cfg!(windows) {
+            format!("cmd /C echo {word} 1>&2 & exit 2")
+        } else {
+            format!("echo {word} 1>&2; exit 2")
+        }
+    }
+
+    /// A command that exits 2 only when the hook's tool variable is `tool`.
+    fn deny_tool_cmd(tool: &str) -> String {
+        if cfg!(windows) {
+            format!("cmd /C if %POLYMORPH_HOOK_TOOL%=={tool} exit 2")
+        } else {
+            format!("test $POLYMORPH_HOOK_TOOL != {tool} || exit 2")
+        }
+    }
 
     #[tokio::test]
     async fn exit_zero_allows() {
         let hook = ScriptHook {
             on: ScriptOn::Pre,
-            command: "cmd /C exit 0".to_string(),
+            command: exit_cmd(0),
             timeout: Duration::from_secs(10),
         };
         assert_eq!(
@@ -260,7 +286,7 @@ mod tests {
     async fn exit_two_denies_with_stderr() {
         let hook = ScriptHook {
             on: ScriptOn::Pre,
-            command: "cmd /C echo no-reads-here 1>&2 & exit 2".to_string(),
+            command: deny_cmd("no-reads-here"),
             timeout: Duration::from_secs(10),
         };
         let decision = run_hook(&hook, "read", "{}", &cancel()).await;
@@ -276,7 +302,7 @@ mod tests {
     async fn other_exit_denies_naming_code() {
         let hook = ScriptHook {
             on: ScriptOn::Pre,
-            command: "cmd /C exit 5".to_string(),
+            command: exit_cmd(5),
             timeout: Duration::from_secs(10),
         };
         let decision = run_hook(&hook, "read", "{}", &cancel()).await;
@@ -292,11 +318,11 @@ mod tests {
     async fn missing_command_denies() {
         let hook = ScriptHook {
             on: ScriptOn::Pre,
-            command: "cmd /C no-such-binary-xyz".to_string(),
+            command: "no-such-binary-xyz".to_string(),
             timeout: Duration::from_secs(10),
         };
-        // `cmd /C` itself spawns (exit 1 on unknown inner command) → deny
-        // naming the code, never a hang, never a pass.
+        // The shell itself spawns and exits nonzero on the unknown command:
+        // deny naming the code, never a hang, never a pass.
         let decision = run_hook(&hook, "read", "{}", &cancel()).await;
         assert!(
             matches!(decision, super::super::HookDecision::Deny { .. }),
@@ -309,7 +335,7 @@ mod tests {
         // Delivery proof: the script decides on the TOOL var.
         let hook = ScriptHook {
             on: ScriptOn::Pre,
-            command: "cmd /C if %POLYMORPH_HOOK_TOOL%==read exit 2".to_string(),
+            command: deny_tool_cmd("read"),
             timeout: Duration::from_secs(10),
         };
         let decision = run_hook(&hook, "read", "{}", &cancel()).await;
@@ -329,7 +355,7 @@ mod tests {
             set.spawn(async move {
                 let hook = ScriptHook {
                     on: ScriptOn::Pre,
-                    command: format!("cmd /C if %POLYMORPH_HOOK_TOOL%=={tool} exit 2"),
+                    command: deny_tool_cmd(&tool),
                     timeout: Duration::from_secs(30),
                 };
                 let decision = run_hook(&hook, &tool, "{}", &cancel()).await;
@@ -349,7 +375,7 @@ mod tests {
     async fn observe_never_denies() {
         let hook = ScriptHook {
             on: ScriptOn::Post,
-            command: "cmd /C exit 2".to_string(),
+            command: exit_cmd(2),
             timeout: Duration::from_secs(10),
         };
         // Observation path has no verdict by construction (returns unit).

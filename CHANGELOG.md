@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] — 2026-11-14
+
+### Fixed
+
+- An `openai::` model claimed by a `[[providers]]` entry with a `base_url` is sent to
+  that endpoint with the entry's `api_key_env`. It went to the default OpenAI endpoint.
+- A missing `z3` is reported with install commands for each platform.
+- A test that scanned the shared temp folder no longer races its sibling.
+- Six tests that assumed Windows paths or `cmd` pass on Linux.
+
+### Changed
+
+- CI runs the whole test suite on Linux as well as Windows.
+
 ## [1.1.0] — 2026-11-14
 
 ### Added

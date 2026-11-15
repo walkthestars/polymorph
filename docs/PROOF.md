@@ -71,9 +71,10 @@ covered by the test suite in that role.
 When the solver cannot be resolved:
 
 - `proof run`, `proof recheck` and `proof bench` stop before doing any work and
-  exit `1` with `solver executable "z3" was not found (...)` on stderr. No
-  response JSON, certificate or events file is written. `proof bench` always
-  uses `z3` and does not read the variable the message suggests.
+  exit `1` with `solver executable "z3" was not found.` on stderr, followed by
+  the install commands above. No response JSON, certificate or events file is
+  written. The message also names `POLYMORPH_AIS_SOLVER`; `proof bench` always
+  uses `z3` and does not read it.
 - `proof backends` prints `solver       unresolved: ...` and exits `0`.
 - `review drive --proof-request` refuses to start, before any model call, with
   `proof gate cannot arm: ...`. A gate that cannot run is not armed silently.

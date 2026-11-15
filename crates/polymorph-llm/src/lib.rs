@@ -911,6 +911,28 @@ pub fn spec_for_model(model: &str, providers: &[ProviderEntry]) -> genai::ModelS
             model: genai::ModelIden::new(genai::adapter::AdapterKind::OpenAIResp, bare),
         });
     }
+    // OpenAI-compatible gateways: an `openai::` id claimed by a provider entry
+    // that sets `base_url` goes to that endpoint on the chat-completions
+    // surface, authenticated from the entry's `api_key_env`. Unclaimed
+    // `openai::` ids, and claims without a `base_url`, keep the Name path.
+    if let Some(bare_openai) = model.strip_prefix("openai::") {
+        if let Some(entry) = find_provider_for(providers, model).filter(|e| !e.base_url.is_empty())
+        {
+            let mut base = entry.base_url.clone();
+            if !base.ends_with('/') {
+                base.push('/');
+            }
+            let sink = entry
+                .api_key_env
+                .clone()
+                .unwrap_or_else(|| "OPENAI_API_KEY".into());
+            return genai::ModelSpec::from_target(genai::ServiceTarget {
+                endpoint: genai::resolver::Endpoint::from_owned(base),
+                auth: genai::resolver::AuthData::from_env(sink),
+                model: genai::ModelIden::new(genai::adapter::AdapterKind::OpenAI, bare_openai),
+            });
+        }
+    }
     genai::ModelSpec::from(model.to_string())
 }
 
@@ -1995,6 +2017,32 @@ mod tests {
                 "{id} must keep the Name path"
             );
         }
+    }
+
+    #[test]
+    fn spec_for_model_routes_claimed_openai_ids_to_provider_base_url() {
+        let providers = vec![polymorph_core::config::ProviderEntry {
+            id: "gateway".into(),
+            base_url: "https://gateway.example/v1".into(),
+            api_key_env: Some("GATEWAY_KEY".into()),
+            models: vec!["openai::some-model".into()],
+            ..Default::default()
+        }];
+        match spec_for_model("openai::some-model", &providers) {
+            genai::ModelSpec::Target(t) => {
+                assert_eq!(t.endpoint.base_url(), "https://gateway.example/v1/");
+                assert!(matches!(
+                    t.model.adapter_kind,
+                    genai::adapter::AdapterKind::OpenAI
+                ));
+                assert_eq!(t.model.model_name.as_str(), "some-model");
+            }
+            other => panic!("claimed openai id must route Target, got {other:?}"),
+        }
+        assert!(matches!(
+            spec_for_model("openai::other-model", &providers),
+            genai::ModelSpec::Name(_)
+        ));
     }
 
     #[test]
