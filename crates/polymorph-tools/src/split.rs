@@ -7,7 +7,7 @@
 //! [`SplitGroup`]s the caller can commit one per atomic commit —
 //! propose-only, this module never writes history.
 //!
-//! Content-signal floor (v2 T1, stated): same-file clustering — every
+//! Content-signal floor (stated): same-file clustering — every
 //! hunk lands in its own file's group, so zero cross-pollution holds by
 //! construction. Cross-file dependency edges enter explicitly via
 //! `deps` (`before -> after` on file paths); import-graph inference is

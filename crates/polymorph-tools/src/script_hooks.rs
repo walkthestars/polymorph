@@ -57,7 +57,7 @@ pub struct ScriptHook {
 pub const MAX_HOOK_TIMEOUT_SECS: u64 = 600;
 
 /// Validate one config entry into a runnable hook. Refusals name the field
-/// (fail-closed at attach time — bad config bails pre-spend, F5d precedent).
+/// (fail-closed at attach time — bad config bails pre-spend).
 pub fn validate_entry(entry: &polymorph_core::config::HookEntry) -> anyhow::Result<ScriptHook> {
     let on = ScriptOn::parse(&entry.event)?;
     if entry.command.trim().is_empty() {

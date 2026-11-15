@@ -4,7 +4,7 @@
 //! -9 loses nothing committed — throughput is irrelevant for a single-user agent),
 //! `rusqlite_migration` versions, backup-before-migrate, refuse-on-downgrade.
 //!
-//! Also home to the READ LEDGER (C1-for-F): every range the agent shows the
+//! Also home to the READ LEDGER: every range the agent shows the
 //! model is recorded with its snapshot tag, so the future hashline
 //! seen-lines guard can distinguish shown lines from elided ones. The ledger
 //! stores tag STRINGS only (no dependency on polymorph-tools).
@@ -797,7 +797,7 @@ impl Store {
         }
     }
 
-    /// DB + WAL + SHM sizes in bytes (C2 soak-sampler core).
+    /// DB + WAL + SHM sizes in bytes (soak-sampler core).
     pub fn sample_db_sizes(db_path: &Path) -> DbSizes {
         let sibling = |suffix: &str| {
             let mut p = db_path.as_os_str().to_owned();

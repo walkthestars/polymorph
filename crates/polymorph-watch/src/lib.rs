@@ -59,11 +59,58 @@ pub struct BudgetView {
     pub tools_max: u64,
 }
 
+/// The proof gate's row: the latest `proof_round`, replaced by the final
+/// `proof` verdict when it arrives.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProofView {
+    pub verdict: String,
+    pub class: Option<String>,
+    pub certificate_digest: Option<String>,
+    /// Gate invocations seen (`proof_round` events).
+    pub invocations: u64,
+    /// Solver time summed over the invocations.
+    pub solver_ms: u64,
+    /// From the final `proof` event: are the certificate's source bytes still
+    /// in the tree? `None` = not reported (no certificate, or no final event).
+    pub source_present: Option<bool>,
+    /// True once the final `proof` event has been applied.
+    pub is_final: bool,
+}
+
+impl ProofView {
+    /// One line: verdict, class, a digest prefix, invocation count and cost.
+    pub fn line(&self) -> String {
+        let mut out = format!("proof {}", self.verdict);
+        if let Some(class) = &self.class {
+            out.push_str(&format!("  {class}"));
+        }
+        if let Some(digest) = &self.certificate_digest {
+            let prefix: String = digest.chars().take(15).collect();
+            out.push_str(&format!("  {prefix}…"));
+        }
+        if self.source_present == Some(false) {
+            out.push_str("  (source no longer in tree)");
+        }
+        if self.invocations > 0 {
+            out.push_str(&format!(
+                "  gate runs {}  solver {} ms",
+                self.invocations, self.solver_ms
+            ));
+        }
+        out
+    }
+
+    fn passed(&self) -> bool {
+        self.verdict == "proved" && self.certificate_digest.is_some()
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ViewState {
     pub rounds: Vec<RoundView>,
     pub findings: Vec<String>,
     pub budget: Option<BudgetView>,
+    pub proof: Option<ProofView>,
     pub verdict: Option<String>,
     pub halted: Option<String>,
     pub event_count: usize,
@@ -147,6 +194,22 @@ impl ViewState {
                     tools_max: field("tools_max"),
                 });
             }
+            "proof_round" | "proof" => {
+                let text = |key: &str| object.get(key).and_then(Value::as_str).map(str::to_string);
+                let view = self.proof.get_or_insert_with(ProofView::default);
+                view.verdict = text("verdict").unwrap_or_else(|| "?".to_string());
+                view.class = text("class");
+                view.certificate_digest = text("certificate_digest");
+                if object.get("type").and_then(Value::as_str) == Some("proof") {
+                    view.is_final = true;
+                    view.source_present = object
+                        .get("certificate_source_present")
+                        .and_then(Value::as_bool);
+                } else {
+                    view.invocations += 1;
+                    view.solver_ms += object.get("solver_ms").and_then(Value::as_u64).unwrap_or(0);
+                }
+            }
             "halted" => {
                 self.halted = Some(
                     object
@@ -208,7 +271,7 @@ pub fn draw(frame: &mut Frame, state: &ViewState, path: &str, following: bool) {
         .constraints([
             Constraint::Length(3),
             Constraint::Min(1),
-            Constraint::Length(8),
+            Constraint::Length(if state.proof.is_some() { 9 } else { 8 }),
         ])
         .split(frame.area());
 
@@ -272,6 +335,19 @@ pub fn draw(frame: &mut Frame, state: &ViewState, path: &str, following: bool) {
         footer.push(Line::from(format!(
             "rounds {}/{}  tools {}/{}",
             budget.rounds_used, budget.rounds_max, budget.tools_used, budget.tools_max
+        )));
+    }
+    if let Some(proof) = &state.proof {
+        let color = if proof.passed() && proof.source_present != Some(false) {
+            Color::Green
+        } else if proof.passed() {
+            Color::Yellow
+        } else {
+            Color::Red
+        };
+        footer.push(Line::from(Span::styled(
+            proof.line(),
+            Style::default().fg(color),
         )));
     }
     let shown = state.findings.len().min(5);
@@ -375,6 +451,9 @@ mod tests {
             {"type":"round_started","round":3,"max_rounds":3},
             {"type":"verdict","round":3,"passed":true,"summary":"findings=0","synthesized":"create"},
             {"type":"budget","rounds_used":3,"rounds_max":3,"tools_used":9,"tools_max":30},
+            {"type":"proof_round","round":1,"verdict":"disproved","class":"spec_bug","solver_ms":41,"certificate_digest":null},
+            {"type":"proof_round","round":2,"verdict":"proved","class":null,"solver_ms":37,"certificate_digest":"sha256:a6e6336dd039b9c0"},
+            {"type":"proof","verdict":"proved","class":null,"certificate_digest":"sha256:a6e6336dd039b9c0","summary":"all obligations discharged","certificate_source_present":true},
             {"type":"finished","verdict":"PASSED"},
             {"type":"unknown_kind"}
         ])
@@ -384,7 +463,7 @@ mod tests {
     fn applies_every_event_type() {
         let mut state = ViewState::default();
         state.apply_all(&ledger()).unwrap();
-        assert_eq!(state.event_count, 10);
+        assert_eq!(state.event_count, 13);
         assert_eq!(state.rounds.len(), 3);
         assert_eq!(state.rounds[0].state, RoundState::Failed);
         assert_eq!(state.rounds[1].state, RoundState::Invalid);
@@ -401,6 +480,45 @@ mod tests {
             })
         );
         assert_eq!(state.status(), "PASSED");
+        assert_eq!(
+            state.proof,
+            Some(ProofView {
+                verdict: "proved".into(),
+                class: None,
+                certificate_digest: Some("sha256:a6e6336dd039b9c0".into()),
+                invocations: 2,
+                solver_ms: 78,
+                source_present: Some(true),
+                is_final: true,
+            })
+        );
+    }
+
+    #[test]
+    fn proof_rounds_show_progress_before_the_final_event() {
+        let mut state = ViewState::default();
+        state.apply(&serde_json::json!(
+            {"type":"proof_round","round":1,"verdict":"disproved","class":"spec_bug","solver_ms":41,"certificate_digest":null}
+        ));
+        let proof = state.proof.clone().unwrap();
+        assert!(!proof.is_final);
+        assert_eq!(
+            proof.line(),
+            "proof disproved  spec_bug  gate runs 1  solver 41 ms"
+        );
+    }
+
+    #[test]
+    fn a_rolled_back_certificate_source_is_called_out() {
+        let mut state = ViewState::default();
+        state.apply(&serde_json::json!(
+            {"type":"proof","verdict":"proved","class":null,"certificate_digest":"sha256:a6e6336dd039b9c0","summary":"ok","certificate_source_present":false}
+        ));
+        let line = state.proof.unwrap().line();
+        assert_eq!(
+            line,
+            "proof proved  sha256:a6e6336d…  (source no longer in tree)"
+        );
     }
 
     #[test]
@@ -446,5 +564,7 @@ mod tests {
         assert!(text.contains("PASSED"), "{text}");
         assert!(text.contains("missing guard"), "{text}");
         assert!(text.contains("PASS"), "{text}");
+        assert!(text.contains("proof proved"), "{text}");
+        assert!(text.contains("sha256:a6e6336d"), "{text}");
     }
 }

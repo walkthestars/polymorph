@@ -138,7 +138,7 @@ impl TaskGraph {
     }
 
     /// Add one task. Refuses empty ids, duplicates, self-deps, and deps on
-    /// tasks not yet present (fail-fast at write — F5d precedent). Cycle
+    /// tasks not yet present (fail-fast at write). Cycle
     /// detection is NOT here: with unknown deps refused, no `add_task` call
     /// can close a cycle, so a check would be unreachable code — cycles are
     /// caught by [`Self::validate`], which the parse/load boundaries run.

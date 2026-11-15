@@ -4,6 +4,7 @@
 //!
 //! polymorph mcp MCP stdio server (one `drive` tool)
 //! polymorph exec <prompt> headless single-turn
+//! polymorph proof <command> invariant synthesis, verdicts, certificates
 //! polymorph review <command> reviewer loops and plan execution
 //! polymorph sessions|config|... sessions, configuration, providers, models,
 //! delegate, eval, update-catalog
@@ -14,6 +15,7 @@ use clap::{Args, CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
 
 mod clean;
+mod proof;
 mod tracing_setup;
 
 #[derive(Debug, Parser)]
@@ -52,7 +54,7 @@ enum Commands {
         /// Override the system prompt (default: Polymorph engineering brief).
         #[arg(long)]
         system: Option<String>,
-        /// Path scope for D1b chain pins (unpinned paths use the role chain).
+        /// Path scope for chain pins (unpinned paths use the role chain).
         #[arg(long)]
         scope: Option<String>,
     },
@@ -88,7 +90,13 @@ enum Commands {
         #[command(subcommand)]
         cmd: ReviewCmd,
     },
-    /// Model-output eval: run one live turn against an expected end state.
+    /// Experimental. Proofs over the `ais-core` fragment: run a request to a
+    /// verdict, re-check a certificate, run the benchmark. Needs `z3` on PATH;
+    /// see docs/PROOF.md.
+    Proof {
+        #[command(subcommand)]
+        cmd: proof::ProofCmd,
+    },
     Eval {
         #[command(subcommand)]
         cmd: EvalCmd,
@@ -197,10 +205,10 @@ enum ReviewCmd {
         /// Path to the verdict JSON file.
         path: std::path::PathBuf,
     },
-    /// Run the live reviewer loop over LLM turns (needs key). Both modes live
-    /// (F2b-part2): plan critiques a plan document, act critiques an artifact.
+    /// Run the live reviewer loop over LLM turns (needs key). Both modes live:
+    /// plan critiques a plan document, act critiques an artifact.
     /// Reviewer + fixer are Bus children; executor rewrites TEXT in memory
-    /// (no tool calls yet — F3; the artifact file is read-only input, never
+    /// (no tool calls yet; the artifact file is read-only input, never
     /// written back).
     Run {
         #[command(flatten)]
@@ -234,8 +242,8 @@ enum ReviewCmd {
         args: Box<ReviewBenchArgs>,
     },
     /// Re-score recorded bench outcomes offline and gate the board. File or
-    /// dir (dir = sorted `*.bench.json`); red gate bails non-zero (F5c
-    /// precedent — CI must fail the build, not print red). No key.
+    /// dir (dir = sorted `*.bench.json`); red gate bails non-zero (CI
+    /// must fail the build, not print red). No key.
     BenchCheck {
         /// Recording file or dir of `*.bench.json` recordings.
         #[arg(long)]
@@ -304,7 +312,7 @@ struct ReviewRunArgs {
     /// Loop mode: act (artifact) or plan (plan document, PLAN.md convention).
     #[arg(long, default_value = "act")]
     mode: String,
-    /// Path scope for D1b chain pins (unpinned paths use the role chain).
+    /// Path scope for chain pins (unpinned paths use the role chain).
     #[arg(long)]
     scope: Option<String>,
     /// Git repo to drive in isolation (refused when not a repo): the whole
@@ -344,6 +352,14 @@ struct ReviewRunArgs {
     /// true`. Off by default: diagnostics stay evidence + warn-only.
     #[arg(long, action = clap::ArgAction::SetTrue)]
     lsp_error_gate: bool,
+    /// Experimental opt-in proof gate: after every fix turn, run the proof
+    /// request in this JSON file (format in docs/PROOF.md; source paths
+    /// resolve against the workdir) and veto a
+    /// pass unless every obligation discharges. The highest deterministic gate:
+    /// proof > tests > LSP > review. Applies to units in the `ais-core`
+    /// fragment; a Rust artifact needs a companion `.ais` model.
+    #[arg(long)]
+    proof_request: Option<std::path::PathBuf>,
     /// Read-only reviewer tools: the reviewer may `read`/ `grep`/`glob` the drive's workdir (plus
     /// `lsp_hover`/`lsp_definition` /`lsp_references` when `[[lsp_servers]]` are configured) for up
     /// to `[agent] reviewer_tool_rounds` (default 4) tool rounds, then answers with the usual JSON
@@ -400,7 +416,7 @@ struct ReviewEvalAbArgs {
     /// Loop mode for both arms: act (artifact) or plan (plan document).
     #[arg(long, default_value = "act")]
     mode: String,
-    /// Path scope for D1b chain pins (both arms; unpinned paths use chains).
+    /// Path scope for chain pins (both arms; unpinned paths use chains).
     #[arg(long)]
     scope: Option<String>,
     /// Review-pack file (default: muse-spark-1.3 review pack, read-only).
@@ -463,7 +479,7 @@ struct ReviewPlanArgs {
 /// `review bench` flags.
 #[derive(Debug, Args)]
 struct ReviewBenchArgs {
-    /// Corpus TOML (default: the admitted F6 fixture set; read-only input).
+    /// Corpus TOML (default: the admitted fixture set; read-only input).
     #[arg(
         long,
         default_value = "crates/polymorph-review/tests/agent_bench/agent_bench_corpus.toml"
@@ -537,7 +553,7 @@ enum EvalCmd {
         #[command(flatten)]
         args: Box<EvalCheckArgs>,
     },
-    /// Sweep the B6 edit corpus live: one model turn per scorable task,
+    /// Sweep the edit corpus live: one model turn per scorable task,
     /// one v2 `*.eval.json` per case for `eval check` to gate. Single
     /// attempt per case on `--model` (no fallback — attribution over
     /// robustness). Rejection tasks skip NAMED (byte-compare cannot score
@@ -595,10 +611,10 @@ struct EvalCheckArgs {
 /// `eval sweep` flags.
 #[derive(Debug, Args)]
 struct EvalSweepArgs {
-    /// Corpus TOML (default: the committed B6 fixture; read-only input).
+    /// Corpus TOML (default: the committed edit-corpus fixture; read-only input).
     #[arg(
         long,
-        default_value = "crates/polymorph-tools/tests/eval_b6/edit_corpus.toml"
+        default_value = "crates/polymorph-tools/tests/edit_corpus/edit_corpus.toml"
     )]
     corpus: std::path::PathBuf,
     /// Subject model (REQUIRED: eval must name its subject; no chain default). Bare names qualify
@@ -708,6 +724,7 @@ async fn async_main() -> anyhow::Result<()> {
             let db = cli.db.clone().unwrap_or_else(default_db_path);
             run_review(cmd, &overrides, &db).await
         }
+        Some(Commands::Proof { cmd }) => proof::run(cmd, &overrides).await,
         Some(Commands::Eval { cmd }) => run_eval(cmd, &overrides).await,
         Some(Commands::UpdateCatalog { url }) => run_update_catalog(url.as_deref()).await,
         Some(Commands::Clean {
@@ -1351,7 +1368,7 @@ async fn run_bench_live(
     if loop_worktree && !arms.contains(&BenchArm::Loop) {
         anyhow::bail!("--loop-worktree needs `--arm loop` or `both` (got `--arm {arm}`)");
     }
-    // Preamble ablation: unknown values bail pre-spend like the profile rule above (F5d precedent).
+    // Preamble ablation: unknown values bail pre-spend like the profile rule above.
     let minimal_preamble = polymorph_review::parse_preamble(&preamble)?;
     let shell_rule = polymorph_review::profile_shell_rule(&tool_profile)?;
     let corpus_text = std::fs::read_to_string(&corpus)
@@ -1373,7 +1390,7 @@ async fn run_bench_live(
         std::time::Duration::from_secs(300),
     )));
     let bus = std::sync::Arc::new(polymorph_delegate::Bus::flat());
-    // MCP deliberately NOT wired here: the bench measures the fixed V1 floor — apparatus changes
+    // MCP deliberately NOT wired here: the bench measures the fixed built-in tool floor — apparatus changes
     // would void every prior board. bounding stays off: bench boards keep the unbounded tool
     // results.
     let registry = {
@@ -1465,8 +1482,8 @@ async fn run_bench_live(
                 );
                 continue;
             }
-            // The fixer finds the repo through the artifact text (F2b
-            // ARTIFACT-PATH precedent): goal + criteria carry the goal,
+            // The fixer finds the repo through the artifact text
+            // (ARTIFACT-PATH): goal + criteria carry the goal,
             // the REPO DIR block carries the path into every brief.
             let goal = format!(
                 "{}\n\nRepository copy at {}. Make `cargo test` pass there without touching the tests.\nUse RELATIVE paths exactly as listed (e.g. src/main.rs) for every tool call — never absolute paths; the workdir is already the repo copy.",
@@ -1696,7 +1713,7 @@ async fn run_bench_live(
             );
         }
     }
-    // Board + delta + strict gate (F5d precedent: variance must hurt).
+    // Board + delta + strict gate (variance must hurt).
     // Profile stamped on every line: boards attribute to the selected profile.
     println!("profile: {tool_profile}");
     let mut reds: Vec<String> = Vec::new();
@@ -1727,8 +1744,8 @@ async fn run_bench_live(
     Ok(())
 }
 
-/// `review bench-check`: offline replay of `*.bench.json` records (F5c
-/// precedent). Materializes recorded files per record, re-runs the hidden
+/// `review bench-check`: offline replay of `*.bench.json` records.
+/// Materializes recorded files per record, re-runs the hidden
 /// suite, and requires the same resolved bit; mismatches and corrupt files
 /// are hard errors naming the file. Red gate bails non-zero.
 fn run_bench_check(path: std::path::PathBuf, min_rate: f64) -> anyhow::Result<()> {
@@ -1804,7 +1821,7 @@ fn run_bench_check(path: std::path::PathBuf, min_rate: f64) -> anyhow::Result<()
 }
 
 /// `review plan show`: parse + validate a PLAN.md file and print the board. Offline, no key. Parse
-/// faults exit 1 naming the line (the fault text already does — F5c precedent). Plan source for
+/// faults exit 1 naming the line (the fault text already does). Plan source for
 /// show/drive: checkpoint wins when present (resume), else the session store when `--session` names
 /// a session with a saved plan, else the PLAN.md file. The title ALWAYS comes from the file
 /// (checkpoint precedent — the file is the human artifact, the store holds run state). Corrupt
@@ -2014,8 +2031,8 @@ async fn run_plan_drive(
 /// rides Review and stays tool-free; the fixer rides Act in act mode, Plan in plan mode (`--plan-
 /// pack` system), wielding registry tools only behind `--tools` (text-only fixing stays the
 /// default). One process, one bus, one shared fallback state (cooldowns persist across rounds).
-/// `--scope` selects D1b pins; `--repo` runs the whole drive in one detached git worktree of the
-/// repo (removed at drive end; the operator's tree is never written, merge- back = G). Spend
+/// `--scope` selects chain pins; `--repo` runs the whole drive in one detached git worktree of the
+/// repo (removed at drive end; the operator's tree is never written). Spend
 /// guards: `--max-rounds` caps LLM rounds (each round = 1 review turn + ≤1 fix turn); `--max-tool-
 /// rounds` caps model→tools→results feeds per fix turn. Live-loop parts shared by `run` and
 /// `drive`.
@@ -2040,6 +2057,9 @@ struct LiveLoopParts {
     /// The `--repo` drive worktree: `Some` for the whole drive, removed by
     /// [`Self::finish`] (or its own drop on every other exit).
     drive_tree: Option<polymorph_delegate::DriveWorktree>,
+    /// The proof gate: `Some` only with `--proof-request`; its last summary is
+    /// emitted as a `proof` event.
+    proof: Option<std::sync::Arc<polymorph_review::ProofGate>>,
 }
 
 impl LiveLoopParts {
@@ -2225,6 +2245,7 @@ async fn prepare_live_loop(
         tools,
         max_tool_rounds,
         lsp_error_gate,
+        proof_request,
         reviewer_tools,
         verify_cmd,
         verify_timeout_secs,
@@ -2306,6 +2327,50 @@ async fn prepare_live_loop(
     } else {
         None
     };
+    // Proof gate (AIS): the highest deterministic gate. Arming it without a
+    // runnable checker is worse than not arming it, so resolution happens here,
+    // before any spend, and fails the drive naming the fault.
+    let mut proof_gate: Option<Arc<polymorph_review::ProofGate>> = None;
+    let mut proof_gate_seed: Option<Arc<polymorph_review::HarnessGate>> = None;
+    if let Some(path) = proof_request {
+        let text = std::fs::read_to_string(path)
+            .map_err(|e| anyhow::anyhow!("--proof-request {}: {e}", path.display()))?;
+        let request: polymorph_ais::types::Request = serde_json::from_str(&text).map_err(|e| {
+            anyhow::anyhow!("--proof-request {} is not AIS JSON: {e}", path.display())
+        })?;
+        request
+            .validate()
+            .map_err(|e| anyhow::anyhow!("--proof-request: {e}"))?;
+        let spec = match std::env::var("POLYMORPH_AIS_SOLVER") {
+            Ok(line) if !line.trim().is_empty() => {
+                polymorph_ais::solver::SolverSpec::from_command_line(
+                    &line,
+                    std::time::Duration::from_secs(request.budget.solver_timeout_s.max(1)),
+                )
+                .map_err(|e| anyhow::anyhow!("POLYMORPH_AIS_SOLVER: {e}"))?
+            }
+            _ => polymorph_ais::solver::SolverSpec::z3(std::time::Duration::from_secs(
+                request.budget.solver_timeout_s.max(1),
+            )),
+        };
+        let checker = polymorph_ais::solver::Checker::resolve(spec)
+            .map_err(|e| anyhow::anyhow!("proof gate cannot arm: {e}"))?;
+        // Unproved until proven: a round-1 PASS with no proof run must not stand.
+        let seed = vec![polymorph_core::Finding {
+            severity: polymorph_core::Severity::P1,
+            file: polymorph_review::proof_gate::PROOF_FINDING_FILE.to_string(),
+            line: None,
+            issue: "Proof gate (harness-observed): no proof evidence this drive: the declared AIS unit has not been checked yet; a passing verdict requires a discharged obligation set"
+                .to_string(),
+            proposed_fix: "The fix turn runs the proof gate automatically; re-submit once it has."
+                .into(),
+        }];
+        proof_gate_seed = Some(Arc::new(polymorph_review::HarnessGate::with_seed(seed)));
+        proof_gate = Some(Arc::new(polymorph_review::ProofGate::new(
+            request, checker, 6,
+        )));
+    }
+
     // Verify-command gate: a non-empty flag list replaces the `[agent]` list. Blank commands and a
     // zero timeout bail pre-spend (`cmd /C ""` would "pass" while verifying nothing).
     let verify_cmds = if verify_cmd.is_empty() {
@@ -2380,7 +2445,7 @@ async fn prepare_live_loop(
         }
         _ => None,
     };
-    // Tool scope for `--tools`: the full V1 floor, Gate-enforced per call. Text-only (default)
+    // Tool scope for `--tools`: the full built-in tool floor, Gate-enforced per call. Text-only (default)
     // records an empty scope, as before. MCP servers: enrolled from config when `--tools` is on —
     // fail-soft per server, names join the model allowlist, the unchanged Gate still enforces every
     // call.
@@ -2396,15 +2461,14 @@ async fn prepare_live_loop(
         // the MCP-stated reason).
         lsp_languages = polymorph_tools::lsp::wire_lsp_servers(&registry, &cfg.lsp_servers).await;
         // DAP adapters: enrolled from config when `--tools` is on — fail-soft per entry (warn +
-        // continue), DAP tool names are already in the V1 floor so only specs enroll here. Bench
-        // deliberately stays unwired (apparatus stability);
-        // stated). The unchanged Gate still enforces every `dap_<op>:<program>` call.
+        // continue), DAP tool names are already in the built-in tool floor so only specs enroll here. Bench
+        // deliberately stays unwired (apparatus stability). The unchanged Gate still enforces every `dap_<op>:<program>` call.
         let _enrolled = polymorph_tools::dap::wire_dap_adapters(&registry, &cfg.dap_adapters).await;
         // RenderDoc binary: single enroll from `[renderdoc]`, fail-soft (warn past a bad path); the
-        // `rdoc_capture` name rides the V1 floor already. Bench stays unwired.
+        // `rdoc_capture` name rides the built-in tool floor already. Bench stays unwired.
         let _rdoc = polymorph_tools::renderdoc::wire_renderdoc(&registry, &cfg.renderdoc.cmd).await;
         // Web backend: enroll `[web]` (fail-soft like rdoc); the `web_search`/`web_extract` names
-        // ride the V1 floor already. Bench stays unwired.
+        // ride the built-in tool floor already. Bench stays unwired.
         let _web = polymorph_tools::web::wire_web(&registry, &cfg.web).await;
     } else if reviewer_tools {
         // A tool reviewer's `lsp_*` lookups need the servers even when the fixer is text-only
@@ -2472,7 +2536,12 @@ async fn prepare_live_loop(
         },
         // Verify first: its output is post-turn ground truth, while LSP
         // snapshots date from each file's last write.
-        gates: verify_gate.iter().chain(lsp_gate.iter()).cloned().collect(),
+        gates: verify_gate
+            .iter()
+            .chain(lsp_gate.iter())
+            .chain(proof_gate_seed.iter())
+            .cloned()
+            .collect(),
     };
     let gate = polymorph_tools::Gate::from_config(&cfg.permissions);
     let runner: Arc<dyn polymorph_delegate::TurnRunner> = if *tools {
@@ -2546,6 +2615,16 @@ async fn prepare_live_loop(
         }),
         None => runner,
     };
+    // Proof gate decorator: runs AIS over the declared unit after the whole fix
+    // turn and records the veto the reviewer must honour.
+    let runner: Arc<dyn polymorph_delegate::TurnRunner> = match (&proof_gate, &proof_gate_seed) {
+        (Some(proof), Some(gate)) => Arc::new(polymorph_review::ProofGateRunner {
+            inner: runner,
+            gate: gate.clone(),
+            proof: proof.clone(),
+        }),
+        _ => runner,
+    };
     let executor = BusExecutor {
         bus,
         runner,
@@ -2566,6 +2645,7 @@ async fn prepare_live_loop(
         ..Default::default()
     };
     Ok(LiveLoopParts {
+        proof: proof_gate.clone(),
         reviewer,
         executor,
         loop_cfg,
@@ -2807,15 +2887,15 @@ fn invalid_reason(r: &polymorph_review::RoundRecord) -> Option<String> {
 }
 
 /// Remove the pid worktree parent (empty by now — ignore errors). The bus
-/// auto-removes each worktree; this is the parent-dir half (F2b precedent).
+/// auto-removes each worktree; this is the parent-dir half.
 fn scrub_worktree_parent(wt_parent: &std::path::Path) {
     let _ = std::fs::remove_dir(wt_parent);
 }
 
 /// Map a loop report 1:1 onto drive events (LlmResponder precedent —
 /// cross-crate composition lives in CLI; manual JSON mapping beside it
-/// keeps tui serde-free). Counts must match observed rounds (asserted
-/// live in 140, unit-pinned here).
+/// keeps tui serde-free). Counts must match observed rounds (unit-pinned
+/// here).
 fn report_to_events(
     report: &polymorph_review::LoopReport,
     max_rounds: u32,
@@ -2908,6 +2988,28 @@ fn events_json_value(events: &[polymorph_drive::DriveEvent]) -> serde_json::Valu
                         "tools_max": tools_max
                     })
                 }
+                DriveEvent::ProofRound {
+                    round,
+                    verdict,
+                    class,
+                    solver_ms,
+                    certificate_digest,
+                } => serde_json::json!({
+                    "type": "proof_round", "round": round, "verdict": verdict,
+                    "class": class, "solver_ms": solver_ms,
+                    "certificate_digest": certificate_digest
+                }),
+                DriveEvent::Proof {
+                    verdict,
+                    class,
+                    certificate_digest,
+                    summary,
+                    certificate_source_present,
+                } => serde_json::json!({
+                    "type": "proof", "verdict": verdict, "class": class,
+                    "certificate_digest": certificate_digest, "summary": summary,
+                    "certificate_source_present": certificate_source_present
+                }),
                 DriveEvent::Halted { reason } => {
                     serde_json::json!({"type": "halted", "reason": reason})
                 }
@@ -2952,6 +3054,36 @@ fn attach_rollback(events: &mut serde_json::Value, rollback: &polymorph_review::
     }
 }
 
+/// The proof gate's ledger rows, computed at drive end (after any rollback):
+/// one `proof_round` per gate invocation, then the final `proof` verdict.
+/// `source_present` is the gate's re-read of the last certificate's sources.
+fn proof_events(
+    history: &[polymorph_review::ProofSummary],
+    source_present: Option<bool>,
+) -> Vec<polymorph_drive::DriveEvent> {
+    let mut events: Vec<polymorph_drive::DriveEvent> = history
+        .iter()
+        .enumerate()
+        .map(|(i, s)| polymorph_drive::DriveEvent::ProofRound {
+            round: i + 1,
+            verdict: s.verdict.clone(),
+            class: s.class.clone(),
+            solver_ms: s.solver_ms,
+            certificate_digest: s.certificate_digest.clone(),
+        })
+        .collect();
+    if let Some(last) = history.last() {
+        events.push(polymorph_drive::DriveEvent::Proof {
+            verdict: last.verdict.clone(),
+            class: last.class.clone(),
+            certificate_digest: last.certificate_digest.clone(),
+            summary: last.summary.clone(),
+            certificate_source_present: source_present,
+        });
+    }
+    events
+}
+
 /// `review drive`: goal-as-text in (no ingestion — softened charter),
 /// `DriveEvent` vec JSON out (drive machine seam), human board on stdout.
 /// DAG pre-pass and merge-back are not implemented.
@@ -2971,6 +3103,12 @@ async fn run_review_drive(
     print_loop_report(&report, &review_reports);
     print_rollback(rollback.as_ref());
     let mut events = report_to_events(&report, parts.loop_cfg.max_iterations);
+    if let Some(gate) = parts.proof.as_deref() {
+        events.extend(proof_events(
+            &gate.history(),
+            gate.certificate_source_present(),
+        ));
+    }
     let tools_used = parts
         .executor
         .tool_outcomes
@@ -3032,7 +3170,7 @@ async fn run_review_drive(
 /// `review_model_a`, arm B on `review_model_b`. Both fixers share the mode executor chain text-only
 /// — the reviewer model is the isolated variable. One process, one bus, one shared fallback state
 /// (cooldowns shared, same as `run`). InPlace workdir only (no `--repo`: worktree isolation is
-/// F2b-part1-proven and orthogonal to the reviewer-model question). Spend guard: `--max-rounds`
+/// orthogonal to the reviewer-model question). Spend guard: `--max-rounds`
 /// caps EACH arm (worst case 2 × max_rounds rounds × 2 turns; default 2 bounds a probe to 8 turns).
 #[allow(clippy::too_many_arguments)]
 async fn run_review_eval_ab(
@@ -3118,7 +3256,7 @@ async fn run_review_eval_ab(
         workdir: workdir.clone(),
         artifact_path: Some(artifact_file.clone()),
     };
-    // Text-only fixers on the CONFIGURED mode chain (shared): pre-F3b
+    // Text-only fixers on the CONFIGURED mode chain (shared): unchanged
     // behavior, still the right default when the reviewer is the variable.
     let mk_fixer = |router: polymorph_llm::RoleRouter| {
         Arc::new(FixTurnRunner {
@@ -3195,8 +3333,8 @@ async fn run_review_eval_ab(
 }
 
 /// `eval run`: one live model turn scored against an expected end state. Reads `--input`, mints its
-/// tag over normalized text (the same convention the scorer verifies), renders the F5a prompt, runs
-/// ONE turn on `--model` (qualified + injected, no fallback), scores with the F5a scorer in a pid-
+/// tag over normalized text (the same convention the scorer verifies), renders the prompt, runs
+/// ONE turn on `--model` (qualified + injected, no fallback), scores with the scorer in a pid-
 /// scoped case dir (auto-removed), prints the outcome, and optionally records JSON for CI replay.
 /// Needs provider auth like `exec --model`. No Ctrl-C wiring (review-live precedent for short
 /// bounded calls — stated, not hidden).
@@ -3212,8 +3350,8 @@ async fn run_eval_live(
     overrides: &polymorph_core::config::CliOverrides,
 ) -> anyhow::Result<()> {
     use polymorph_tools::hashline::{apply::normalize, SnapshotStore};
-    // Bogus `--format` bails before any IO/scorer/LLM work (F5g
-    // fail-fast precedent: constraint faults create nothing).
+    // Bogus `--format` bails before any IO/scorer/LLM work
+    // (fail-fast: constraint faults create nothing).
     let format =
         polymorph_tools::EvalFormat::parse(&format_raw).map_err(|e| anyhow::anyhow!("{e}"))?;
     let system_pack = resolve_system_pack(format, &system_pack);
@@ -3226,7 +3364,7 @@ async fn run_eval_live(
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| "case.txt".to_string());
     // Arm-specific prompt: tagged hashline workspace vs untagged
-    // str_replace workspace (tags would leak hashline concepts — D-plan).
+    // str_replace workspace (tags would leak hashline concepts).
     let prompt = match format {
         polymorph_tools::EvalFormat::Hashline => {
             let norm = normalize(input_text.as_bytes());
@@ -3413,7 +3551,7 @@ fn resolve_system_pack(
     }
 }
 
-/// One recording's worth of fields (v2 shape since F5e: `files` + `expected` as `{name, content}`
+/// One recording's worth of fields (v2 shape: `files` + `expected` as `{name, content}`
 /// arrays — multi-file, absence, and rename all expressible; the loader still reads legacy string
 /// shapes). `attempts` is provenance like `outcome` (the scorer re-derives, the loader ignores it —
 /// pinned by test). `format` stamps the scoring arm; `check` dispatches per record through
@@ -3485,7 +3623,7 @@ fn retry_feedback_str(outcome: &polymorph_tools::CaseOutcome) -> Option<String> 
     }
 }
 
-/// One parsed B6 corpus task. `files`/`expected` sorted by name; `expect_error` carries the
+/// One parsed edit-corpus task. `files`/`expected` sorted by name; `expect_error` carries the
 /// rejection variant when the corpus declares one (those tasks skip — byte-compare cannot score a
 /// rejection, and a live turn mints live tags so it could never reproduce the stale/corrupt setup
 /// anyway).
@@ -3499,9 +3637,9 @@ struct SweepTask {
     expect_error: Option<String>,
 }
 
-/// Parse the B6 TOML into tasks (pure over text so fixtures prove the
+/// Parse the edit-corpus TOML into tasks (pure over text so fixtures prove the
 /// skip classes; the live test parses the committed corpus). Table shapes
-/// mirror the edit-corpus driver (`eval_b6`); unknown shapes bail naming
+/// mirror the edit-corpus driver; unknown shapes bail naming
 /// the task (operator error, never a score).
 fn parse_sweep_corpus(toml_text: &str) -> Result<Vec<SweepTask>, String> {
     let doc: toml::Value =
@@ -3619,7 +3757,7 @@ fn sweep_plan(
             ));
         } else {
             // Content-specified instruction when the corpus carries one;
-            // description fallback keeps custom corpora working (the B6
+            // description fallback keeps custom corpora working (the
             // live-disk test forbids relying on it for these tasks).
             let instruction = t.instruction.unwrap_or(t.description);
             cases.push(SweepCase {
@@ -3677,7 +3815,7 @@ fn stability_table(boards: &[polymorph_tools::Scoreboard]) -> Vec<(String, usize
 
 /// Sweep the corpus live: one turn per scorable case on `--model`, scored in pid-parent/run-N/case-
 /// id/attempt-M subdirs, one recording per case per run for `eval check`. Skips print named (never
-/// silent). `--runs N` repeats the matrix (F5h); pooled board gated. Red gate bails non-zero. No
+/// silent). `--runs N` repeats the matrix; pooled board gated. Red gate bails non-zero. No
 /// Ctrl-C wiring (short bounded calls — review-live precedent, stated not hidden).
 async fn run_eval_sweep(
     args: EvalSweepArgs,
@@ -3734,7 +3872,7 @@ async fn run_eval_sweep(
     std::fs::create_dir_all(&parent)
         .map_err(|e| anyhow::anyhow!("cannot create {}: {e}", parent.display()))?;
     let _guard = RemoveOnDrop(parent.clone());
-    // Matrix repeats (F5h): same cases every run; one client + fallback
+    // Matrix repeats: same cases every run; one client + fallback
     // state for the whole invocation (cooldowns shared, as within a run).
     let mut run_boards: Vec<polymorph_tools::Scoreboard> = Vec::new();
     let mut run_firsts: Vec<usize> = Vec::new();
@@ -3751,7 +3889,7 @@ async fn run_eval_sweep(
         let mut first_passed: usize = 0;
         for case in &cases {
             // Arm-specific prompt: hashline mints one live tag per file
-            // (F3b read-tag-mint precedent — identical tags across
+            // (identical tags across
             // attempts); str_replace shows plain files (no tags exist in
             // that arm — showing them would leak hashline concepts).
             let base_prompt = match format {
@@ -3943,8 +4081,8 @@ async fn run_eval(
 
 /// `exec`: single streamed turn over the `default` role chain.
 ///
-/// Turns run managed — path scope selects D1b pins, the provider mapped to each model donates one
-/// pool key (D1c/D1d injection), 429s cool down per model with restore (D1a). `--model` is the
+/// Turns run managed — path scope selects chain pins, the provider mapped to each model donates one
+/// pool key (injection), 429s cool down per model with restore. `--model` is the
 /// operator's manual override: single attempt, injection still applies, no fallback.
 ///
 /// Ctrl-C cancels the token: the stream fold returns its partial text with
@@ -4215,7 +4353,7 @@ mod tests {
             }
             other => panic!("unexpected parse: {other:?}"),
         }
-        // Plan mode parses with its pack flag (F2b-part2 — both modes live).
+        // Plan mode parses with its pack flag (both modes live).
         let cli = Cli::try_parse_from([
             "polymorph",
             "review",
@@ -4237,13 +4375,13 @@ mod tests {
                     args.plan_pack,
                     std::path::PathBuf::from("prompts/glm/glm-5.3/plan.md")
                 );
-                // Tools default OFF with 30 feed rounds (F3b opt-in).
+                // Tools default OFF with 30 feed rounds (opt-in).
                 assert!(!args.tools);
                 assert_eq!(args.max_tool_rounds, 30);
             }
             other => panic!("unexpected parse: {other:?}"),
         }
-        // `--tools --max-tool-rounds` parse (F3b flag).
+        // `--tools --max-tool-rounds` parse.
         let cli = Cli::try_parse_from([
             "polymorph",
             "review",
@@ -4364,8 +4502,8 @@ mod tests {
             "want.txt",
         ])
         .is_err());
-        // `eval check` flags reach the tree with values + defaults (F5c:
-        // parse layer; scoring stays live-proven by the smoke below).
+        // `eval check` flags reach the tree with values + defaults
+        // (parse layer; scoring stays live-proven by the smoke below).
         let cli = Cli::try_parse_from(["polymorph", "eval", "check", "--path", "rec/"]).unwrap();
         match cli.command {
             Some(Commands::Eval {
@@ -4396,8 +4534,8 @@ mod tests {
         }
         // `--path` is required (check names its recordings, not subjects).
         assert!(Cli::try_parse_from(["polymorph", "eval", "check"]).is_err());
-        // `eval sweep` flags reach the tree with values + defaults (F5d:
-        // parse layer; live turns stay operator/key-gated like `run`).
+        // `eval sweep` flags reach the tree with values + defaults
+        // (parse layer; live turns stay operator/key-gated like `run`).
         let cli = Cli::try_parse_from([
             "polymorph",
             "eval",
@@ -4489,7 +4627,7 @@ mod tests {
             }
             other => panic!("unexpected parse: {other:?}"),
         }
-        // `--runs 3` parses (multi-run aggregation, F5h).
+        // `--runs 3` parses (multi-run aggregation).
         let cli = Cli::try_parse_from([
             "polymorph",
             "eval",
@@ -4526,7 +4664,7 @@ mod tests {
             }) => assert_eq!(args.max_attempts, 1),
             other => panic!("unexpected parse: {other:?}"),
         }
-        // Global --debug reaches the parsed tree (D1f CLI layer).
+        // Global --debug reaches the parsed tree (CLI layer).
         let cli = Cli::try_parse_from(["polymorph", "--debug", "exec", "hi"]).unwrap();
         assert!(cli.debug);
         assert!(cli_overrides(&cli).debug == Some(true));
@@ -4537,7 +4675,7 @@ mod tests {
 
     #[test]
     fn eval_check_rescores_recordings_offline() {
-        // F5c replay without spend: hand-written recordings (NOT model runs) through the real
+        // Replay without spend: hand-written recordings (NOT model runs) through the real
         // loader + scorer + gate. Tags mint exactly like score_case's setup.
         use polymorph_tools::hashline::{apply::normalize, SnapshotStore};
         let live_tag = {
@@ -4608,7 +4746,7 @@ mod tests {
     #[test]
     fn sweep_plan_keeps_shapes_and_skips_only_rejection() {
         // Fixture-level proof: every shape scores, only rejection skips
-        // (NOT model runs — the v2 promise at the plan layer).
+        // (NOT model runs).
         let task = |id: &str,
                     files: Vec<(&str, &str)>,
                     expected: Vec<(&str, &str)>,
@@ -4751,7 +4889,7 @@ mod tests {
         // fixture, same instructions — only the arm moved.
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../");
         let text = std::fs::read_to_string(
-            root.join("crates/polymorph-tools/tests/eval_b6/edit_corpus.toml"),
+            root.join("crates/polymorph-tools/tests/edit_corpus/edit_corpus.toml"),
         )
         .unwrap();
         let (cases, skips) = sweep_plan(
@@ -4917,11 +5055,11 @@ mod tests {
 
     #[test]
     fn sweep_live_corpus_plans_fifteen_with_five_rejection_skips() {
-        // Live gate: the committed B6 fixture plans 15 scorable + 5
+        // Live gate: the committed edit-corpus fixture plans 15 scorable + 5
         // rejection skips (NOTHING else narrows). CWD-independent.
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../");
         let text = std::fs::read_to_string(
-            root.join("crates/polymorph-tools/tests/eval_b6/edit_corpus.toml"),
+            root.join("crates/polymorph-tools/tests/edit_corpus/edit_corpus.toml"),
         )
         .unwrap();
         let (cases, skips) = sweep_plan(
@@ -5000,7 +5138,7 @@ mod tests {
 
     #[test]
     fn eval_ab_arm_routers_override_only_review_chain() {
-        // F4b core without spend: per-arm role maps override ONLY the
+        // Core without spend: per-arm role maps override ONLY the
         // review key; every other chain (act, plan, default) is shared.
         use polymorph_core::Role;
         use std::collections::BTreeMap;
@@ -5385,7 +5523,7 @@ mod tests {
         }
     }
 
-    /// Scripted reviewer (F1 pattern, local copy): pops one verdict per
+    /// Scripted reviewer (local copy): pops one verdict per
     /// round; exhaustion panics (test bug, loud — loop.rs precedent).
     struct DriveReviewer {
         script:
@@ -5509,7 +5647,7 @@ mod tests {
 
     #[test]
     fn drive_flags_parse() {
-        // `review drive` = ReviewRunArgs + --events-json (141 charter).
+        // `review drive` = ReviewRunArgs + --events-json.
         let cli = Cli::try_parse_from([
             "polymorph",
             "review",
@@ -6451,6 +6589,27 @@ mod tests {
                 tools_used: 4,
                 tools_max: 30,
             },
+            DriveEvent::ProofRound {
+                round: 1,
+                verdict: "disproved".to_string(),
+                class: Some("spec_bug".to_string()),
+                solver_ms: 41,
+                certificate_digest: None,
+            },
+            DriveEvent::ProofRound {
+                round: 2,
+                verdict: "proved".to_string(),
+                class: None,
+                solver_ms: 37,
+                certificate_digest: Some("sha256:a6e6".to_string()),
+            },
+            DriveEvent::Proof {
+                verdict: "proved".to_string(),
+                class: None,
+                certificate_digest: Some("sha256:a6e6".to_string()),
+                summary: "all obligations discharged".to_string(),
+                certificate_source_present: Some(false),
+            },
             DriveEvent::Halted {
                 reason: "MaxIterations".to_string(),
             },
@@ -6481,6 +6640,62 @@ mod tests {
             recorded,
             "events JSON drifted from {}",
             path.display()
+        );
+    }
+
+    #[test]
+    fn proof_events_emit_one_round_per_invocation_then_the_verdict() {
+        use polymorph_review::ProofSummary;
+        assert!(proof_events(&[], None).is_empty(), "no gate run, no rows");
+        let history = vec![
+            ProofSummary {
+                verdict: "disproved".into(),
+                class: Some("spec_bug".into()),
+                certificate_digest: None,
+                solver_ms: 41,
+                summary: "spec_bug: a real execution violates the property".into(),
+            },
+            ProofSummary {
+                verdict: "proved".into(),
+                class: None,
+                certificate_digest: Some("sha256:a6e6".into()),
+                solver_ms: 37,
+                summary: "all obligations discharged".into(),
+            },
+        ];
+        let v = events_json_value(&proof_events(&history, Some(false)));
+        let arr = v.as_array().unwrap();
+        assert_eq!(arr.len(), 3);
+        assert_eq!(arr[0]["type"], "proof_round");
+        assert_eq!(arr[0]["round"], 1);
+        assert_eq!(arr[0]["verdict"], "disproved");
+        assert_eq!(arr[0]["class"], "spec_bug");
+        assert_eq!(arr[0]["solver_ms"], 41);
+        assert!(arr[0]["certificate_digest"].is_null());
+        assert_eq!(arr[1]["round"], 2);
+        assert_eq!(arr[1]["certificate_digest"], "sha256:a6e6");
+        // The verdict is the last invocation's, with the drive-end re-read.
+        assert_eq!(arr[2]["type"], "proof");
+        assert_eq!(arr[2]["verdict"], "proved");
+        assert_eq!(arr[2]["certificate_digest"], "sha256:a6e6");
+        assert_eq!(arr[2]["certificate_source_present"], false);
+        let mut keys: Vec<&str> = arr[2]
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            vec![
+                "certificate_digest",
+                "certificate_source_present",
+                "class",
+                "summary",
+                "type",
+                "verdict"
+            ]
         );
     }
 }

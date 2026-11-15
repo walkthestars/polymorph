@@ -6,7 +6,7 @@
 
 pub use crate::{is_allowed, v1_tool_floor, Registry, ToolContext, ToolDef};
 
-/// Build the V1 tool floor as a live registry. Registration order is the priority order from
+/// Build the built-in tool floor as a live registry. Registration order is the priority order from
 /// Tool inventory.
 pub fn v1_registry() -> crate::Registry {
     let mut r = crate::Registry::new();

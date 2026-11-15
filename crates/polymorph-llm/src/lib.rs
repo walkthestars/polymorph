@@ -232,6 +232,40 @@ pub struct StreamOutcome {
     pub text: String,
     pub aborted: bool,
     pub rule_hit: Option<rules::RuleHit>,
+    /// Provider-reported token usage from the stream end, when the provider
+    /// sent it. `None` means not reported — never zero by default.
+    pub usage: Option<TokenUsage>,
+}
+
+/// Token counts as the provider reported them for one streamed turn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct TokenUsage {
+    /// Input tokens (cache reads included, as the provider counts them).
+    pub prompt: u64,
+    /// Output tokens (reasoning included, as the provider counts them).
+    pub completion: u64,
+}
+
+impl TokenUsage {
+    /// Read genai's captured usage. `None` unless the provider reported at
+    /// least one of the two counts.
+    pub fn from_genai(usage: &genai::chat::Usage) -> Option<Self> {
+        let count = |v: Option<i32>| v.and_then(|n| u64::try_from(n).ok());
+        let prompt = count(usage.prompt_tokens);
+        let completion = count(usage.completion_tokens);
+        if prompt.is_none() && completion.is_none() {
+            return None;
+        }
+        Some(Self {
+            prompt: prompt.unwrap_or(0),
+            completion: completion.unwrap_or(0),
+        })
+    }
+
+    /// Prompt plus completion.
+    pub fn total(&self) -> u64 {
+        self.prompt.saturating_add(self.completion)
+    }
 }
 
 /// Typed failure of the [`drive_stream`] fold. Split so the managed loop can route upstream
@@ -284,7 +318,7 @@ pub async fn drive_stream(
     loop {
         tokio::select! {
                    _ = cancel.cancelled() => {
-                       return Ok(StreamOutcome { text, aborted: true, rule_hit: None });
+                       return Ok(StreamOutcome { text, aborted: true, rule_hit: None, usage: None });
                    }
                    event_res = tokio::time::timeout(STREAM_CHUNK_TIMEOUT, stream.next()) => {
                        let event = match event_res {
@@ -292,7 +326,7 @@ pub async fn drive_stream(
                            Err(_) => return Err(DriveError::TimedOut(STREAM_CHUNK_TIMEOUT)),
                        };
                        match event {
-                           None => return Ok(StreamOutcome { text, aborted: false, rule_hit: None }),
+                           None => return Ok(StreamOutcome { text, aborted: false, rule_hit: None, usage: None }),
                            Some(Err(e)) => return Err(DriveError::Upstream(e)),
                            Some(Ok(ChatStreamEvent::Start)) => {}
                            Some(Ok(ChatStreamEvent::Chunk(c))) => {
@@ -306,8 +340,9 @@ pub async fn drive_stream(
                            Some(Ok(ChatStreamEvent::ToolCallChunk(_))) => {
                                return Err(DriveError::ToolCallsUnsupported);
                            }
-                           Some(Ok(ChatStreamEvent::End(_))) => {
-                               return Ok(StreamOutcome { text, aborted: false, rule_hit: None });
+                           Some(Ok(ChatStreamEvent::End(end))) => {
+                               let usage = end.captured_usage.as_ref().and_then(TokenUsage::from_genai);
+                               return Ok(StreamOutcome { text, aborted: false, rule_hit: None, usage });
                            }
                        }
                    }
@@ -332,7 +367,7 @@ pub async fn drive_stream_with_rules(
     loop {
         tokio::select! {
             _ = cancel.cancelled() => {
-                return Ok(StreamOutcome { text, aborted: true, rule_hit: None });
+                return Ok(StreamOutcome { text, aborted: true, rule_hit: None, usage: None });
             }
             event_res = tokio::time::timeout(STREAM_CHUNK_TIMEOUT, stream.next()) => {
                 let event = match event_res {
@@ -340,14 +375,14 @@ pub async fn drive_stream_with_rules(
                     Err(_) => return Err(DriveError::TimedOut(STREAM_CHUNK_TIMEOUT)),
                 };
                 match event {
-                    None => return Ok(StreamOutcome { text, aborted: false, rule_hit: None }),
+                    None => return Ok(StreamOutcome { text, aborted: false, rule_hit: None, usage: None }),
                     Some(Err(e)) => return Err(DriveError::Upstream(e)),
                     Some(Ok(ChatStreamEvent::Start)) => {}
                     Some(Ok(ChatStreamEvent::Chunk(c))) => {
                         sink.push_text(&c.content);
                         text.push_str(&c.content);
                         if let Some(hit) = rules::first_hit(rules, &text) {
-                            return Ok(StreamOutcome { text, aborted: false, rule_hit: Some(hit) });
+                            return Ok(StreamOutcome { text, aborted: false, rule_hit: Some(hit), usage: None });
                         }
                     }
                     Some(Ok(ChatStreamEvent::ReasoningChunk(_))) => {}
@@ -355,8 +390,9 @@ pub async fn drive_stream_with_rules(
                     Some(Ok(ChatStreamEvent::ToolCallChunk(_))) => {
                         return Err(DriveError::ToolCallsUnsupported);
                     }
-                    Some(Ok(ChatStreamEvent::End(_))) => {
-                        return Ok(StreamOutcome { text, aborted: false, rule_hit: None });
+                    Some(Ok(ChatStreamEvent::End(end))) => {
+                        let usage = end.captured_usage.as_ref().and_then(TokenUsage::from_genai);
+                        return Ok(StreamOutcome { text, aborted: false, rule_hit: None, usage });
                     }
                 }
             }
@@ -383,6 +419,8 @@ pub struct CollectedTurn {
     pub reasoning_content: Option<String>,
     pub aborted: bool,
     pub rule_hit: Option<rules::RuleHit>,
+    /// Provider-reported token usage from the stream end (see [`StreamOutcome::usage`]).
+    pub usage: Option<TokenUsage>,
 }
 
 /// Fold like [`drive_stream`] but gathering End-carried tool calls instead
@@ -406,6 +444,7 @@ pub async fn drive_stream_collecting_tools(
                            reasoning_content: Some(reasoning).filter(|value| !value.is_empty()),
                            aborted: true,
                            rule_hit: None,
+                           usage: None,
                        });
                    }
                    event_res = tokio::time::timeout(STREAM_CHUNK_TIMEOUT, stream.next()) => {
@@ -422,6 +461,7 @@ pub async fn drive_stream_collecting_tools(
                                    reasoning_content: Some(reasoning).filter(|value| !value.is_empty()),
                                    aborted: false,
                                    rule_hit: None,
+                                   usage: None,
                                })
                            }
                            Some(Err(e)) => return Err(DriveError::Upstream(e)),
@@ -456,6 +496,7 @@ pub async fn drive_stream_collecting_tools(
                                    reasoning_content,
                                    aborted: false,
                                    rule_hit: None,
+                                   usage: end.captured_usage.as_ref().and_then(TokenUsage::from_genai),
                                });
                            }
                        }
@@ -487,6 +528,7 @@ pub async fn drive_stream_collecting_tools_with_rules(
                     reasoning_content: Some(reasoning).filter(|value| !value.is_empty()),
                     aborted: true,
                     rule_hit: None,
+                    usage: None,
                 });
             }
             event_res = tokio::time::timeout(STREAM_CHUNK_TIMEOUT, stream.next()) => {
@@ -503,6 +545,7 @@ pub async fn drive_stream_collecting_tools_with_rules(
                             reasoning_content: Some(reasoning).filter(|value| !value.is_empty()),
                             aborted: false,
                             rule_hit: None,
+                            usage: None,
                         })
                     }
                     Some(Err(e)) => return Err(DriveError::Upstream(e)),
@@ -518,6 +561,7 @@ pub async fn drive_stream_collecting_tools_with_rules(
                                     .filter(|value| !value.is_empty()),
                                 aborted: false,
                                 rule_hit: Some(hit),
+                                usage: None,
                             });
                         }
                     }
@@ -545,6 +589,7 @@ pub async fn drive_stream_collecting_tools_with_rules(
                             reasoning_content,
                             aborted: false,
                             rule_hit: None,
+                            usage: end.captured_usage.as_ref().and_then(TokenUsage::from_genai),
                         });
                     }
                 }
@@ -699,7 +744,7 @@ fn clean_json_args(raw: &str) -> &str {
 }
 
 /// Map a collected turn back onto the text-only contract: tool calls become
-/// the pre-F3 sentence through the SAME Display chain, so text-only paths
+/// the unsupported-tool-calls sentence through the SAME Display chain, so text-only paths
 /// keep byte-identical errors after delegating to the messages variants.
 fn without_tool_calls(turn: CollectedTurn) -> Result<StreamOutcome, ChatError> {
     if turn.tool_calls.is_empty() {
@@ -707,6 +752,7 @@ fn without_tool_calls(turn: CollectedTurn) -> Result<StreamOutcome, ChatError> {
             text: turn.text,
             aborted: turn.aborted,
             rule_hit: turn.rule_hit,
+            usage: turn.usage,
         })
     } else {
         Err(ChatError::StreamFold(
@@ -942,7 +988,10 @@ impl LlmClient {
                     // must carry `reasoning_content` back on the next request or
                     // the provider rejects the turn (HTTP 400). Genai's OpenAI
                     // adapter echoes it when the message captured it.
-                    .with_capture_reasoning_content(true),
+                    .with_capture_reasoning_content(true)
+                    // Measured token counts for cost ledgers; text-only and
+                    // tool paths both read them off the stream End.
+                    .with_capture_usage(true),
             ),
         }
     }
@@ -1523,7 +1572,7 @@ mod tests {
     #[tokio::test]
     async fn drive_stream_abort_mid_token() {
         // A never-resolving stream + cancelled token must return promptly
-        // with partial text and aborted=true (the A3 done-criteria).
+        // with partial text and aborted=true.
         let pending = stream::pending::<genai::Result<ChatStreamEvent>>();
         let cancel = CancellationToken::new();
         cancel.cancel();
@@ -1547,7 +1596,7 @@ mod tests {
 
     #[tokio::test]
     async fn with_rules_seeded_misfire_aborts_with_reminder() {
-        // The v2 R1 shape, scripted: the misfire text arrives across two
+        // A scripted misfire: the text arrives across two
         // chunks (match spans the boundary), the fold stops at the hit —
         // no End needed, reminder attached for the retry.
         let events = vec![
@@ -2129,6 +2178,105 @@ mod tests {
         assert!(out.text.contains("hello from mock"), "{}", out.text);
     }
 
+    /// OpenAI SSE stream whose final chunk carries `usage` (the shape a
+    /// provider sends when `stream_options.include_usage` is requested).
+    const SSE_WITH_USAGE: &str = "data: {\"id\":\"chatcmpl-u\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"t\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"counted\"},\"finish_reason\":null}]}
+
+data: {\"id\":\"chatcmpl-u\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"t\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}
+
+data: {\"id\":\"chatcmpl-u\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"t\",\"choices\":[],\"usage\":{\"prompt_tokens\":120,\"completion_tokens\":30,\"total_tokens\":150}}
+
+data: [DONE]
+
+";
+
+    #[tokio::test]
+    async fn wiremock_usage_rides_the_stream_end_into_the_outcome() {
+        use wiremock::matchers::{body_string_contains, method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        // The client must ask for usage, or an OpenAI-compatible provider
+        // never sends the final usage chunk.
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .and(body_string_contains("include_usage"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "text/event-stream")
+                    .set_body_string(SSE_WITH_USAGE),
+            )
+            .mount(&server)
+            .await;
+        let client = LlmClient::with_conversation_id("test-session");
+        let cancel = CancellationToken::new();
+        let mut sink = String::new();
+        let out = client
+            .stream_chat_typed_spec(
+                mock_spec(&server, "w-usage"),
+                "sys",
+                "hi",
+                &cancel,
+                &mut sink,
+            )
+            .await
+            .expect("usage-bearing turn must fold");
+        assert!(out.text.contains("counted"), "{}", out.text);
+        assert_eq!(
+            out.usage,
+            Some(TokenUsage {
+                prompt: 120,
+                completion: 30
+            })
+        );
+        assert_eq!(out.usage.unwrap().total(), 150);
+    }
+
+    #[tokio::test]
+    async fn a_stream_without_usage_reports_none_not_zero() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "text/event-stream")
+                    .set_body_string(SSE_OK),
+            )
+            .mount(&server)
+            .await;
+        let client = LlmClient::with_conversation_id("test-session");
+        let cancel = CancellationToken::new();
+        let mut sink = String::new();
+        let out = client
+            .stream_chat_typed_spec(
+                mock_spec(&server, "w-nousage"),
+                "sys",
+                "hi",
+                &cancel,
+                &mut sink,
+            )
+            .await
+            .expect("plain turn must fold");
+        assert_eq!(out.usage, None);
+    }
+
+    #[test]
+    fn token_usage_reads_genai_counts_and_refuses_an_empty_report() {
+        let mut u = genai::chat::Usage::default();
+        assert_eq!(TokenUsage::from_genai(&u), None);
+        u.prompt_tokens = Some(10);
+        assert_eq!(
+            TokenUsage::from_genai(&u),
+            Some(TokenUsage {
+                prompt: 10,
+                completion: 0
+            })
+        );
+        u.completion_tokens = Some(-1);
+        assert_eq!(TokenUsage::from_genai(&u).unwrap().completion, 0);
+    }
+
     /// Minimal OpenAI SSE stream: one content chunk + DONE.
     const SSE_OK: &str = "data: {\"id\":\"chatcmpl-t\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"t\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hello from mock\"},\"finish_reason\":null}]}\n\ndata: [DONE]\n\n";
 
@@ -2209,7 +2357,7 @@ mod tests {
         assert!(debug.contains("test-session"), "{debug}");
         assert!(LlmClient::new().options.is_none());
         assert!(LlmClient::default().options.is_none());
-        // F3b: complete tool calls ride the stream End (capture on) on the
+        // Complete tool calls ride the stream End (capture on) on the
         // conversation constructors — the only production path.
         assert_eq!(c.options.as_ref().unwrap().capture_tool_calls, Some(true));
     }

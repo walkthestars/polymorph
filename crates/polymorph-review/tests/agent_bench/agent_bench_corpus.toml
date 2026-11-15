@@ -5,18 +5,18 @@
 # precede the first [table] header — keys after a [table] header belong to
 # that table):
 #   id, description: strings.
-#   instruction: agent-facing task text (content-specified like F5f: names the
+#   instruction: agent-facing task text (content-specified: names the
 #     failing test + observed vs wanted values + the `cargo test` goal, NEVER
 #     solution code — the agent must locate and write the fix).
 #   fail_to_pass: test names that FAIL pre-fix (each must appear FAILED).
 #   pass_to_pass: test names that PASS pre-fix and must keep passing.
 #   [task.files]: initial crate files (dependency-free mini crates; the driver
 #     materializes to a tempdir OUTSIDE the repo workspace, so no [workspace]
-#     detach needed — the c33 rule applies only to fixtures under target/).
-#   [task.fix.files]: EXACT fixed contents (full files, B6 byte-exact spirit).
+#     detach needed — that applies only to fixtures under target/).
+#   [task.fix.files]: EXACT fixed contents (full files, byte-exact).
 #
 # File bodies use triple-single-quote literals (real newlines; NO escapes —
-# a `\n` here would land literally per the c34 driver catch).
+# a `\n` here would land literally).
 
 [[task]]
 id = "sum-off-by-one"

@@ -112,7 +112,7 @@ async fn bogus_command_fails_at_spawn() {
     );
 }
 
-/// Op-surface proof (L1b: the v2 9): every wrapper round-trips against
+/// Op-surface proof: every wrapper round-trips against
 /// the fixture with shape asserts; the rename echoes `newName` (request
 /// fidelity, not just connectivity); raw passthrough (`request` direct)
 /// agrees with its wrapper on the same method.

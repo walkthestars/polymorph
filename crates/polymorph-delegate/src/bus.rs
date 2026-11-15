@@ -185,7 +185,7 @@ impl ChildHandle {
     }
 }
 
-/// Turn transcript sink (E1c). Failures are warned-over, never fatal:
+/// Turn transcript sink. Failures are warned-over, never fatal:
 /// a dead transcript must not kill a live child.
 pub type Transcript = Arc<dyn TranscriptSink>;
 

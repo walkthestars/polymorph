@@ -80,7 +80,7 @@ async fn post_write_check_records_diagnostics() {
     );
 }
 
-/// Pool records diagnostic messages per URI (L4 gutter feed): one write
+/// Pool records diagnostic messages per URI (gutter feed): one write
 /// through the fixture leaves exactly its message under the file's URI.
 #[tokio::test]
 async fn pool_records_messages_per_uri() {
@@ -199,7 +199,7 @@ fn wire_entry(
     }
 }
 
-/// Wire matrix (L3): one entry × four fixture languages consults four
+/// Wire matrix: one entry × four fixture languages consults four
 /// writes (a diagnostics notice each); an unregistered fifth falls back.
 /// Real-server coverage rides host availability (stated gap — no language
 /// server is installed here).

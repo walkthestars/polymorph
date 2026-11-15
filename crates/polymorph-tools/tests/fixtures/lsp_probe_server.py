@@ -1,7 +1,7 @@
-"""Minimal LSP probe server (TEST FIXTURE ONLY, chunks 92-93).
+"""Minimal LSP probe server (TEST FIXTURE ONLY).
 
 Speaks enough LSP over Content-Length-framed stdio JSON-RPC for the
-chunk-92/93 client: `initialize` (capabilities + serverInfo), the L1b
+LSP client: `initialize` (capabilities + serverInfo), the
 op set (hover / definition / references / diagnostic-pull / rename /
 codeAction / documentSymbol, all canned with request-echo where it
 proves the round-trip), `shutdown`, plus JSON-RPC `-32601` for unknown
@@ -12,7 +12,7 @@ incoming queue is proven against these). Stdlib only, no deps.
 
 Not product code: the repo stays single-language Rust; this file exists so
 tests can spawn a REAL child through the production spawn path instead of
-only loopback duplexes (the chunk-56 MCP precedent, same shape).
+only loopback duplexes.
 """
 
 import json

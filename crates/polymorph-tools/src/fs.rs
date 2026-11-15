@@ -3,12 +3,12 @@
 //! - `read_text`: paginated line reads with truncation flags; NUL-byte sniff
 //!   refuses binary files (the model must use `bash` + a hex tool for those).
 //! - `write_text`: creates parent dirs; single atomic-ish write via
-//!   `std::fs::write` (crash-consistency of multi-block edits is B4b, not here).
+//!   `std::fs::write` (crash-consistency of multi-block edits is the hashline applier's job, not here).
 //! - `grep_files`: ripgrep internals as libraries (`grep-regex` matcher +
 //!   `grep-searcher` driver) over an `ignore` gitignore-aware walker.
 //! - `glob_files`: `globset` matcher over the same walker.
 //!
-//! Done-criteria trace (v2 B3): property test asserts grep skips exactly the
+//! Gitignore property: a test asserts grep skips exactly the
 //! files a `.gitignore` excludes — see `grep_respects_gitignore` below.
 //!
 //! Harness state never surfaces in a scan: every walker here skips `.polymorph/` directories and
@@ -470,7 +470,7 @@ mod tests {
 
     #[test]
     fn grep_respects_gitignore() {
-        // B3 done-criteria, unit form: the walker must skip exactly what
+        // Unit form of the gitignore property: the walker must skip exactly what
         // `.gitignore` excludes — the decoy `ignored.log` holds the needle
         // but must never appear in hits.
         let d = fixture();

@@ -10,13 +10,14 @@ members = [
   "crates/polymorph-mcp",
   "crates/polymorph-review",
   "crates/polymorph-tasks",
+  "crates/polymorph-ais",
   "crates/polymorph-tools",
   "crates/polymorph-swe",
   "crates/polymorph-drive",
 ]
 
 [workspace.package]
-version = "1.0.1"
+version = "1.1.0"
 edition = "2021"
 rust-version = "1.88"
 license = "AGPL-3.0-only"

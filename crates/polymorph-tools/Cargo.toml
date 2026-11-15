@@ -37,6 +37,6 @@ libc.workspace = true
 tempfile.workspace = true
 toml.workspace = true
 wiremock.workspace = true
-# U2 datum only: proves skills::validate accepts diagnoser output.
-# Test-only edge (runtime stays decoupled — 134-plan ruling).
+# Proves skills::validate accepts diagnoser output.
+# Test-only edge (runtime stays decoupled).
 polymorph-skills = { version = "1.0.0", path = "../polymorph-skills" }

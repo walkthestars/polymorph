@@ -12,7 +12,7 @@
 //! [`crate::review_tools::ToolReviewTurnRunner`]. - Workdir is caller-chosen (`InPlace` default;
 //! CLI `--repo` is `InPlace` on one drive-scoped worktree, `DriveWorktree`; per-child `Worktree`
 //! specs serve bench/delegate); `keep_worktree` stays false outside the bench merge mode (merge-
-//! back = F2b/G, untouched).
+//! back is untouched).
 
 use async_trait::async_trait;
 use polymorph_core::Role;
@@ -40,8 +40,8 @@ pub enum LlmTarget {
     Fixed(genai::ModelSpec),
 }
 
-/// Resolve the turn target: a recorded parent model wins (142 directive —
-/// children run their parent's model); unknown (first turn) falls back to
+/// Resolve the turn target: a recorded parent model wins (children
+/// run their parent's model); unknown (first turn) falls back to
 /// the configured target verbatim (today's behavior, byte for byte).
 fn resolve_target(pinned: &std::sync::Mutex<Option<String>>, configured: &LlmTarget) -> LlmTarget {
     match pinned.lock().ok().and_then(|pin| pin.clone()) {
@@ -130,9 +130,9 @@ pub struct ReviewTurnRunner {
     pub client: polymorph_llm::LlmClient,
     pub target: LlmTarget,
     pub system: String,
-    /// Parent-model pin (142 directive): serving model recorded per turn;
+    /// Parent-model pin: serving model recorded per turn;
     /// next turn resolves `Fixed` to it. `Default` (None) = role chain
-    /// (today's behavior). New laterals set it the same way (126 precedent).
+    /// (today's behavior). New laterals set it the same way.
     pub pinned: std::sync::Mutex<Option<String>>,
 }
 
@@ -749,7 +749,7 @@ fn render_fix_brief(input: &ExecutorInput) -> String {
     out
 }
 
-/// Caps for the L-actuation (1) diagnostics feed: the brief is a model prompt, not a log dump —
+/// Caps for the diagnostics feed: the brief is a model prompt, not a log dump —
 /// bounded URIs × bounded items × bounded chars, deterministic BTree order, omitted counts named
 /// (never silent). Empty diagnostics → `None` (caller leaves the brief byte-identical, preserving
 /// every prior matrix when LSP is off).
@@ -1158,6 +1158,14 @@ impl HarnessGate {
         }
     }
 
+    /// A gate pre-loaded with caller-supplied veto findings (the proof gate
+    /// starts unproved: "no proof evidence this drive").
+    pub fn with_seed(findings: Vec<polymorph_core::Finding>) -> Self {
+        Self {
+            last: std::sync::Mutex::new(findings),
+        }
+    }
+
     pub(crate) fn record(&self, findings: Vec<polymorph_core::Finding>) {
         if let Ok(mut last) = self.last.lock() {
             *last = findings;
@@ -1539,7 +1547,7 @@ pub struct BusReviewer {
     pub workdir: polymorph_delegate::WorkdirSpec,
     /// Read-only source path of the artifact (live run #5: without it the
     /// model guessed filenames). Informational only — the loop passes artifact
-    /// TEXT, never writes back to this path in F2b.
+    /// TEXT, never writes back to this path.
     pub artifact_path: Option<PathBuf>,
 }
 
@@ -1562,7 +1570,7 @@ impl Reviewer for BusReviewer {
         log_brief("review", &brief);
         let mut spec =
             polymorph_delegate::SpawnSpec::new(Role::Review, brief, self.workdir.clone());
-        // F2a: no tool calls (F3 owns the registry). The opt-in tool reviewer enforces its own
+        // No tool calls here. The opt-in tool reviewer enforces its own
         // read-only allowlist in its runner.
         spec.tools = Vec::new();
         let handle = self
@@ -1629,7 +1637,7 @@ pub(crate) fn extract_verdict(text: &str) -> Result<Verdict, crate::VerdictError
 
 /// Tool preamble prepended to the executor system prompt when tools are on. Runtime text, NOT a
 /// pack file: packs are static, the flag is dynamic. Documents the six tools + the read→tag→edit
-/// flow the runner enforces. F5 followup: migrate into evaluated packs.
+/// flow the runner enforces. May later migrate into evaluated packs.
 pub const TOOLS_PREAMBLE: &str =
     "You have tools — use them to inspect the work before rewriting.\n\
 Available: read (files; results carry a `tag`), write, edit (hashline patches ONLY, \
@@ -1700,7 +1708,7 @@ pub fn to_genai_tools(
 }
 
 /// One agentic LLM turn: message history + tools in, collected turn out.
-/// The F1-style seam for the feed loop: production runs the live client,
+/// The injectable seam for the feed loop: production runs the live client,
 /// tests inject scripted turns (deterministic, no network).
 #[async_trait]
 pub trait AgenticTurnFn: Send + Sync {
@@ -1771,7 +1779,7 @@ impl AgenticTurnFn for LiveAgenticTurn {
         };
         let mut system = self.system.clone();
         let mut used = 0u32;
-        // Parent-model pin resolves once per turn (142 directive); the
+        // Parent-model pin resolves once per turn; the
         // retry loop re-issues under the same pin (same parent).
         let target = resolve_target(&self.pinned, &self.target);
         let mut served: Option<String> = None;
@@ -1865,7 +1873,7 @@ impl AgenticTurnFn for LiveAgenticTurn {
             match &turn.rule_hit {
                 Some(hit) if policy.should_retry(used) => {
                     // Permanent attempt telemetry: the JSON rolling logs are the retry forensics
-                    // path (C4).
+                    // path.
                     tracing::info!(attempt = used + 1, rule = %hit.rule_id, "stream rule fired, retrying");
                     system = RuleRetryPolicy::inject(&system, hit);
                     used += 1;
@@ -1880,7 +1888,7 @@ impl AgenticTurnFn for LiveAgenticTurn {
 }
 
 /// Watching-reviewer note severity: advisory only — nothing here ever gates, denies, or rewrites
-/// (observe-first, 98/99).
+/// (observe-first).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AdvisorSeverity {
@@ -1941,7 +1949,7 @@ pub fn parse_notes(body: &str) -> Vec<AdvisorNote> {
 
 /// Watching reviewer: a second model reading one turn from its own clean context (brief + compact
 /// round trace + capped final text — never the conversation, prompt-stability invariant intact).
-/// Failures are the caller's to absorb (warn + empty, 99 posture).
+/// Failures are the caller's to absorb (warn + empty).
 pub struct AdvisorRunner {
     pub client: polymorph_llm::LlmClient,
     pub target: LlmTarget,
@@ -1996,7 +2004,7 @@ impl AdvisorRunner {
             trace.join(", ")
         );
         // Advisor stays role-canonical (unpinned by design — it observes
-        // turns, it descends from none; 142 directive covers descendants).
+        // turns, it descends from none; the pin covers descendants).
         let (body, _) = single_turn(
             &self.client,
             &self.target,
@@ -2436,9 +2444,9 @@ impl polymorph_delegate::TurnRunner for AgenticFixRunner {
             ctx.cancel.clone(),
         );
         let genai_tools = to_genai_tools(&self.registry, &self.tools);
-        // L-actuation: last-recorded post-write diagnostics ride the fix-turn brief as a read-only
+        // Last-recorded post-write diagnostics ride the fix-turn brief as a read-only
         // advisory. Empty (LSP off) leaves the brief byte-identical — every prior matrix
-        // preserved. Reviewers stay tool-free and diagnostics-free (F3b posture stands).
+        // preserved. Reviewers stay tool-free and diagnostics-free.
         let brief = match render_lsp_section(&self.registry.lsp_diagnostics().await) {
             Some(section) => format!("{}\n\n{section}", ctx.brief),
             None => ctx.brief.clone(),
@@ -2690,7 +2698,7 @@ impl polymorph_delegate::TurnRunner for AgenticFixRunner {
                     compacted: false,
                 });
                 outcomes.push(entry);
-                // Forensics, not stdout (C4 split logging): name + shape +
+                // Forensics, not stdout: name + shape +
                 // outcome by default; the raw arguments stay behind the
                 // forensic switch (the registry never logs values either).
                 log_tool_call(tc.fn_name.as_str(), feeds, &tc.fn_arguments, outcome);
@@ -2747,10 +2755,10 @@ impl polymorph_delegate::TurnRunner for AgenticFixRunner {
         let summary = format!(
             "agentic fix: {feeds} tool rounds, {total_calls} calls, {dropped} dropped (cap)"
         );
-        // J1 Stop hook: the tool loop terminated (observation only — the
+        // Stop hook: the tool loop terminated (observation only — the
         // report below is unchanged, handlers cannot alter the outcome).
         self.registry.fire_stop(summary.clone()).await;
-        // L-actuation: warn-first merge signal. Record the last-recorded diagnostic count on the
+        // Warn-first merge signal. Record the last-recorded diagnostic count on the
         // outcome; warn past a non-zero remainder, never deny (deny is queued behind data — the
         // merge arm below stays unconditional).
         let lsp_findings = lsp_findings_count(&self.registry.lsp_diagnostics().await);
@@ -2758,7 +2766,7 @@ impl polymorph_delegate::TurnRunner for AgenticFixRunner {
             tracing::warn!(lsp_findings, "agentic fix completed with LSP diagnostics");
         }
         // S advisor: one watching turn over the finished trace (clean context, never the
-        // conversation). Failure absorbs to warn + empty (99 posture — a sick watcher never holds
+        // conversation). Failure absorbs to warn + empty (a sick watcher never holds
         // fixes hostage); notes ride data + logs as their own surface.
         let advisor_notes: Vec<AdvisorNote> = match &self.advisor {
             Some(advisor) => match advisor
@@ -2825,9 +2833,9 @@ pub struct BusExecutor {
     pub workdir: polymorph_delegate::WorkdirSpec,
     /// Tool names the executor child may wield (spawn-record honesty; the
     /// runner enforces the same allowlist + Gate at call time). Empty =
-    /// text-only (pre-F3b behavior, still the default).
+    /// text-only (still the default).
     pub tools: Vec<String>,
-    /// Bench cost ledger (F6): per-fix-turn `tool_outcomes` arrays appended from child data. Text-
+    /// Bench cost ledger: per-fix-turn `tool_outcomes` arrays appended from child data. Text-
     /// only children record none. Shared so the bench runner reads costs without touching loop
     /// semantics.
     pub tool_outcomes: Arc<std::sync::Mutex<Vec<serde_json::Value>>>,
@@ -2846,7 +2854,7 @@ pub struct BusExecutor {
     /// [`PERIPHERAL_HEADER`], so the reviewer grades them too. Set only in `review run`/`drive`
     /// (bench/eval-ab/plan-drive keep `None` — apparatus stability); `None`, or no peripheral
     /// mutation, leaves the scored text byte-identical. One tracker per drive. Content rides the
-    /// prompts only, never logs (C4 posture).
+    /// prompts only, never logs.
     pub peripherals: Option<PeripheralFiles>,
     /// Multi-file / worktree-diff review scope: `Some` scores the set re-read from disk after every
     /// fix turn (InPlace workdirs only; a `--repo` drive is in place on its worktree) instead of
@@ -2863,7 +2871,7 @@ pub struct BusExecutor {
 /// (no IO beyond the read itself) for unit tests; never spawns. Harness-observed evidence appended
 /// to the scored fix text. The reviewer never sees the tree, so gradeable file facts ride along:
 /// per-finding-file existence + line counts, plus the turn's tool ledger and the mutated files' LSP
-/// diagnostics. Static facts only — never file content (C4 secrets posture). Pure IO, best-effort
+/// diagnostics. Static facts only — never file content. Pure IO, best-effort
 /// throughout (unresolvable paths are named MISSING-or-SKIP, never errors). Capped (20 files) with
 /// the omission named.
 fn render_harness_evidence(
@@ -3727,7 +3735,7 @@ impl Executor for BusExecutor {
                     .map(|s| s.to_string())
                     .ok_or_else(|| anyhow::anyhow!("fix child returned no artifact"))?;
                 // Empty-text fallback: the child edited the file but returned blank text — grade
-                // the file work, not the empty string (the 109 4× empty-artifact pattern). File-
+                // the file work, not the empty string (the empty-artifact pattern). File-
                 // first, always: the child's closing chat text is a summary at best, and at worst
                 // raw tool-call markup (Frontier SSIM drive, round 3: the reviewer graded DSML
                 // instead of the file on disk) — or, worse still, code that was never written
@@ -3758,11 +3766,11 @@ impl Executor for BusExecutor {
                     // with zero findings and an empty `git diff`, twice in one session. `mutated` is
                     // still logged, but it can no longer decide what gets graded.
                     match artifact_from_file(&self.workdir, path) {
-                        // Forensics (the 110 validation lesson: silent
+                        // Forensics (silent
                         // fallback is indistinguishable from snippet
                         // grading in round-2 issues): static message
-                        // only — never file content (C4 secrets
-                        // posture). The unreadable-path warn below
+                        // only — never file content. The
+                        // unreadable-path warn below
                         // carries the path (finding_issues logs
                         // file:line the same way); content never logs.
                         Some(content) => {
@@ -4080,7 +4088,7 @@ mod tests {
 
     #[test]
     fn pin_unset_returns_configured_chain() {
-        // Cold pin = today's behavior verbatim (142 directive: unknown
+        // Cold pin = today's behavior verbatim (unknown
         // parent resolves the role chain, byte for byte).
         let pin = std::sync::Mutex::new(None);
         let out = resolve_target(&pin, &managed_target());
@@ -4987,7 +4995,7 @@ mod tests {
 
     #[tokio::test]
     async fn full_act_loop_over_bus_backed_scripted_runners() {
-        // The F1↔F2 seam live: run_loop drives Bus adapters whose children
+        // The reviewer/executor seam live: run_loop drives Bus adapters whose children
         // are scripted (fail once with one finding, then pass).
         let dir = tempfile::tempdir().unwrap();
         let bus = Arc::new(Bus::flat());
@@ -5257,6 +5265,7 @@ v1
                     reasoning_content: None,
                     aborted: false,
                     rule_hit: None,
+                    usage: None,
                 })
             }
         }
@@ -5337,6 +5346,7 @@ v1
                         reasoning_content: None,
                         aborted: false,
                         rule_hit: None,
+                        usage: None,
                     })
                 }
             }
@@ -5460,6 +5470,7 @@ v1
             reasoning_content: None,
             aborted: false,
             rule_hit: None,
+            usage: None,
         }
     }
 
@@ -5560,7 +5571,7 @@ v1
     #[test]
     fn genai_tool_definitions_carry_mcp_schemas() {
         // Enrolled server tools flow to the model through the same `to_genai_tools` call — instance
-        // schemas first, V1 static second, unknowns still skipped.
+        // schemas first, built-in static second, unknowns still skipped.
         use polymorph_tools::mcp::{enroll_mcp_tools, McpToolInfo};
         let mut r = polymorph_tools::registry::v1_registry();
         enroll_mcp_tools(
@@ -5653,7 +5664,7 @@ v1
         // model habit (eval.rs extract_patch tolerates one fence, the tool
         // does not) — must label `edit-parse`, while the identical raw
         // patch applies. Documents the prime suspect without logging
-        // patch text (C4: labels only, never values).
+        // patch text (labels only, never values).
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("a.txt"), "l1\nl2\n").unwrap();
         let registry = std::sync::Arc::new(polymorph_tools::registry::v1_registry());
@@ -5960,8 +5971,8 @@ v1
 
     #[tokio::test]
     async fn agentic_runner_labels_stale_edit_subtype() {
-        // Live-shaped stale: mint the true tag, rotate one hex digit (B6
-        // corrupt_tag precedent), then edit against a real file.
+        // Live-shaped stale: mint the true tag, rotate one hex digit
+        // (corrupt_tag precedent), then edit against a real file.
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("a.txt"), "l1\nl2\n").unwrap();
         let registry = Arc::new(polymorph_tools::registry::v1_registry());
@@ -7270,7 +7281,7 @@ v1
 
     #[tokio::test]
     async fn agentic_runner_fires_stop_hook_at_turn_end() {
-        // J1 wiring proof: the turn terminal point notifies Stop observers
+        // Wiring proof: the turn terminal point notifies Stop observers
         // with the rounds/calls/dropped summary (observation only — the
         // report below is byte-identical with or without handlers).
         use std::sync::{Arc, Mutex};
@@ -7307,7 +7318,7 @@ v1
     #[tokio::test]
     async fn agentic_runner_transport_failure_bails_loud() {
         // Transport/auth failures are NOT fed back (unlike denials) — they
-        // bail so the loop escalates ExecutorFailed (unchanged F1 path).
+        // bail so the loop escalates ExecutorFailed (unchanged path).
         let stub = Arc::new(StubAgenticTurn::failing("connection refused"));
         let dir = tempfile::tempdir().unwrap();
         let runner = agentic_runner(stub, vec!["read".into()], vec![], 3);
@@ -7564,7 +7575,7 @@ v1
     #[tokio::test]
     async fn run_turn_advisor_failure_stays_ok_with_empty_notes() {
         // Dead server shape (500 envelope): the turn succeeds anyway —
-        // a sick watcher never holds fixes hostage (99 posture).
+        // a sick watcher never holds fixes hostage.
         use wiremock::matchers::method;
         use wiremock::{Mock, MockServer, ResponseTemplate};
         let server = MockServer::start().await;

@@ -257,9 +257,8 @@ async fn rdoc_script_runs_user_echo() {
 
 #[tokio::test]
 async fn read_renderdoc_url_lists_draws_headed() {
-    // P2 renderdoc:// delegate over the N1b machinery. Headed (qrenderdoc + sample window) — gated
-    // like every headed test here; committed unrun this chunk (117 precedent: delegate bodies are
-    // live-proven N1b code, only the parse+route is new).
+    // renderdoc:// delegate over the introspection machinery. Headed (qrenderdoc + sample window) — gated
+    // like every headed test here. The delegate bodies reuse existing code; only the parse+route is new.
     if !headed_enabled() {
         eprintln!(
             "SKIP read_renderdoc_url_lists_draws_headed: headed (set POLYMORPH_HEADED=1 to run)"

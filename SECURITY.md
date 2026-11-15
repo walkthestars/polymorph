@@ -62,6 +62,10 @@ polymorph clean --all --force             # add session rows
 polymorph clean --root /path/to/project   # a different working tree
 ```
 
+`clean` spares the newest log file so a running drive never loses its file.
+For a full purge, stop all Polymorph processes and remove the current day's
+log directly.
+
 ### What leaves the machine
 
 Every reviewer, planner and fixer turn sends its brief to the model provider
@@ -81,3 +85,10 @@ redacted in `Debug` output, and never written to logs or session rows.
 restores changed bytes, but neither is a sandbox: the process can read and
 write anything the user can. Run untrusted repositories in a container or a
 virtual machine.
+
+### Certificates
+
+An `ais-cert-v1` certificate carries the source file paths, the final
+annotations, and the SMT-LIB2 queries the proof used, together with their
+digests. It is designed to be re-checked, not to be published unread: treat it
+as source-derived material.

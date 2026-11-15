@@ -5,6 +5,9 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+  schedule:
+    # Weekly run: surfaces toolchain and dependency drift early.
+    - cron: "0 6 * * 1"
 
 env:
   CARGO_TERM_COLOR: always
@@ -12,14 +15,29 @@ env:
 
 jobs:
   verify:
-    name: Build, Clippy, Test & Format
-    runs-on: windows-latest
+    name: Build, Clippy, Test & Format (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
+
+      - name: SMT solver for the proof gate
+        shell: bash
+        run: |
+          python -m pip install --disable-pip-version-check z3-solver
+          bin="$(python -c 'import os, sys; print(os.path.join(sys.prefix, "bin"))')"
+          echo "$bin" >> "$GITHUB_PATH"
+          "$bin/z3" --version
 
       - name: Build workspace
         run: cargo build --workspace --all-targets --locked
@@ -31,9 +49,34 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run workspace tests
-        run: cargo test --workspace --locked
+        if: runner.os == 'Windows'
+        # The solver is provisioned above: a missing `z3` must fail, not skip.
+        env:
+          POLYMORPH_REQUIRE_Z3: "1"
+        run: cargo test --workspace --locked --no-fail-fast
+
+      - name: Run proof-gate tests
+        if: runner.os == 'Linux'
+        # The full suite runs on Windows. Linux covers the proof gate and the
+        # crates that carry it, against the real solver.
+        env:
+          POLYMORPH_REQUIRE_Z3: "1"
+        run: |
+          cargo test --locked --no-fail-fast -p polymorph-ais -p polymorph-drive -p polymorph-mcp -p polymorph-swe -p polymorph-watch
+          cargo test --locked -p polymorph-review --test proof_gate_ledger
+
+      - name: MCP proof tool end to end
+        # Drives the built binary over MCP; ignored by default because it needs it.
+        shell: bash
+        env:
+          POLYMORPH_REQUIRE_Z3: "1"
+        run: |
+          exe="$PWD/target/debug/polymorph"
+          if [ "$RUNNER_OS" = "Windows" ]; then exe="$(pwd -W)/target/debug/polymorph.exe"; fi
+          POLYMORPH_BIN="$exe" cargo test -p polymorph-mcp --locked -- --ignored
 
       - name: Verify prompt manifest (prompts.toml)
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $files = Get-ChildItem -Recurse -File crates/polymorph-prompts/prompts | ForEach-Object { $_.FullName.Replace("$PWD\", "").Replace("\", "/") }

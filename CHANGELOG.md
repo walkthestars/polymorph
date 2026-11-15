@@ -7,10 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-11-14
+
 ### Added
 
+- `polymorph proof` and `review drive --proof-request` (experimental): an SMT-checked
+  proof gate over the `ais-core` fragment, with re-checkable certificates and
+  `proof_round` / `proof` ledger events. Needs `z3` on `PATH`.
 - `deny.toml`: a permissive-only `cargo-deny` policy that reproduces the AGPL rejection
   an enterprise allowlist gives, as described in `docs/LICENSING.md`.
+- MCP tool `synthesize_invariants` (experimental).
+- `docs/PROOF.md`: the proof-gate guide, covering the `ais-core` language, verdicts,
+  the trust boundary, certificates and what is not proved.
+- `SECURITY.md`: a "Certificates" section on what a proof certificate contains.
+
+### Changed
+
+- The edit corpus moved to `crates/polymorph-tools/tests/edit_corpus/`, which is the
+  new default of `eval sweep --corpus`. Its test prints `EDIT-CORPUS SCORE`.
+- CI runs the proof-gate crates on Linux as well as the full suite on Windows, with
+  `z3` required.
 
 ## [1.0.1] — 2026-11-14
 

@@ -48,6 +48,30 @@
     "tools_max": 30
   },
   {
+    "type": "proof_round",
+    "round": 1,
+    "verdict": "disproved",
+    "class": "spec_bug",
+    "solver_ms": 41,
+    "certificate_digest": null
+  },
+  {
+    "type": "proof_round",
+    "round": 2,
+    "verdict": "proved",
+    "class": null,
+    "solver_ms": 37,
+    "certificate_digest": "sha256:a6e6"
+  },
+  {
+    "type": "proof",
+    "verdict": "proved",
+    "class": null,
+    "certificate_digest": "sha256:a6e6",
+    "summary": "all obligations discharged",
+    "certificate_source_present": false
+  },
+  {
     "type": "halted",
     "reason": "MaxIterations"
   },

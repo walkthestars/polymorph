@@ -1,6 +1,6 @@
-//! M6 closure matrix: seeded reviewer→executor runs over the public [`polymorph_review`] API
+//! Closure matrix: seeded reviewer→executor runs over the public [`polymorph_review`] API
 //! proving convergence AND every escalation kind terminates with a typed reason. No LLM, no
-//! subprocess — scripted fakes through the F1 `Reviewer`/`Executor` seam (offline by construction).
+//! subprocess — scripted fakes through the `Reviewer`/`Executor` seam (offline by construction).
 
 use std::collections::VecDeque;
 use std::sync::Mutex;
