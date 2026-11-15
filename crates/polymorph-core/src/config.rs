@@ -1183,7 +1183,7 @@ reviewer_tool_rounds = 2
     #[test]
     fn lsp_servers_parse_with_defaults() {
         // Same progressive shape as MCP (absent section = empty = LSP off), plus the language list
-        // L2's pool keys on.
+        // the pool keys on.
         let dir = tempfile::tempdir().unwrap();
         let cfg_file = write_toml(
             &dir,

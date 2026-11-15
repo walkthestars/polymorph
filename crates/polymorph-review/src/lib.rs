@@ -19,6 +19,7 @@ pub mod command_changes;
 pub mod converge;
 pub mod r#loop;
 pub mod plan_drive;
+pub mod proof_gate;
 pub mod restore;
 pub mod review_tools;
 pub mod verdict;
@@ -50,6 +51,7 @@ pub use converge::{FindingId, ObserveOutcome, Tracker};
 pub use plan_drive::{
     drive_plan, drive_plan_with_writeback, task_words, PlanDriveReport, PlanTaskReport,
 };
+pub use proof_gate::{proof_findings, ProofGate, ProofGateRunner, ProofSummary};
 pub use r#loop::{
     run_loop, run_loop_seeded, EscalateReason, Executor, ExecutorInput, LoopMode, LoopReport,
     Outcome, Reviewer, ReviewerError, ReviewerInput, RoundRecord, RoundSeed, RoundVerdict,

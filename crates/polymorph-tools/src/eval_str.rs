@@ -22,14 +22,14 @@
 //! (atomicity parity with hashline).
 //!
 //! Extraction parity: raw-or-one-fence like `extract_patch` (models fence
-//! by default — review-loop runs #2/#3 precedent). Fence policy must not
+//! by default). Fence policy must not
 //! become the measured variable.
 //!
 //! Honest limitation (documented, not hidden): matching is byte-exact on
 //! `\n`-joined text with NO line-ending normalization. When a model
 //! normalizes endings, a CRLF file's `\r\n` bytes never equal its `\n`
 //! old-block, so the case refuses as `MissingOld` while hashline's
-//! terminator-aware applier passes it (live datum: glm-5.3 reproduced CRLF
+//! terminator-aware applier passes it (observed live: glm-5.3 reproduced CRLF
 //! verbatim on first attempt, so the risk is conditional, not certain).
 //! That asymmetry IS a measured effect candidate (whitespace battles),
 //! not a harness bug.

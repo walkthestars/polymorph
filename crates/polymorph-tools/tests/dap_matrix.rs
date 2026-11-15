@@ -51,7 +51,7 @@ fn resolve_python() -> Option<(String, String)> {
 /// One stopped-at-breakpoint inspection over ANY session: init →
 /// held-launch → breakpoints → configured → stopped/breakpoint →
 /// threads → stack → watch expression + frameless fallback. Returns
-/// the two evaluated texts (the v2 M2 breakpoint+watch+eval triple).
+/// the two evaluated texts (the breakpoint+watch+eval triple).
 async fn drive_break_eval(
     session: &mut impl DapSession,
     adapter_id: &str,

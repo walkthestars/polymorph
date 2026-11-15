@@ -1,11 +1,11 @@
 //! Model-output eval skeleton.
 //!
-//! The B6 corpus scores FIXED patches; this scores RAW MODEL OUTPUT:
+//! The edit corpus scores FIXED patches; this scores RAW MODEL OUTPUT:
 //! extract → apply → byte-compare, with recorded or hand-written outputs
 //! (hand-written ones say so — never present a fixture as a model run).
-//! Live-model generation is F5b; the scorer + gate land here, LLM-free.
+//! The scorer + gate live here and are LLM-free; live-model generation is separate.
 //!
-//! Extraction contract (documented choice, revisit if F-measurements say
+//! Extraction contract (documented choice, revisit if measurements say
 //! otherwise): the `edit.md` pack shows the patch inside a fenced block
 //! but never pins raw-only output, and live runs prove models fence by
 //! default (review loop runs #2/#3) — so one fenced block OR raw text both
@@ -54,7 +54,7 @@ impl std::fmt::Display for EvalFormat {
 }
 
 /// Why extraction refused the output. All variants name the fault for the
-/// scoreboard (and for the model in F5b retries).
+/// scoreboard (and for the model in retries).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExtractError {
     /// No fenced block and the text doesn't open a `[PATH#TAG]` section.
@@ -117,7 +117,7 @@ pub fn extract_patch(text: &str) -> Result<String, ExtractError> {
 }
 
 /// One scored unit: initial files + the model's raw output + the expected
-/// end state. `model_output` may be a live recording (F5b) or hand-written
+/// end state. `model_output` may be a live recording or hand-written
 /// (fixture — always labeled at the call site).
 #[derive(Debug, Clone)]
 pub struct EvalCase {
@@ -230,8 +230,8 @@ pub(crate) fn check_workspace(root: &Path, expected: &[(String, String)]) -> Res
     Ok(())
 }
 
-/// Score one case inside `root` (caller-owned dir; F5b manages lifetimes).
-/// Setup mirrors the B6 driver: write initials, mint tags over NORMALIZED
+/// Score one case inside `root` (caller-owned dir; the caller manages lifetimes).
+/// Setup mirrors the edit-corpus driver: write initials, mint tags over NORMALIZED
 /// text (the same convention the applier verifies — minting raw bytes
 /// would fork CRLF/BOM), extract, apply, byte-compare, temp check.
 pub fn score_case(case: &EvalCase, root: &Path) -> CaseReport {
@@ -317,7 +317,7 @@ pub fn gate(sb: &Scoreboard, min_rate: f64) -> Result<(), String> {
 /// Rebuild an `EvalCase` from an `eval run/sweep --record` JSON recording. Two shapes, detected on
 /// the `files` key: v2 carries `files` + `expected` as `{name, content}` arrays (multi-file,
 /// absence, rename all expressible); legacy carries `input` + `expected` strings with the workspace
-/// name in `path` (or the legacy `id` when `path` predates it — F5b/F5c records replay unchanged).
+/// name in `path` (or the legacy `id` when `path` predates it — older records replay unchanged).
 /// `model`/`instruction`/`outcome` are provenance, ignored for scoring — the scorer re-derives the
 /// outcome, never trusts the recorded one.
 ///
@@ -404,11 +404,11 @@ pub fn load_recording_with_format(json_text: &str) -> Result<(EvalCase, EvalForm
     Ok((case, format))
 }
 
-/// Render the user prompt for a live eval turn (F5b): the instruction plus
+/// Render the user prompt for a live eval turn: the instruction plus
 /// each workspace file with its CURRENT tag. The tag flow mirrors the
-/// tools-executor read→tag→edit loop (F3b): the model patches against tags
+/// tools-executor read→tag→edit loop: the model patches against tags
 /// minted here, never invented ones. Runtime assembly (TOOLS_PREAMBLE
-/// precedent) — pack migration, if warranted, is F5's call on measured data.
+/// precedent).
 ///
 /// ```text
 /// TASK: <instruction>
@@ -438,7 +438,7 @@ mod tests {
     use super::*;
 
     // Hand-written model outputs (NOT model runs — fixtures proving the
-    // scorer discriminates; F5b brings recordings).
+    // scorer discriminates).
     const GOOD_RAW: &str = "[a.txt#TAG]\nPUT 1:\n+fixed\n";
     const GOOD_FENCED: &str =
         "Here is the patch:\n```text\n[a.txt#TAG]\nPUT 1:\n+fixed\n```\nDone.\n";
@@ -572,9 +572,8 @@ mod tests {
     }
 
     // Hand-written recordings in the exact `eval run --record` shape
-    // (NOT model runs — fixtures proving the loader replays; F5b brings
-    // live bytes). The `output` tag is minted like `case()` above so the
-    // replay hits the Pass path for the right reason (live tag, not luck).
+    // (NOT model runs — fixtures proving the loader replays). The `output` tag is minted like
+    // `case()` above so the replay hits the Pass path for the right reason (live tag, not luck).
     fn recording(id: &str, output: &str) -> String {
         serde_json::json!({
             "id": "a.txt",
@@ -684,7 +683,7 @@ mod tests {
 
     #[test]
     fn recording_path_separates_identity_from_filename() {
-        // F5d sweep shape: the corpus task id is NOT the workspace file.
+        // Sweep shape: the corpus task id is NOT the workspace file.
         // Hand-written (NOT a model run — proves the loader seam).
         let rec = serde_json::json!({
             "id": "replace-single-line",
@@ -713,7 +712,7 @@ mod tests {
         assert_eq!(rep.id, "replace-single-line");
     }
 
-    // v2 array-shape recordings (F5e). Hand-written correct patches with
+    // Array-shape recordings. Hand-written correct patches with
     // live tags (NOT model runs — proves the loader + scorer cover the
     // shapes legacy strings cannot express: multi-file, rename, absence).
     fn v2_recording(

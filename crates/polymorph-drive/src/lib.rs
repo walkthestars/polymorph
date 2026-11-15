@@ -11,7 +11,7 @@
 //! here unchanged.
 
 /// What the operator wants, post-gate (the ask-picker confirms Build;
-/// denial/headless falls back to Chat — Q fail-closed precedent).
+/// denial/headless falls back to Chat, fail-closed).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DriveIntent {
     PlanFirst {
@@ -250,6 +250,26 @@ pub enum DriveEvent {
     },
     Halted {
         reason: String,
+    },
+    /// One proof-gate invocation (AIS): progress and cost. The final
+    /// [`DriveEvent::Proof`] is the verdict.
+    ProofRound {
+        /// 1-based gate invocation number.
+        round: usize,
+        verdict: String,
+        class: Option<String>,
+        solver_ms: u64,
+        certificate_digest: Option<String>,
+    },
+    /// The proof gate's last word (AIS): verdict, class, certificate digest.
+    Proof {
+        verdict: String,
+        class: Option<String>,
+        certificate_digest: Option<String>,
+        summary: String,
+        /// Whether the certificate's source bytes are still in the tree at
+        /// drive end (a halted drive rolls them back). `None` = no certificate.
+        certificate_source_present: Option<bool>,
     },
     Finished {
         verdict: String,

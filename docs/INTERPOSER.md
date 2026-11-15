@@ -20,6 +20,12 @@ is the same ledger as `--events-json` plus `exit_code`, `passed`, and
 `rounds_used`/`rounds_max`. Success is the same rule: exit 0 and a `finished`
 `PASSED` event; every other outcome returns the findings with `isError`.
 
+The server also exposes `synthesize_invariants` (experimental; see
+[PROOF.md](PROOF.md)): give it `source_text` in
+`ais-core`, a property, bounds and `use_model`; it returns the full AIS response —
+certificate blob included — with `isError` for anything but `proved`.
+Deterministic by default (no key, no spend).
+
 The server runs `review drive --tools` in a subprocess with `--on-fail rollback`,
 one drive at a time. `repo` is the child's working directory, not the CLI
 `--repo` worktree, so edits land in the tree. The server runs with the user's
@@ -77,6 +83,17 @@ polymorph review drive --goal "…" --artifact-file src/a.rs --artifact-files 's
 # grade the whole worktree diff against HEAD (re-read every round)
 polymorph review drive --goal "…" --diff --tools --verify-cmd "cargo test" …
 
+# experimental: a unit in the declared verification fragment, with a proof gate
+# above the tests (needs z3; see PROOF.md)
+polymorph review drive --goal "keep the loop provable" --artifact-file unit.ais \
+  --proof-request request.json --tools --verify-cmd "cargo test" --events-json events.json
+
+# the primitive on its own (exit 0 only on `proved`; writes a re-checkable certificate)
+polymorph proof run --request request.json --cert-out cert.json --events-json proof-events.json
+polymorph proof recheck --cert cert.json --source unit.ais
+# the same re-check, plus every obligation replayed under a second solver
+polymorph proof recheck --cert cert.json --source unit.ais --differential "cvc5 {input}"
+
 # a plan file, task by task (no events file; exit 0 just means it finished)
 polymorph review plan-drive --plan PLAN.md --out PLAN.updated.md \
   --checkpoint .polymorph/plan-checkpoint.json
@@ -115,6 +132,8 @@ stdout, is the machine truth):
 | `halted` | `reason`; optional `rollback` | Terminal failure. Tree was rolled back by default. Re-plan, then at most one retry. |
 | `finished` | `verdict` | Terminal. `PASSED` is the only success value. |
 | `budget` | `rounds_used`, `rounds_max`, `tools_used`, `tools_max` | Spend record. Log it. |
+| `proof_round` | `round`, `verdict`, `class`, `solver_ms`, `certificate_digest` | Present only with `--proof-request`: one per gate invocation (`round` counts invocations from 1), all written just before `proof`. Progress + cost; not a verdict. `class` and `certificate_digest` may be `null`. |
+| `proof` | `verdict`, `class`, `certificate_digest`, `summary`, `certificate_source_present` | Present only with `--proof-request`; the last invocation's result. `verdict != "proved"` = the proof gate vetoed; `class` says whether a human is needed (`spec_bug`, `expressiveness_ceiling`). Keep `certificate_digest` for audit. `certificate_source_present` is re-read at drive end, after any rollback: `false` = the proved bytes are no longer in the tree (a halted drive rolled them back), so the certificate does not describe what you have; `null` = no certificate. |
 
 The full drive protocol also has `diff` and `plan` events; `review drive` does not
 emit them — do not depend on keys that are not in this table.
@@ -127,6 +146,12 @@ emit them — do not depend on keys that are not in this table.
 | `1` | Halted/escalated, bad arguments, missing key, or missing pack. stderr names the cause. | failure |
 | `2` | CLI parse error (clap). | failure |
 | `130` | `exec` interrupted. | failure |
+
+`polymorph proof run` exits `0` only on `proved` (with a certificate); every other
+verdict exits `1`, and `--json` still prints the full response. `polymorph proof
+recheck` exits `0` only when every check row holds, the `differential` row
+included when requested. The MCP `synthesize_invariants` tool mirrors this with
+`isError`.
 
 ## 6. Spend guard
 

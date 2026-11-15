@@ -6,8 +6,8 @@
 //! pack contents + parent manifest hashes with [`render_diff`] deriving
 //! the PR-facing unified diff via the `similar` dep.
 //!
-//! Deliberately IO-free (mirrors the 127 planner): scoring lives in
-//! [`super::eval`], the gate runner rides U1b, proposers ride U1c. The
+//! Deliberately IO-free: scoring lives in
+//! [`super::eval`], the gate runner and proposers live further down in this module. The
 //! rendered diff is a RENDER (hunk headers, no apply-contract) —
 //! anything applying a candidate uses full-file `files`, never parses
 //! the diff text.
@@ -16,7 +16,7 @@ use std::collections::BTreeMap;
 
 use super::eval::{CaseOutcome, CaseReport, EvalCase};
 
-/// Fault detail cap (R124 200-char precedent — consistency, not novelty).
+/// Fault detail cap (200 chars, consistent with the other fault details).
 pub const MAX_FAULT_CHARS: usize = 200;
 
 /// One exported trace line: a scored case plus its pack provenance.
@@ -32,7 +32,7 @@ pub struct TraceRecord {
 }
 
 /// Scored input pair for [`export_traces`] (borrows — the export is pure;
-/// loading + scoring is U1b's pipeline, not a gap here).
+/// loading + scoring happens elsewhere, not a gap here).
 pub struct TraceSource<'a> {
     pub case: &'a EvalCase,
     pub pack_id: &'a str,
@@ -63,8 +63,8 @@ fn fault_of(outcome: &CaseOutcome) -> String {
 }
 
 /// Fold scored pairs into failure-first JSONL (one record per line).
-/// Failures lead (mutation signal, F5e precedent); passes trail sampled
-/// to `max_passes` (regression guard, F5h precedent — `0` admits none).
+/// Failures lead (mutation signal); passes trail sampled
+/// to `max_passes` (regression guard — `0` admits none).
 pub fn export_traces(sources: &[TraceSource], max_passes: usize) -> String {
     let mut failed = Vec::new();
     let mut passed = Vec::new();
@@ -140,7 +140,7 @@ pub fn render_diff(candidate: &PackCandidate, current: &BTreeMap<String, String>
     out
 }
 
-/// U1b judging layer + U1c proposer seam: trace→board rebuild, parent-hash (dashed-against) verify,
+/// Judging layer + proposer seam: trace→board rebuild, parent-hash (dashed-against) verify,
 /// offline baseline replay, before/after judge reusing [`super::eval::gate`], and the external-
 /// proposer boundary ([`ProposerBrief`], [`Proposer`], [`SimpleMutator`]). Claimed after-boards are
 /// shape- + math-checked here; trust arrives via the key-gated live re-run (stated, not
@@ -203,8 +203,8 @@ pub fn verify_parents(
 }
 
 /// Offline baseline replay: `score_case` per case under a pid-stamped
-/// std tempdir (F5c precedent — removed on EVERY exit; `tempfile` stays
-/// dev-only, 131-plan ruling). Infallible by construction (`score_case`
+/// std tempdir (removed on EVERY exit; `tempfile` stays
+/// dev-only). Infallible by construction (`score_case`
 /// folds setup faults into `ApplyFail`, never Err).
 pub fn replay_baseline(cases: &[EvalCase]) -> super::eval::Scoreboard {
     use super::eval::{score_case, Scoreboard};
@@ -227,7 +227,7 @@ pub fn replay_baseline(cases: &[EvalCase]) -> super::eval::Scoreboard {
 }
 
 /// The judged verdict, PR-body shaped (serializable for the candidate
-/// record, U1c's proposer seam).
+/// record, for the proposer seam).
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct GateReport {
     pub verdict: String,
@@ -270,7 +270,7 @@ pub fn judge(
 /// failure-first traces, current pack contents, dashed-against hashes,
 /// focus case ids. Serialize → file → proposer → [`PackCandidate`]
 /// JSON back. The harness never imports proposer code (no `Cargo.lock`
-/// row for evolution ever — 129, stated).
+/// row for evolution ever).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ProposerBrief {
     pub traces_jsonl: String,
@@ -338,8 +338,8 @@ impl Proposer for SimpleMutator {
     }
 }
 
-/// The composed verification U2 and CI reuse (naming it prevents three
-/// copies — 133-plan ruling): parents first (dashed-against), then the
+/// The composed verification the skill layer and CI reuse (naming it prevents
+/// three copies): parents first (dashed-against), then the
 /// shared-gate judge.
 pub fn chain_verify(
     candidate: &PackCandidate,
@@ -352,9 +352,9 @@ pub fn chain_verify(
     judge(before, after, min_rate).map_err(|e| format!("chain: {e}"))
 }
 
-/// U2 skill layer: `SKILL.md` candidates with the same PR shape as packs (full file + parent hash +
+/// Skill layer: `SKILL.md` candidates with the same PR shape as packs (full file + parent hash +
 /// rules) plus a hand-rolled hygiene diagnoser. Strict validation itself lives in `polymorph-
-/// skills::validate` (dev-dep proof only — runtime stays decoupled, 134-plan ruling).
+/// skills::validate` (dev-dep proof only — runtime stays decoupled).
 ///
 /// A skill-mutation proposal: the FULL `SKILL.md` (single-file v1 —
 /// resources/ rides a triggered follow-up) + parent sha + note.
@@ -440,7 +440,7 @@ fn flat_fields(md: &str) -> Option<BTreeMap<String, String>> {
     None
 }
 
-/// Hand-rolled hygiene diagnosis (134-plan ruling — quality disclaimed):
+/// Hand-rolled hygiene diagnosis (quality disclaimed):
 /// SAFE repairs only (single trailing newline; truncate
 /// `compatibility` > 500 chars with the issue named). Structural faults
 /// (bad fence, missing name/description, name mismatch) are NAMED and
@@ -498,7 +498,7 @@ pub fn diagnose_skill_fix(name: &str, current_md: &str, failure_note: &str) -> S
             }
         }
     }
-    // Single trailing newline (U1c precedent — byte hygiene; reported
+    // Single trailing newline (byte hygiene; reported
     // whenever bytes change, `fixed` still gates on no structural fault).
     let trimmed = md.trim_end_matches('\n');
     let want = format!("{trimmed}\n");
@@ -954,7 +954,7 @@ mod tests {
 
     #[test]
     fn dry_run_broken_to_validate_green() {
-        // v2 U2 datum: ≥1 failed skill → diagnosed rewrite → eval-green
+        // At least one failed skill → diagnosed rewrite → eval-green
         // (validate + discover), dry-run, never merged (stated).
         let root = tempfile::tempdir().unwrap();
         let dir = root.path().join("demo-skill");

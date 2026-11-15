@@ -3,7 +3,7 @@
 //! The human- and model-readable plan file: the planner writes it, the reviewer reviews it, the
 //! executor rewrites it (plan-mode shape — observable, editable, versioned, never a black-
 //! box transcript). Render and parse are strict inverses: `parse(render(g)) == g` is tested, and
-//! parse faults name the line (F5c precedent — corrupt files are hard errors). adds
+//! parse faults name the line (corrupt files are hard errors). It also provides
 //! [`apply_section`]: executor rewrite fragments written back into the graph under the same
 //! strictness.
 
@@ -126,7 +126,7 @@ pub fn apply_section(
             return Err(bad(sec.line, "empty dep entry"));
         }
     }
-    // Atomic: patch a clone, validate whole, commit only on success (B4).
+    // Atomic: patch a clone, validate whole, commit only on success.
     let mut next = graph.clone();
     let task = next.get_mut(task_id).expect("validated present above");
     task.title = sec.name.clone();

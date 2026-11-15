@@ -458,8 +458,179 @@ async fn run_drive(plan: &Plan) -> Result<CallToolResult, ErrorData> {
     }
 }
 
-/// The MCP server: one `drive` tool, plus a gate so only one drive runs at
-/// a time (a second caller waits — it never runs concurrently).
+/// Input contract of the `synthesize_invariants` tool: the AIS request in a
+/// flat, agent-friendly shape. The full request JSON is still what the
+/// subprocess consumes; this type is the ergonomic front door.
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct SynthesizeRequest {
+    /// The unit, in `ais-core`.
+    #[schemars(
+        description = "The unit in the `ais-core` language (fn … requires/ensures … while … invariant … variant …). At most 200000 bytes."
+    )]
+    pub source_text: String,
+
+    /// Source language.
+    #[serde(default)]
+    #[schemars(description = "Source language: only \"ais-core\" is admitted (default).")]
+    pub language: Option<String>,
+
+    /// Entry function.
+    #[serde(default)]
+    #[schemars(description = "Entry function name; defaults to the last function in the unit.")]
+    pub entry: Option<String>,
+
+    /// Property kind.
+    #[serde(default)]
+    #[schemars(
+        description = "Property kind: \"postcondition\" (default), \"safety\", \"termination\" or \"infer\"."
+    )]
+    pub property_kind: Option<String>,
+
+    /// Property expression.
+    #[serde(default)]
+    #[schemars(
+        description = "The claim itself in the fragment's expression syntax. Optional for postcondition (then the unit's own ensures are proved) and for termination."
+    )]
+    pub property_expr: Option<String>,
+
+    /// Assumptions the caller grants.
+    #[serde(default)]
+    #[schemars(
+        description = "Extra assumptions (hypotheses), each an expression. An unsatisfiable set returns spec_inconsistent, never a proof."
+    )]
+    pub assumptions: Vec<String>,
+
+    /// Loop selector for termination.
+    #[serde(default)]
+    #[schemars(description = "Loop id for termination (loop1, loop2, …).")]
+    pub property_at: Option<String>,
+
+    /// Proposer/refiner rounds.
+    #[serde(default)]
+    #[schemars(description = "Proposer/refiner rounds: 1..=8, default 3.")]
+    pub max_rounds: Option<u32>,
+
+    /// Solver wall clock per invocation.
+    #[serde(default)]
+    #[schemars(description = "Solver wall-clock cap in seconds: 1..=300, default 20.")]
+    pub solver_timeout_s: Option<u64>,
+
+    /// Token cap.
+    #[serde(default)]
+    #[schemars(description = "Token cap over model turns; 0 = unlimited. Default 60000.")]
+    pub token_budget: Option<u64>,
+
+    /// Total wall clock.
+    #[serde(default)]
+    #[schemars(
+        description = "Wall-clock cap for the whole request, in seconds: 1..=1800, default 600."
+    )]
+    pub total_wall_s: Option<u64>,
+
+    /// Call a model.
+    #[serde(default)]
+    #[schemars(
+        description = "Call the configured model as proposer/refiner. Default false: the deterministic pool alone (no spend, fully reproducible)."
+    )]
+    pub use_model: Option<bool>,
+
+    /// Model pin.
+    #[serde(default)]
+    #[schemars(description = "Model name to pin for proposer and refiner (only with use_model).")]
+    pub model: Option<String>,
+
+    /// Bounded model-check depth.
+    #[serde(default)]
+    #[schemars(description = "Bounded model-check depth: 1..=32, default 6.")]
+    pub bmc_depth: Option<usize>,
+}
+
+/// A validated synthesize call: the request JSON plus the flags the subprocess
+/// needs.
+#[derive(Debug)]
+struct SynthesizePlan {
+    request_json: serde_json::Value,
+    deterministic: bool,
+    model: Option<String>,
+    bmc_depth: usize,
+    timeout: Duration,
+}
+
+fn plan_synthesize(req: SynthesizeRequest) -> Result<SynthesizePlan, String> {
+    let source = req.source_text.trim_end();
+    if source.trim().is_empty() {
+        return Err("source_text must be non-empty".into());
+    }
+    if source.len() > 200_000 {
+        return Err(format!(
+            "source_text is {} bytes; the cap is 200000",
+            source.len()
+        ));
+    }
+    let language = req.language.unwrap_or_else(|| "ais-core".into());
+    let kind = req.property_kind.unwrap_or_else(|| "postcondition".into());
+    if !matches!(
+        kind.as_str(),
+        "postcondition" | "safety" | "termination" | "infer"
+    ) {
+        return Err(format!(
+            "property_kind must be postcondition|safety|termination|infer (got {kind:?})"
+        ));
+    }
+    let max_rounds = req.max_rounds.unwrap_or(3);
+    if max_rounds == 0 || max_rounds > 8 {
+        return Err("max_rounds must be in 1..=8".into());
+    }
+    let solver_timeout_s = req.solver_timeout_s.unwrap_or(20);
+    if solver_timeout_s == 0 || solver_timeout_s > 300 {
+        return Err("solver_timeout_s must be in 1..=300".into());
+    }
+    let total_wall_s = req.total_wall_s.unwrap_or(600);
+    if total_wall_s == 0 || total_wall_s > 1800 {
+        return Err("total_wall_s must be in 1..=1800".into());
+    }
+    let bmc_depth = req.bmc_depth.unwrap_or(6);
+    if bmc_depth == 0 || bmc_depth > 32 {
+        return Err("bmc_depth must be in 1..=32".into());
+    }
+    let use_model = req.use_model.unwrap_or(false);
+    if req.model.is_some() && !use_model {
+        return Err("model is only meaningful with use_model: true".into());
+    }
+    let request_json = serde_json::json!({
+        "source": {
+            "language": language,
+            "files": [{ "path": "unit.ais", "text": source }],
+            "entry": req.entry,
+        },
+        "property": {
+            "kind": kind,
+            "expr": req.property_expr,
+            "assumptions": req.assumptions,
+            "at": req.property_at,
+        },
+        "backend": { "name": "smtlib2" },
+        "budget": {
+            "max_rounds": max_rounds,
+            "solver_timeout_s": solver_timeout_s,
+            "token_budget": req.token_budget.unwrap_or(60_000),
+            "total_wall_s": total_wall_s,
+        },
+        "determinism": { "seed": 42, "temperature": "0" },
+        "emit": ["certificate", "ledger", "counterexamples"],
+    });
+    Ok(SynthesizePlan {
+        request_json,
+        deterministic: !use_model,
+        model: req.model,
+        bmc_depth,
+        timeout: Duration::from_secs(total_wall_s + 30),
+    })
+}
+
+/// The MCP server: the `drive` and `synthesize_invariants` tools, plus a gate
+/// so only one subprocess runs at a time (a second caller waits — it never
+/// runs concurrently).
 #[derive(Clone)]
 pub struct PolymorphServer {
     tool_router: ToolRouter<Self>,
@@ -497,6 +668,132 @@ impl PolymorphServer {
         let _gate = self.gate.lock().await;
         run_drive(&planned).await
     }
+
+    #[tool(
+        description = "Experimental. Synthesize and verify invariants/contracts for one code unit written in the ais-core fragment. Returns a proof certificate (ais-cert-v1) only when every SMT obligation is discharged; otherwise a classified failure with validated counterexamples. Deterministic by default; set use_model to let a model propose."
+    )]
+    async fn synthesize_invariants(
+        &self,
+        Parameters(req): Parameters<SynthesizeRequest>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let planned = match plan_synthesize(req) {
+            Ok(planned) => planned,
+            Err(msg) => return Err(ErrorData::invalid_params(msg, None)),
+        };
+        let _gate = self.gate.lock().await;
+        run_synthesize(&planned).await
+    }
+}
+
+/// Run one `polymorph proof run` in a subprocess and return the response JSON.
+/// The certificate travels inside the response (blob + digest), so the caller
+/// keeps the artifact even though the temp request file is removed. The
+/// child's working directory is that same tempdir, so its default
+/// `.polymorph` state is created — and removed — there, never in this
+/// server's working directory.
+async fn run_synthesize(plan: &SynthesizePlan) -> Result<CallToolResult, ErrorData> {
+    let exe = match resolve_polymorph_bin() {
+        Ok(exe) => exe,
+        Err(e) => return Ok(synthesize_broken(e)),
+    };
+    let dir = tempfile::Builder::new()
+        .prefix("polymorph-ais-")
+        .tempdir()
+        .map_err(|e| ErrorData::internal_error(format!("scratch dir: {e}"), None))?;
+    let request_path = dir.path().join("request.json");
+    if let Err(e) = std::fs::write(&request_path, plan.request_json.to_string()) {
+        return Ok(synthesize_broken(format!("cannot write request: {e}")));
+    }
+    let mut cmd = tokio::process::Command::new(&exe);
+    cmd.arg("proof")
+        .arg("run")
+        .arg("--request")
+        .arg(&request_path)
+        .arg("--json")
+        .arg("--bmc-depth")
+        .arg(plan.bmc_depth.to_string());
+    if plan.deterministic {
+        cmd.arg("--deterministic");
+    }
+    if let Some(model) = &plan.model {
+        cmd.arg("--model").arg(model);
+    }
+    // Workdir isolation: the proof child resolves its default `.polymorph`
+    // state relative to its process working directory, so park it inside the
+    // scratch tempdir next to request.json — that state is removed with the
+    // tempdir instead of leaking into this server's cwd (the repo, in tests).
+    cmd.current_dir(dir.path())
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true);
+    let child = match cmd.spawn() {
+        Ok(child) => child,
+        Err(e) => {
+            return Ok(synthesize_broken(format!(
+                "cannot spawn {}: {e}",
+                exe.display()
+            )))
+        }
+    };
+    let output = match tokio::time::timeout(plan.timeout, child.wait_with_output()).await {
+        Ok(Ok(output)) => output,
+        Ok(Err(e)) => return Ok(synthesize_broken(format!("wait failed: {e}"))),
+        Err(_) => {
+            return Ok(synthesize_broken(format!(
+                "timed out after {}s",
+                plan.timeout.as_secs()
+            )))
+        }
+    };
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let response: serde_json::Value = match serde_json::from_str(&stdout) {
+        Ok(v) => v,
+        Err(e) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Ok(synthesize_broken(format!(
+                "response was not JSON ({e}); stderr tail: {}",
+                stderr_tail(&stderr)
+            )));
+        }
+    };
+    let proved = response.get("verdict").and_then(|v| v.as_str()) == Some("proved");
+    let text = serde_json::to_string_pretty(&response).map_err(|e| {
+        ErrorData::internal_error(format!("response serialization failed: {e}"), None)
+    })?;
+    if proved && output.status.code() == Some(0) {
+        Ok(CallToolResult::success(vec![ContentBlock::text(text)]))
+    } else {
+        Ok(CallToolResult::error(vec![ContentBlock::text(text)]))
+    }
+}
+
+/// Where the subprocess binary is. `POLYMORPH_BIN` wins when it names a file —
+/// an embedder or a test can point at the built binary — otherwise this process
+/// is assumed to be the `polymorph` executable itself.
+fn resolve_polymorph_bin() -> Result<std::path::PathBuf, String> {
+    if let Some(path) = std::env::var_os("POLYMORPH_BIN") {
+        let path = std::path::PathBuf::from(path);
+        if path.is_file() {
+            return Ok(path);
+        }
+        return Err(format!(
+            "POLYMORPH_BIN is set to {} but that file does not exist",
+            path.display()
+        ));
+    }
+    std::env::current_exe().map_err(|e| format!("cannot resolve the polymorph binary: {e}"))
+}
+
+fn synthesize_broken(cause: String) -> CallToolResult {
+    let body = serde_json::json!({
+        "verdict": "unsupported",
+        "error": cause,
+        "certificate": serde_json::Value::Null,
+    });
+    CallToolResult::error(vec![ContentBlock::text(
+        serde_json::to_string_pretty(&body).unwrap_or_else(|_| "{}".into()),
+    )])
 }
 
 // `#[tool_handler]` fills in `call_tool`/`list_tools` routed through the
@@ -510,7 +807,7 @@ impl ServerHandler for PolymorphServer {
                 env!("CARGO_PKG_VERSION"),
             ))
             .with_instructions(
-                "Polymorph drive tool: one goal, one artifact set, one verdict. Success requires exit 0 and a finished PASSED event; on failure the ledger carries the findings.",
+                "Polymorph substrate tools: `drive` (one goal, one artifact set, one verdict; success requires exit 0 and a finished PASSED event) and `synthesize_invariants` (experimental: verifier-judged invariant synthesis over the ais-core fragment, returning a re-checkable certificate, or a classified failure).",
             )
     }
 }
@@ -547,6 +844,73 @@ mod tests {
         let mut req = base_req();
         mutate(&mut req);
         req
+    }
+
+    fn synth_req() -> SynthesizeRequest {
+        SynthesizeRequest {
+            source_text: "fn f(x: int) -> int
+  ensures result == x
+{
+  return x;
+}
+"
+            .into(),
+            language: None,
+            entry: None,
+            property_kind: None,
+            property_expr: None,
+            assumptions: Vec::new(),
+            property_at: None,
+            max_rounds: None,
+            solver_timeout_s: None,
+            token_budget: None,
+            total_wall_s: None,
+            use_model: None,
+            model: None,
+            bmc_depth: None,
+        }
+    }
+
+    #[test]
+    fn synth_plan_builds_the_documented_request_shape() {
+        let plan = plan_synthesize(synth_req()).expect("valid");
+        assert!(plan.deterministic, "the model is opt-in");
+        assert_eq!(plan.request_json["source"]["language"], "ais-core");
+        assert_eq!(
+            plan.request_json["property"]["kind"], "postcondition",
+            "postcondition is the default kind"
+        );
+        assert_eq!(plan.request_json["budget"]["max_rounds"], 3);
+        assert!(plan.request_json["source"]["files"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("return x;"));
+    }
+
+    #[test]
+    fn synth_plan_rejects_out_of_bounds_and_nonsense() {
+        let mut r = synth_req();
+        r.source_text = "   ".into();
+        assert!(plan_synthesize(r).unwrap_err().contains("source_text"));
+
+        let mut r = synth_req();
+        r.max_rounds = Some(99);
+        assert!(plan_synthesize(r).unwrap_err().contains("max_rounds"));
+
+        let mut r = synth_req();
+        r.property_kind = Some("reticulate".into());
+        assert!(plan_synthesize(r).unwrap_err().contains("property_kind"));
+
+        let mut r = synth_req();
+        r.model = Some("gpt-x".into());
+        assert!(plan_synthesize(r).unwrap_err().contains("use_model"));
+
+        let mut r = synth_req();
+        r.use_model = Some(true);
+        r.model = Some("glm-5.3".into());
+        let plan = plan_synthesize(r).expect("valid");
+        assert!(!plan.deterministic);
+        assert_eq!(plan.model.as_deref(), Some("glm-5.3"));
     }
 
     #[test]
@@ -855,7 +1219,7 @@ mod tests {
     /// subprocess exists — a spawn here would re-run this very test binary
     /// as the "CLI", so its absence is the point.
     #[tokio::test]
-    async fn serves_exactly_one_drive_tool_over_loopback() {
+    async fn serves_the_drive_and_synthesize_tools_over_loopback() {
         let (a, b) = tokio::io::duplex(65536);
         let (ar, aw) = tokio::io::split(a);
         let (br, bw) = tokio::io::split(b);
@@ -872,9 +1236,26 @@ mod tests {
         let client = client.unwrap();
 
         let listed = client.list_tools(None).await.unwrap();
-        assert_eq!(listed.tools.len(), 1, "exactly one tool: {listed:?}");
-        let drive = &listed.tools[0];
-        assert_eq!(drive.name.to_string(), "drive");
+        assert_eq!(listed.tools.len(), 2, "two tools: {listed:?}");
+        let drive = listed
+            .tools
+            .iter()
+            .find(|t| t.name.as_ref() == "drive")
+            .expect("drive tool");
+        let synthesise = listed
+            .tools
+            .iter()
+            .find(|t| t.name.as_ref() == "synthesize_invariants")
+            .expect("synthesize_invariants tool");
+        let schema = serde_json::Value::Object(synthesise.input_schema.as_ref().clone());
+        assert!(
+            schema["properties"]["source_text"].is_object(),
+            "source_text schema: {schema}"
+        );
+        assert!(
+            schema["properties"]["use_model"].is_object(),
+            "use_model schema: {schema}"
+        );
         let description = drive.description.as_deref().unwrap_or_default();
         assert!(description.contains("review drive"), "{description}");
         let schema = serde_json::Value::Object(drive.input_schema.as_ref().clone());
@@ -912,5 +1293,81 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// End-to-end over loopback: the real binary synthesizes, the certificate
+    /// comes back inside the response, and a false property returns isError.
+    /// Ignored by default because it needs the sibling `polymorph` binary.
+    #[tokio::test]
+    #[ignore = "needs the built polymorph binary; run with --ignored"]
+    async fn synthesize_invariants_end_to_end_over_loopback() {
+        let (a, b) = tokio::io::duplex(262144);
+        let (ar, aw) = tokio::io::split(a);
+        let (br, bw) = tokio::io::split(b);
+        let server_t =
+            rmcp::transport::async_rw::AsyncRwTransport::<rmcp::RoleServer, _, _>::new(ar, aw);
+        let client_t =
+            rmcp::transport::async_rw::AsyncRwTransport::<rmcp::RoleClient, _, _>::new(br, bw);
+        let (server, client) = tokio::join!(
+            rmcp::serve_server(PolymorphServer::new(), server_t),
+            rmcp::ServiceExt::serve((), client_t)
+        );
+        let _server = server.unwrap();
+        let client = client.unwrap();
+
+        let program = "fn sum(n: int) -> int
+  requires n >= 0
+  ensures result == n * (n + 1) / 2
+{
+  var r: int = 0;
+  var i: int = 0;
+  while (i < n)
+  {
+    i = i + 1;
+    r = r + i;
+  }
+  return r;
+}
+";
+        let mut params =
+            rmcp::model::CallToolRequestParams::new("synthesize_invariants".to_string());
+        params.arguments = Some(
+            serde_json::json!({ "source_text": program })
+                .as_object()
+                .cloned()
+                .unwrap(),
+        );
+        let result = client.call_tool(params).await.expect("tool call");
+        assert_eq!(result.is_error, Some(false), "{result:?}");
+        let text = result_text(&result);
+        let response: serde_json::Value = serde_json::from_str(&text).expect("response json");
+        assert_eq!(response["verdict"], "proved", "{text}");
+        assert_eq!(response["certificate"]["format"], "ais-cert-v1", "{text}");
+
+        // A false property must come back as an error verdict with a class.
+        let mut params =
+            rmcp::model::CallToolRequestParams::new("synthesize_invariants".to_string());
+        params.arguments = Some(
+            serde_json::json!({ "source_text": program, "property_expr": "result == 2 * n" })
+                .as_object()
+                .cloned()
+                .unwrap(),
+        );
+        let result = client.call_tool(params).await.expect("tool call");
+        assert_eq!(result.is_error, Some(true), "{result:?}");
+        let text = result_text(&result);
+        let response: serde_json::Value = serde_json::from_str(&text).expect("response json");
+        assert_eq!(response["verdict"], "disproved", "{text}");
+        assert_eq!(response["failure"]["needs_human"], true, "{text}");
+
+        // Workdir isolation, end to end: the proof child's default
+        // `.polymorph` dir must never land in this crate — it lives and
+        // dies inside the scratch tempdir that held request.json.
+        let leaked = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(".polymorph");
+        assert!(
+            !leaked.exists(),
+            "proof child left {} behind; its working directory must be the scratch tempdir",
+            leaked.display()
+        );
     }
 }

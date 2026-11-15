@@ -1,4 +1,4 @@
-//! `polymorph-skills` — Agent Skills (agentskills.io) conformance (J2b).
+//! `polymorph-skills` — Agent Skills (agentskills.io) conformance.
 //!
 //! Implements the spec's progressive disclosure in three levels:
 //! 1. metadata (`SkillMeta`: name + description, frontmatter only),
@@ -544,7 +544,7 @@ mod tests {
 
     #[test]
     fn shipped_git_split_discovers_and_validates() {
-        // The T2 skill ships in-repo (workspace `skills/`); manifest-
+        // The git-split skill ships in-repo (workspace `skills/`); manifest-
         // relative so the test holds from any cwd (harness-shell
         // precedent: never assume cwd).
         let shipped = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

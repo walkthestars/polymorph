@@ -39,7 +39,7 @@ pub enum ExecError {
 
 /// Run `cmd` via the platform shell (`cmd /C` on Windows, `sh -c` elsewhere).
 /// Captures stdout/stderr fully (lossy-decoded — byte-exact fidelity is NOT
-/// promised here; the PTY path in B2 owns terminal fidelity).
+/// promised here; the PTY path owns terminal fidelity).
 pub async fn run_bash(
     cmd: &str,
     timeout: Duration,

@@ -7,7 +7,7 @@
 //! binaries live host-side, the lsp-servers.md precedent). Transport is
 //! the workspace `reqwest` (already carried for genai — zero new heavy
 //! deps). No connection pool: HTTP needs none (unlike stdio children);
-//! pool-if-measured at P1b, not upfront.
+//! pool-if-measured, not upfront.
 //!
 //! Wire contract: `GET {base}/api/v1/search?q=&page=&safe=&lang=` + `GET
 //! {base}/api/v1/extract?url=`, envelope `{"success":true,"data":{…}}` /
@@ -55,7 +55,7 @@ pub fn validate(base_url: &str, timeout_secs: u64) -> anyhow::Result<WebSpec> {
     })
 }
 
-/// Build a spec from parsed config (P1b's `wire_web` uses this; the
+/// Build a spec from parsed config (`wire_web` uses this; the
 /// `[[hooks]]`-validation precedent — config never trusted raw).
 pub fn spec_for(cfg: &polymorph_core::config::WebConfig) -> anyhow::Result<WebSpec> {
     validate(&cfg.base_url, cfg.timeout_secs)

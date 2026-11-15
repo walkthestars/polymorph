@@ -163,7 +163,7 @@ fn newest_rdc(template: &std::path::Path) -> anyhow::Result<(std::path::PathBuf,
 }
 
 /// Headless replay proof: `thumb --out <png> <rdc>` replays without a viewer; exit 0 + output
-/// exists. Facade-only in N1a.
+/// exists. Facade-only.
 pub async fn thumb(
     spec: &RenderdocSpec,
     rdc: &std::path::Path,

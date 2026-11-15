@@ -149,6 +149,13 @@ polymorph-watch --events .polymorph/events.json --follow
 It shows rounds, verdicts, findings, budget, and the final status. It does not call a model
 and is not part of the `polymorph` binary.
 
+### Proof gate (experimental)
+
+`polymorph proof` and `review drive --proof-request` check properties of units written in
+`ais-core`, a small verification language, with an SMT solver. They do not verify Rust or
+other languages directly, and they need `z3` on `PATH`, which the release archives do not
+include. See [docs/PROOF.md](docs/PROOF.md).
+
 ## Architecture
 
 ```text
@@ -236,7 +243,8 @@ web search are documented in [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 | `polymorph-skills` | `SKILL.md` parsing and progressive disclosure |
 | `polymorph-drive` | Headless drive protocol: intents, events, driver contract |
 | `polymorph-prompts` | Default prompt packs, embedded in the binary |
-| `polymorph-mcp` | MCP stdio server and the bounded `drive` tool |
+| `polymorph-ais` | Experimental proof gate: `ais-core` parser, obligation generation, solver driver, certificates |
+| `polymorph-mcp` | MCP stdio server: the bounded `drive` tool and the experimental `synthesize_invariants` tool |
 | `polymorph-swe` | `polymorph` binary: CLI, MCP wiring, review dispatch |
 | `polymorph-watch` | Separate `polymorph-watch` binary: read-only ledger viewer |
 

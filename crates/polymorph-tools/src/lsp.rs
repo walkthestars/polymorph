@@ -2,7 +2,7 @@
 //!
 //! Transport: stdio + `Content-Length` framing, client-only v1. Zero new deps —
 //! tokio (child + io + time) and serde_json are resident; the initialize
-//! handshake is minimal hand-rolled JSON (`lsp-types` adoption rides L1b's
+//! handshake is minimal hand-rolled JSON (`lsp-types` adoption rides the
 //! op surface, when the 9-op vocabulary actually needs canonical types).
 //! Enforcement and `[[lsp_servers]]` ride this client; the module proves
 //! the transport against a fixture and stops there (stated, not hidden).
@@ -149,7 +149,7 @@ where
         .map(Some)
 }
 
-/// Extension → language map (L2 enforcement routing; L3's `[[lsp_servers]]`
+/// Extension → language map (write-through enforcement routing; the `[[lsp_servers]]`
 /// table keys these names). Unknown extensions route nowhere (plain writes).
 /// Filename routes cover extensionless files (CMakeLists.txt, Dockerfile).
 /// Keys are stable: existing 9 never rename; new keys match
@@ -311,7 +311,7 @@ pub struct LspPool {
     /// didOpen versions per URI (monotonic per session; re-sends must
     /// advance or servers may ignore them as stale).
     open_versions: std::collections::BTreeMap<String, i32>,
-    /// Last pulled diagnostics per URI (L4 gutter feed): replaced on every pull, never blocking;
+    /// Last pulled diagnostics per URI (gutter feed): replaced on every pull, never blocking;
     /// dropped when a write's consult could not refresh it.
     diagnostics: std::collections::BTreeMap<String, Vec<LspDiagnostic>>,
 }
@@ -354,7 +354,7 @@ impl LspPool {
 
     /// Register one language server (duplicate languages refused, not
     /// overwritten — the `register` precedent). `[[lsp_servers]]` maps
-    /// onto this at L3; L2 callers register explicitly.
+    /// onto this; enforcement callers register explicitly.
     pub fn add_server(&mut self, language: &str, spec: LspSpec) -> anyhow::Result<()> {
         if self.specs.contains_key(language) {
             anyhow::bail!("duplicate lsp server for language: {language}");
@@ -707,7 +707,7 @@ pub struct LspClient {
     next_id: u64,
     /// Server-pushed traffic seen while awaiting responses: notifications
     /// and server→client requests, observed but never answered (client-only
-    /// v1 posture). The L1b diagnostics + willRenameFiles proofs read it.
+    /// v1 posture). The diagnostics + willRenameFiles proofs read it.
     incoming: Vec<serde_json::Value>,
 }
 
@@ -891,7 +891,7 @@ impl LspClient {
     /// LSP startup sequence: `initialize` (see [`initialize_params`]) then the `initialized`
     /// notification (process + root + empty capabilities v1) then the `initialized` notification.
     /// Returns the server's result (capabilities + serverInfo — the fixture asserts both, a real
-    /// server's shape is L1b's business). `None` root sends JSON null.
+    /// server's shape is out of scope here). `None` root sends JSON null.
     pub async fn initialize(
         &mut self,
         root_uri: Option<&str>,
@@ -904,9 +904,9 @@ impl LspClient {
         Ok(result)
     }
 
-    /// Thin op wrappers (L1b: the v2 9, client→server direction). Params
+    /// Thin op wrappers (client→server direction). Params
     /// mirror LSP shapes minimally; results pass through as `Value` —
-    /// canonical `lsp-types` mapping is L2's business, when enforcement
+    /// canonical `lsp-types` mapping is left to enforcement, when it
     /// needs field-level reads. `request` itself stays public as the raw
     /// pass-through (the 9th op).
     fn doc_pos(uri: &str, line: u32, character: u32) -> serde_json::Value {

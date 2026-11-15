@@ -3,7 +3,7 @@
 //! Both modes are the same reviewer→executor machine over FRESH reviewer
 //! context each round: plan mode critiques the plan, act mode
 //! critiques the artifact. The reviewer and executor are injected traits —
-//! scripted fakes here, Bus + LLM bindings in F2.
+//! scripted fakes here, Bus + LLM bindings in the `binding` module.
 
 use async_trait::async_trait;
 use polymorph_core::{Finding, LoopConfig, Role, Verdict};
@@ -68,7 +68,7 @@ pub struct ExecutorInput {
     pub mode: LoopMode,
 }
 
-/// Reviewer failure: malformed verdict (F2 maps [`crate::VerdictError`] here).
+/// Reviewer failure: malformed verdict (the Bus + LLM binding maps [`crate::VerdictError`] here).
 /// Consumes the round; the loop continues to the cap, then escalates.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ReviewerError {
@@ -118,7 +118,7 @@ pub struct RoundRecord {
     pub verdict: RoundVerdict,
     pub findings: usize,
     /// Machine-readable finding one-liners (`P1 file:line issue`, capped
-    /// [`MAX_ISSUES_PER_ROUND`]) for bench taxonomy (F6): counts flow to
+    /// [`MAX_ISSUES_PER_ROUND`]) for bench taxonomy: counts flow to
     /// cost proxies, these flow to failure classification.
     pub issues: Vec<String>,
     /// `Some` when the verdict came from the caller's seed, not a reviewer call — carrying which

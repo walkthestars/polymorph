@@ -3,7 +3,7 @@
 //! The plan-mode substrate. [`graph`] owns the model (tasks, statuses, edges, ready-
 //! order, merge ordering, checkpoints); [`plan`] owns the observable artifact (PLAN.md
 //! render/parse). No LLM, no bus, no network — the reviewer loop drives these types without
-//! touching them (F1/F2 seam precedent).
+//! touching them.
 //!
 //! Rules: - The plan is a FILE (rendered, reviewed, rewritten), never a black-box transcript. -
 //! `Done` is terminal: resume never resurrects completed work. - Multi-child merges run in

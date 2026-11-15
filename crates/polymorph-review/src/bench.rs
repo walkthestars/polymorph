@@ -1,6 +1,6 @@
 //! Agent-bench corpus + scoring primitives.
 //!
-//! The seeded corpus (TOML manifest, B6-dialect schema) and the LLM-free
+//! The seeded corpus (TOML manifest) and the LLM-free
 //! machinery around it: loading, tempdir materialization, deadline-bound
 //! `cargo test` runs, hidden-test scoring. Live loop-driving lives in the
 //! CLI (`review bench`); this module stays drivable from unit tests.
@@ -37,7 +37,7 @@ pub struct Fix {
 }
 
 /// Parse a corpus manifest (TOML text). Corrupt manifests are hard errors
-/// naming the failure — never empty corpora (F5c precedent: empties fail).
+/// naming the failure — never empty corpora (empties fail).
 pub fn load_corpus(text: &str) -> anyhow::Result<Corpus> {
     let corpus: Corpus = toml::from_str(text).map_err(|e| anyhow::anyhow!("corpus TOML: {e}"))?;
     if corpus.task.is_empty() {
@@ -206,7 +206,7 @@ pub const SCOPED_BASH_PROFILE: &str = "scoped-v1-bash";
 pub const BENCH_DENY_EXTRA: &[&str] = &["bash:rm", "bash:rmdir", "bash:del", "bash:git"];
 
 /// Resolve a `--tool-profile` name to its shell rule. Unknown names bail
-/// (fail-fast, creates nothing — F5d precedent).
+/// (fail-fast, creates nothing).
 pub fn profile_shell_rule(profile: &str) -> anyhow::Result<&'static str> {
     match profile {
         "scoped-v1" => Ok("bash:cargo"),
@@ -254,7 +254,7 @@ pub fn loop_worktree_record_profile(base: &str) -> String {
 }
 
 /// Parse the `--preamble` flag: `full` | `minimal` (fence-ban-only ablation). Unknown names bail
-/// (fail-fast, creates nothing — F5d precedent). Returns true for minimal.
+/// (fail-fast, creates nothing). Returns true for minimal.
 pub fn parse_preamble(name: &str) -> anyhow::Result<bool> {
     match name {
         "full" => Ok(false),
@@ -327,8 +327,8 @@ pub fn score_dir(dir: &Path) -> (bool, String) {
     (ok, summary)
 }
 
-/// One scored file for record snapshots (recording-v2 files-arrays
-/// precedent, F5e: replay without re-spend).
+/// One scored file for record snapshots (files arrays let a record replay
+/// without re-spend).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct NamedFile {
     pub name: String,
@@ -378,7 +378,7 @@ pub fn snapshot_files(dir: &Path, names: &[String]) -> anyhow::Result<Vec<NamedF
 /// the caller's (CLI owns pid-scoped parents per established pattern).
 pub fn write_record(dir: &Path, record: &BenchRecord) -> anyhow::Result<PathBuf> {
     // Arm validated at write time: a record that cannot replay is never
-    // written (F5c precedent — corrupt files are hard errors, never scores).
+    // written (corrupt files are hard errors, never scores).
     if BenchArm::parse(&record.arm).is_none() {
         anyhow::bail!("record task {}: unknown arm {:?}", record.task, record.arm);
     }

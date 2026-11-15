@@ -1,4 +1,4 @@
-// Minimal presenting OpenGL sample for RenderDoc capture proofs (chunk 112).
+// Minimal presenting OpenGL sample for RenderDoc capture proofs.
 // Win32 + WGL 3.3 CORE context + shader triangle. No external deps beyond
 // opengl32/gdi32 (in-box on Windows). Renders FRAMES frames, prints
 // "frames=N" to stdout, exits 0 — no user input (automation-safe).

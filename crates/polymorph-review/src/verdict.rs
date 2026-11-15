@@ -16,7 +16,7 @@
 use polymorph_core::{Finding, Severity, Verdict, VerdictKind};
 
 /// Why verdict text was rejected. Every variant names the fault so the
-/// caller (F2's LLM reviewer, `review check`) can report it exactly.
+/// caller (the LLM reviewer, `review check`) can report it exactly.
 #[derive(Debug, Clone, PartialEq)]
 pub enum VerdictError {
     /// Blank/whitespace-only input.

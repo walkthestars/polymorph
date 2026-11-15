@@ -218,7 +218,7 @@ impl McpPool {
 }
 
 /// Call one enrolled MCP tool. Transport and `is_error` faults become `Failed` (recoverable at the
-/// feed loop, F3b precedent); only the gate denies (taxonomy stays meaningful). No new `CallError`
+/// feed loop); only the gate denies (taxonomy stays meaningful). No new `CallError`
 /// variant.
 pub async fn call_mcp_tool(
     pool: &tokio::sync::Mutex<McpPool>,
@@ -262,7 +262,7 @@ pub async fn call_mcp_tool(
             )));
         }
     };
-    // The model replies with args matching the tool schema directly (V1
+    // The model replies with args matching the tool schema directly (built-in
     // shape) — the whole object IS the arguments. Non-objects fail naming
     // tool + field (arg_str precedent).
     let obj = args.as_object().cloned().ok_or_else(|| {
@@ -511,7 +511,7 @@ mod tests {
             r.schema_of("mcp__probe__probe_echo"),
             Some(serde_json::json!({"type": "object"}))
         );
-        // V1 static table still serves through the same call.
+        // Built-in static table still serves through the same call.
         assert!(r.schema_of("read").is_some());
         assert_eq!(r.schema_of("frobnicate"), None);
     }

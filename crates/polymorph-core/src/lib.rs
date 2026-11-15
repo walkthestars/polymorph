@@ -1,7 +1,7 @@
 //! `polymorph-core` — agent loop, plan/act/review state machine.
 //!
 //! Role routing types, verdict schema (fixed JSON), and loop config. No LLM calls
-//! yet — that is A3.
+//! yet.
 
 use serde::{Deserialize, Serialize};
 

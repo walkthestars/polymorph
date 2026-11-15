@@ -1,7 +1,7 @@
 //! `polymorph-tools` — tool implementations + self-registering registry.
 //!
 //! CONVENTION: tools self-register in `polymorph-tools/src/registry.rs`; nothing registers from
-//! `core`. exec/read/write/grep/glob land here; edit (hashline) is B4.
+//! `core`. exec/read/write/grep/glob land here.
 
 pub mod dap;
 pub mod eval;
@@ -194,7 +194,7 @@ impl Registry {
         self.mcp.lock().await.connected()
     }
 
-    /// Schema for one tool: enrolled server schemas first, then the V1 static table.
+    /// Schema for one tool: enrolled server schemas first, then the built-in static table.
     pub fn schema_of(&self, name: &str) -> Option<serde_json::Value> {
         self.mcp_schemas
             .get(name)
@@ -222,7 +222,7 @@ impl Registry {
     }
 
     /// JSON-Schema (draft-2020-12 subset) for one tool's args, handed to
-    /// the model verbatim by F3b's loop. Hand-written per tool; the gate
+    /// the model verbatim by the agent loop. Hand-written per tool; the gate
     /// test below pins every tool's required keys against drift.
     pub fn schema(name: &str) -> Option<serde_json::Value> {
         use serde_json::json;
@@ -557,27 +557,27 @@ impl Registry {
         self.ask.set_prompter(prompter);
     }
 
-    /// Register one language server for write-through enforcement (L2).
-    /// `[[lsp_servers]]` maps onto this at L3; duplicate languages refuse.
+    /// Register one language server for write-through enforcement.
+    /// `[[lsp_servers]]` maps onto this; duplicate languages refuse.
     /// Async like `inject_mcp_client` (shared `&self` + pool lock); spawn
     /// stays lazy at first write — the pool is empty until then.
     pub async fn add_lsp_server(&self, language: &str, spec: lsp::LspSpec) -> anyhow::Result<()> {
         self.lsp.lock().await.add_server(language, spec)
     }
 
-    /// Register one debug adapter spec for M3 session spawn (M2).
+    /// Register one debug adapter spec for debug session spawn.
     /// `[[dap_adapters]]` maps onto this; duplicate languages refuse.
     /// Specs only — sessions spawn fresh per use (no shared server).
     pub async fn add_dap_adapter(&self, language: &str, spec: dap::DapSpec) -> anyhow::Result<()> {
         self.dap.lock().await.add_adapter(language, spec)
     }
 
-    /// Adapter spec for one language (M3 reads through here at spawn).
+    /// Adapter spec for one language (session spawn reads through here).
     pub async fn dap_spec_for(&self, language: &str) -> Option<dap::DapSpec> {
         self.dap.lock().await.spec_for(language)
     }
 
-    /// Enroll the RenderDoc binary (N1a reads through here at capture).
+    /// Enroll the RenderDoc binary (capture reads through here).
     /// `[renderdoc]` maps onto this; absent until wired (fail-closed).
     pub async fn set_renderdoc_spec(&self, spec: renderdoc::RenderdocSpec) {
         *self.renderdoc.lock().await = Some(spec);
@@ -588,7 +588,7 @@ impl Registry {
         self.renderdoc.lock().await.clone()
     }
 
-    /// Enroll the serica server address (P1b reads through here).
+    /// Enroll the serica server address (web tools read through here).
     /// `[web]` maps onto this; absent until wired (localhost default).
     pub async fn set_web_spec(&self, spec: web::WebSpec) {
         *self.web.lock().await = Some(spec);
@@ -608,7 +608,7 @@ impl Registry {
         self.lsp.lock().await.take_notice()
     }
 
-    /// Last recorded diagnostics per URI (L4 gutter feed).
+    /// Last recorded diagnostics per URI (gutter feed).
     pub async fn lsp_diagnostics(&self) -> std::collections::BTreeMap<String, Vec<String>> {
         self.lsp.lock().await.diagnostics()
     }
@@ -625,7 +625,7 @@ impl Registry {
         self.lsp.lock().await.is_push_only(language)
     }
 
-    /// Test-only seed for the L-actuation (1) brief feed: writes directly into the pool's last-
+    /// Test-only seed for the diagnostics brief feed: writes directly into the pool's last-
     /// recorded map — no server, no IO. Production populates via `lsp_post_write` only.
     pub async fn test_seed_lsp_diagnostics(
         &self,
@@ -874,7 +874,7 @@ impl Registry {
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(true);
         // Gate FIRST (before any read or connect — a denial leaves zero
-        // side effects, the F3a contract).
+        // side effects).
         ctx.gate
             .check(&format!("{tool}:{path}"))
             .map_err(CallError::Denied)?;
@@ -950,7 +950,7 @@ impl Registry {
         const TOOL: &str = "dap_start";
         let program = arg_str(args, TOOL, "program")?;
         // Gate FIRST (before any spawn — a denial leaves zero side
-        // effects, the F3a contract).
+        // effects).
         ctx.gate
             .check(&format!("{TOOL}:{program}"))
             .map_err(CallError::Denied)?;
@@ -988,9 +988,9 @@ impl Registry {
                 "{TOOL}: no DAP adapter for '{language}' — register one first"
             ))
         })?;
-        // Transport follows the adapter: dlv speaks TCP only (M2),
+        // Transport follows the adapter: dlv speaks TCP only,
         // everything else rides stdio. The session box erases the
-        // difference (the M2 `DapSession` trait).
+        // difference (the `DapSession` trait).
         let mut runner: Box<dyn dap::DapSession> = if language == "go" {
             let mut spec = spec;
             spec.args = vec![
@@ -1111,7 +1111,7 @@ impl Registry {
         const TOOL: &str = "rdoc_capture";
         let program = arg_str(args, TOOL, "program")?;
         // Gate FIRST (before any spawn — a denial leaves zero side
-        // effects, the F3a contract).
+        // effects).
         ctx.gate
             .check(&format!("{TOOL}:{program}"))
             .map_err(CallError::Denied)?;
@@ -1489,7 +1489,7 @@ impl Registry {
             };
             return self.call_scheme_extract(&url, None).await;
         }
-        // P2 handlers: scheme URL → fetch URL + fragment echo. Gate stays the single `read:{path}`
+        // Scheme handlers: scheme URL → fetch URL + fragment echo. Gate stays the single `read:{path}`
         // check above.
         if let Some(rest) = path.strip_prefix("gh://") {
             let (url, fragment) = web::github_url(rest)
@@ -1690,7 +1690,7 @@ impl Registry {
     }
 
     /// Atomic-split proposal: propose-only groups over a live repo via `split::plan_live`. Gate
-    /// FIRST (pre-spawn — a denial leaves zero side effects, F3a contract). Split faults (non-repo,
+    /// FIRST (pre-spawn — a denial leaves zero side effects). Split faults (non-repo,
     /// cycles) surface as failures, never denials (typed-boundary precedent: denials are
     /// permissions only).
     async fn call_split_plan(
@@ -1739,7 +1739,7 @@ impl Registry {
 
     /// `git://<repo>/split` preview: split-plan JSON over a live repo, no-deps floor. Already gated
     /// by the caller (`read:{path}` — the web:// precedent). Only the `/split` suffix is served;
-    /// every other `git://` shape fails closed naming the path (P2 precedent).
+    /// every other `git://` shape fails closed naming the path.
     async fn call_git_split_url(
         &self,
         rest: &str,
@@ -1793,7 +1793,7 @@ impl Registry {
     }
 
     /// `renderdoc://<capture>[#event]`: no event → draws list, event → pipeline state — straight
-    /// delegation to the N1b introspect machinery (live-proven at 113; its own capture-scoped gates
+    /// delegation to the introspect machinery (its own capture-scoped gates
     /// hold under the `read:{path}` grant).
     async fn call_renderdoc_url(
         &self,
@@ -1845,7 +1845,7 @@ enum StopOutcome {
 }
 
 /// Parse `dap_start` breakpoints: `[{path, lines: [1-based]}]` — every
-/// field named on failure (the F3a arg-error contract).
+/// field named on failure.
 fn parse_dap_breakpoints(
     args: &serde_json::Value,
     tool: &str,
@@ -1960,7 +1960,7 @@ fn scheme_of(path: &str) -> Option<&str> {
         .then_some(scheme)
 }
 
-/// Map a classified web error into the registry failure shape (P1b).
+/// Map a classified web error into the registry failure shape.
 fn web_failed(tool: &str, e: web::WebError) -> CallError {
     CallError::Failed(anyhow::anyhow!("{tool}: {e}"))
 }
@@ -2090,8 +2090,7 @@ fn bash_result(
     v
 }
 
-/// The V1 tool floor: read/write/edit/grep/glob/bash. registers descriptors only; executors arrive
-/// with.
+/// The built-in tool floor: read/write/edit/grep/glob/bash. Registers descriptors only.
 pub fn v1_tool_floor() -> Vec<ToolDef> {
     vec![
         ToolDef {
@@ -2118,7 +2117,7 @@ pub fn v1_tool_floor() -> Vec<ToolDef> {
             name: "bash".into(),
             description: "Shell exec (non-interactive + PTY)".into(),
         },
- // L-actuation 3A: read-only LSP queries for the fixer allowlist. Reviewers never see them
+ // Read-only LSP queries for the fixer allowlist. Reviewers never see them
  // (their spawns keep `tools = []`); fixers opt in per call site (`--tools`).
         ToolDef {
             name: "lsp_hover".into(),
@@ -2134,7 +2133,7 @@ pub fn v1_tool_floor() -> Vec<ToolDef> {
             description: "LSP find-references at a position (read-only; needs a registered server)"
                 .into(),
         },
- // M3 debugger surface: session tools for RUNTIME questions. The bash-vs-DAP instruction
+ // Debugger surface: session tools for RUNTIME questions. The bash-vs-DAP instruction
  // lives HERE (tool descriptions reach the model through schemas — the TOOLS_PREAMBLE block
  // is eval-pinned and stays untouched).
         ToolDef {
@@ -2157,13 +2156,13 @@ pub fn v1_tool_floor() -> Vec<ToolDef> {
             name: "dap_disconnect".into(),
             description: "End a debug session and reap its adapter. ALWAYS call when done debugging; sessions never outlive the task.".into(),
         },
- // N1a graphics capture: PREFER over guessing GPU state — a headed capture replays headless
- // for draw/state inspection (N1b). The target must present frames.
+ // Graphics capture: PREFER over guessing GPU state — a headed capture replays headless
+ // for draw/state inspection. The target must present frames.
         ToolDef {
             name: "rdoc_capture".into(),
             description: "Capture a presenting graphics app under RenderDoc to a .rdc file (headless replay + thumbnail source). Use for GPU-state questions; bash covers static questions. Returns the newest .rdc path.".into(),
         },
- // N1b introspection: headed replay queries over captures. Draws first (event ids feed
+ // Introspection: headed replay queries over captures. Draws first (event ids feed
  // state), then state, then diff; user scripts last (gated on their own path).
         ToolDef {
             name: "rdoc_draws".into(),
@@ -2181,7 +2180,7 @@ pub fn v1_tool_floor() -> Vec<ToolDef> {
             name: "rdoc_script".into(),
             description: "Run a Python analysis script under RenderDoc's embedded runtime for custom GPU questions. The script MUST write JSON to the RDOC_OUT env path and quit the UI or the call times out. Output echoed (32KB cap).".into(),
         },
- // P1b web research: serica-backed, observe-first. External facts and docs live here; NEVER
+ // Web research: serica-backed, observe-first. External facts and docs live here; NEVER
  // send secrets outward.
         ToolDef {
             name: "web_search".into(),
@@ -2974,7 +2973,7 @@ mod tests {
         assert!(err.contains("read"), "{err}");
     }
 
-    // L-actuation 3A: read-only LSP query tools ----
+    // Read-only LSP query tools ----
     #[tokio::test]
     async fn lsp_tools_route_unknown_extensions_soft() {
         // No language route → Ok note, no server needed, no error.
@@ -3074,10 +3073,10 @@ mod tests {
         assert!(err.contains("`character`"), "{err}");
     }
 
-    // M3 debugger session tools ----
+    // Debugger session tools ----
     #[test]
     fn dap_launch_args_pin_proven_shapes() {
-        // One arm per adapter, byte-pinned to the M2 matrix rows that
+        // One arm per adapter, byte-pinned to the adapter matrix rows that
         // proved them live — a new adapter adds an arm + its row here.
         assert_eq!(
             dap::launch_args_for("python", "a.py", "w").unwrap(),
@@ -3197,7 +3196,7 @@ mod tests {
 
     #[test]
     fn dap_tool_descriptions_carry_the_instruction() {
-        // M3's bash-vs-DAP instruction lives in tool descriptions. Pin the load-bearing phrases so
+        // The bash-vs-DAP instruction lives in tool descriptions. Pin the load-bearing phrases so
         // edits cannot silently drop the guidance.
         let r = registry::v1_registry();
         let desc = |name: &str| r.get(name).unwrap().description.clone();

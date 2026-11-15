@@ -24,6 +24,7 @@ polymorph-llm = { version = "1.0.0", path = "../polymorph-llm" }
 polymorph-prompts = { version = "1.0.0", path = "../polymorph-prompts" }
 polymorph-tasks = { version = "1.0.0", path = "../polymorph-tasks" }
 polymorph-tools = { version = "1.0.0", path = "../polymorph-tools" }
+polymorph-ais = { version = "1.0.0", path = "../polymorph-ais" }
 
 [dev-dependencies]
 tempfile.workspace = true

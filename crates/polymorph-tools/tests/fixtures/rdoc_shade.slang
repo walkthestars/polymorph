@@ -1,4 +1,4 @@
-// Minimal slang triangle shaders for the N2a compile smoke (chunk 114).
+// Minimal slang triangle shaders for the compile smoke.
 // Plain entry functions (compiled with explicit -entry/-stage — no
 // attribute-magic dependence). Distinct constants per vertex so the
 // compile is real work, not an empty translation unit. Matches the

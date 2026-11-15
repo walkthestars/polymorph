@@ -98,6 +98,7 @@ polymorph review drive --goal <TEXT> [scope flags] [execution flags]
 | `--verify-cmd <CMD>` | `[agent] verify_cmds` | Repeatable command run in the workdir after every fixer turn; a non-zero exit or timeout vetoes a `Pass` |
 | `--verify-timeout-secs <SECS>` | `600` | Per-command timeout; expiry reaps the process tree |
 | `--lsp-error-gate` | `[agent] lsp_error_gate` | Veto a `Pass` while mutated files carry error-severity LSP diagnostics (requires `--tools`) |
+| `--proof-request <FILE>` | off | Experimental. Run the proof request in `FILE` after every fixer turn and veto a `Pass` unless every obligation is discharged. Needs `z3`; see [PROOF.md](PROOF.md) |
 | `--reviewer-tools` | `[agent] reviewer_tools` | Let the reviewer take up to `reviewer_tool_rounds` (default 4) read-only inspection turns before its verdict |
 | `--on-fail rollback\|keep` | `rollback` (`drive`), `keep` (`run`) | On a non-passing outcome or `Ctrl-C`, `rollback` restores mutated bytes and archives the attempt under `.polymorph/attempts/` |
 | `--repo <DIR>` | — | Run the drive in a temporary detached worktree of `<DIR>`. The worktree is removed when the drive ends and nothing is merged back; use it to verify without touching the working tree, not to land a change |
@@ -164,7 +165,7 @@ recording (file or directory of `*.bench.json`) offline and fails below `--min-r
 | Command | Description |
 |---------|-------------|
 | `polymorph eval run` | Run one live model turn against an expected end state and score it |
-| `polymorph eval sweep` | Run the B6 edit corpus live, one turn per scorable task; skips rejection tasks by name |
+| `polymorph eval sweep` | Run the edit corpus live, one turn per scorable task; skips rejection tasks by name |
 | `polymorph eval check` | Re-score a recording (file or directory of `*.eval.json`) offline and gate it |
 
 ---
@@ -231,6 +232,40 @@ polymorph-watch --events <PATH> [--follow] [--interval-ms 250]
 
 `--follow` re-reads the file when it changes, so a live `review drive --events-json` shows
 rounds, verdicts, findings, budget, and the final status as they are written.
+
+---
+
+## 7. Proof gate (`polymorph proof`, experimental)
+
+Proves properties of units written in `ais-core`, a small verification language. It does
+not verify Rust or other languages directly. It needs the `z3` solver on `PATH`, which the
+release archives do not include. The request format, verdicts and certificates are
+described in [PROOF.md](PROOF.md).
+
+```bash
+polymorph proof run --request request.json --cert-out cert.json   # exit 0 only on `proved`
+polymorph proof run --request request.json --deterministic --json # no model call, full response
+polymorph proof recheck --cert cert.json --source unit.ais        # re-derive and replay
+polymorph proof recheck --cert cert.json --source unit.ais --differential "cvc5 {input}"
+polymorph proof bench                                             # built-in benchmark
+polymorph proof backends                                          # supported fragment and limits
+```
+
+| Flag | Applies to | Effect |
+|------|------------|--------|
+| `--request <FILE>` | `run` | Request JSON (`-` reads stdin) |
+| `--cert-out <FILE>` | `run` | Write the certificate body |
+| `--events-json <FILE>` | `run` | Write the round ledger |
+| `--deterministic` | `run` | Do not call a model; use the built-in candidate pool only |
+| `--model <MODEL>` | `run` | Pin the proposer model instead of the role chains |
+| `--bmc-depth <N>` | `run` | Bounded model-check depth used to tell a weak invariant from a false property (default `6`) |
+| `--solver <CMD>` | `run` | Solver command line containing `{input}` (default `z3 -smt2 {input}`) |
+| `--source <FILE>` | `recheck` | Source the certificate is bound to; repeat once per pinned file |
+| `--digest-only` | `recheck` | Verify digests and replay only, without re-deriving the obligations |
+| `--differential <CMD>` | `recheck` | Also replay every obligation under a second solver and require agreement |
+| `--json` | `run`, `recheck` | Print the full result as JSON |
+
+`review drive --proof-request` runs the same check as a gate inside a drive.
 
 ---
 

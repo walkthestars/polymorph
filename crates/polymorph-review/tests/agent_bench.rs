@@ -5,7 +5,7 @@
 //! materialization, deadline-bound `cargo test`): write initial files → suite
 //! must FAIL naming every fail_to_pass (pass_to_pass must read `ok`) → write
 //! fix files → suite exit 0. Prints a per-task board plus
-//! `AGENT-BENCH SCORE: n/10`; the gate is 100% (B6 precedent).
+//! `AGENT-BENCH SCORE: n/10`; the gate is 100%.
 
 use polymorph_review::bench::{cargo_test, load_corpus, write_files, CARGO_DEADLINE};
 

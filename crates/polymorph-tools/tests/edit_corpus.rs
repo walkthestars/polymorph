@@ -1,11 +1,10 @@
-//! B6 seeded edit-corpus driver.
+//! Seeded edit-corpus driver.
 //!
-//! Loads `eval_b6/edit_corpus.toml`, runs every task in an isolated tempdir:
+//! Loads `edit_corpus/edit_corpus.toml`, runs every task in an isolated tempdir:
 //! write initial files → mint tags → substitute `{{TAG:path}}` (or corrupt
 //! when the task says so) → `apply_text_to_disk` → assert the declared
-//! outcome. Prints a per-task board plus `B6 SCORE: n/20`; the gate is 100%
-//! (the plan's ≥90% is a MINIMUM bar we exceed — a single regression must go
-//! red, never hide inside a percentage).
+//! outcome. Prints a per-task board plus `EDIT-CORPUS SCORE: n/20`; the gate is 100%
+//! (a single regression must go red, never hide inside a percentage).
 
 use polymorph_tools::hashline::{
     apply::normalize, apply_text_to_disk, HashlineError, SnapshotStore,
@@ -173,10 +172,10 @@ fn run_task(task: &Task) -> Result<(), String> {
 }
 
 #[test]
-fn b6_edit_corpus() {
-    let src = include_str!("eval_b6/edit_corpus.toml");
+fn edit_corpus_gate() {
+    let src = include_str!("edit_corpus/edit_corpus.toml");
     let corpus: Corpus = toml::from_str(src).expect("corpus TOML must parse");
-    assert_eq!(corpus.task.len(), 20, "B6 corpus is exactly 20 tasks");
+    assert_eq!(corpus.task.len(), 20, "the edit corpus is exactly 20 tasks");
     let mut ids = BTreeSet::new();
     let mut passed = 0;
     let mut failures: Vec<String> = Vec::new();
@@ -197,12 +196,12 @@ fn b6_edit_corpus() {
         }
     }
     println!(
-        "B6 SCORE: {passed}/{} (gate: 100% — plan minimum 90%)",
+        "EDIT-CORPUS SCORE: {passed}/{} (gate: 100%)",
         corpus.task.len()
     );
     assert!(
         failures.is_empty(),
-        "{} B6 task(s) failed:\n{}",
+        "{} edit-corpus task(s) failed:\n{}",
         failures.len(),
         failures.join("\n")
     );

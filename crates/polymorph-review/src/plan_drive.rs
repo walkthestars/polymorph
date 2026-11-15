@@ -2,7 +2,7 @@
 //!
 //! Cashes in the substrate: drives [`run_loop`] per ready task in dependency order over PLAN.md
 //! sections, marks tasks Done/Failed, and exposes the merge sequence. `run_loop` itself is
-//! untouched (F1 core never changes for a consumer — the F1/F2 seam precedent).
+//! untouched (the loop core never changes for a consumer).
 //!
 //! Policies (explicit, tested): - One task per drive step: snapshot [`TaskGraph::ready`], drive
 //! each in order, recompute. Every step consumes exactly one Pending task, so the drive always

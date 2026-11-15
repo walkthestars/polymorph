@@ -1486,6 +1486,7 @@ mod tests {
                 reasoning_content: None,
                 aborted: false,
                 rule_hit: None,
+                usage: None,
             })
         }
     }
@@ -1695,6 +1696,7 @@ mod tests {
                 reasoning_content: None,
                 aborted: false,
                 rule_hit: None,
+                usage: None,
             })
         }
     }

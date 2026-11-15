@@ -5,7 +5,7 @@
 //!   tag-checked, bounds-checked, and overlap-checked BEFORE any result is
 //!   built, so a bad hunk anywhere means zero changes everywhere.
 //! - `apply_to_disk` — reads every section file, runs the pure core, then
-//!   writes via temp-file + rename (B4b on-disk variant). A missing file, a
+//!   writes via temp-file + rename (the on-disk variant). A missing file, a
 //!   stale tag, or a second-section failure leaves every file untouched.
 //! - Line numbers always refer to the ORIGINAL file state (stable addressing).
 //!
@@ -584,7 +584,7 @@ pub fn apply_to_disk(
     Ok(report)
 }
 
-/// Parse + apply to disk in one call (the tool-call entry point for B6).
+/// Parse + apply to disk in one call (the tool-call entry point).
 pub fn apply_text_to_disk(
     patch_text: &str,
     root: &Path,

@@ -3,8 +3,8 @@
 //! discipline mirrors `dap_matrix.rs` (roster: `docs/renderdoc.md`).
 
 /// Resolve `renderdoccmd`: absolute install path first, else PATH probe.
-/// `None` = loud skip (host without RenderDoc — build-time acquisition
-/// in the N1a plan; CI without it skips, never reds).
+/// `None` = loud skip (host without RenderDoc; CI without it
+/// skips, never reds).
 fn resolve_renderdoc() -> Option<String> {
     const INSTALL: &str = "C:/Program Files/RenderDoc/renderdoccmd.exe";
     if std::path::Path::new(INSTALL).is_file() {
