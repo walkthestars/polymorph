@@ -66,7 +66,7 @@ cargo build --release
 
 ## Connect a harness
 
-MCP over stdio, one tool named `drive`:
+MCP over stdio. The tool to call is `drive`:
 
 ```json
 {"mcpServers":{"polymorph":{"command":"polymorph","args":["mcp"]}}}
@@ -119,7 +119,7 @@ The complete flag reference is in [docs/CLI.md](docs/CLI.md).
 
 | Command | Description |
 |---------|-------------|
-| `polymorph mcp` | MCP stdio server exposing the bounded `drive` tool. |
+| `polymorph mcp` | MCP stdio server exposing the bounded `drive` tool and the experimental `synthesize_invariants` tool. |
 | `polymorph review drive` | Drive one goal to a verdict over a file, artifact set, or worktree diff (`--tools`, `--verify-cmd`, `--lsp-error-gate`, `--reviewer-tools`, `--events-json`). |
 | `polymorph review plan-drive` | Drive a `PLAN.md` DAG task-by-task with write-back and optional checkpoint resume. |
 | `polymorph review plan-show` | Validate and display a `PLAN.md` task board offline. |
@@ -132,7 +132,9 @@ The complete flag reference is in [docs/CLI.md](docs/CLI.md).
 | `polymorph sessions` | List, create, switch, or delete SQLite sessions. |
 | `polymorph config`, `providers`, `models` | Inspect and update configuration, providers, and the model catalog. |
 | `polymorph delegate run` | Exercise the subagent bus with echo workers (offline demo). |
-| `polymorph eval run`, `eval check` | Run one model-output evaluation, or verify a recording offline. |
+| `polymorph eval run`, `eval sweep`, `eval check` | Run one model-output evaluation, run the edit corpus live, or verify a recording offline. |
+| `polymorph proof run`, `recheck`, `bench`, `backends` | Experimental proof gate: prove a request, re-check a certificate, run the bundled bench, list solver backends. Needs `z3`. |
+| `polymorph clean` | Remove old local state under `.polymorph` (logs, rollback archives, spilled tool output). |
 | `polymorph update-catalog` | Refresh the cached `models.dev` capability catalog. |
 
 `polymorph` with no subcommand prints this command surface and exits.
@@ -265,7 +267,8 @@ pull request.
 
 ## License
 
-AGPL-3.0-only, with commercial and enterprise licensing available from the Project Owner.
+AGPL-3.0-only, with commercial and enterprise licensing available from the Project Owner
+(<licensing@shienar.com>, <https://shienar.com>).
 See [LICENSE](LICENSE), [COPYRIGHT](COPYRIGHT), [CLA.md](CLA.md), and
 [docs/LICENSING.md](docs/LICENSING.md) for what the AGPL permits, when the commercial
 license is required, and why contributions carry a CLA.

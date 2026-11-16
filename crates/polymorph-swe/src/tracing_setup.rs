@@ -13,6 +13,10 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter, Layer};
 /// Used by the builder below AND pinned by test — bump in one place.
 pub(crate) const RETENTION_FILES: usize = 7;
 
+/// Console filter when `RUST_LOG` is unset: warnings and up, except the model
+/// client's stream reader, which is held to errors.
+const CONSOLE_FILTER: &str = "warn,genai::adapter::adapters::openai::streamer=error";
+
 /// Held guards — dropping the file guard loses buffered log lines.
 /// `main` must keep this alive for the whole process.
 pub struct LoggingGuards {
@@ -39,8 +43,11 @@ pub fn build_subscriber(
     let (file_writer, file_guard) = tracing_appender::non_blocking(file_appender);
 
     let stderr_layer = if enable_stderr {
+        // The model client's stream reader warns once per content-free chunk,
+        // which some gateways send by the hundred. Those lines stay in the
+        // log file; the console shows that module's errors only.
         let stderr_filter =
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn"));
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(CONSOLE_FILTER));
         Some(
             fmt::layer()
                 .with_writer(std::io::stderr)
@@ -98,6 +105,13 @@ mod tests {
             );
         }
         assert!(found, "expected the JSON log line in the log dir");
+    }
+
+    #[test]
+    fn console_filter_parses_and_quiets_the_stream_reader() {
+        EnvFilter::try_new(CONSOLE_FILTER).unwrap();
+        assert!(CONSOLE_FILTER.starts_with("warn,"));
+        assert!(CONSOLE_FILTER.contains("streamer=error"));
     }
 
     #[test]

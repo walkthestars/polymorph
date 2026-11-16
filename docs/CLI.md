@@ -19,7 +19,8 @@ with no subcommand prints the command surface and exits `0`.
 
 ## 1. MCP server (`polymorph mcp`)
 
-Speaks MCP over stdio and exposes one tool, `drive`. Stdout carries the protocol; nothing
+Speaks MCP over stdio and exposes two tools: `drive`, and the experimental
+`synthesize_invariants` (see [PROOF.md](PROOF.md)). Stdout carries the protocol; nothing
 else is printed.
 
 ```bash

@@ -6,7 +6,7 @@ driven goal per invocation, machine-readable events, and an honest exit code.
 
 ## 0. MCP server (preferred)
 
-`polymorph mcp` speaks MCP over stdio and exposes one tool, `drive`. Register it
+`polymorph mcp` speaks MCP over stdio. Its main tool is `drive`. Register it
 in any MCP client:
 
 ```json

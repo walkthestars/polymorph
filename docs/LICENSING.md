@@ -5,9 +5,9 @@ Polymorph is **dual-licensed**:
 1. **Open source:** [AGPL-3.0-only](../LICENSE) for everyone. Running it, modifying
    it, and self-hosting it are free.
 2. **Commercial:** a separate licence for embedding Polymorph in a proprietary
-   product or offering it as part of a commercial service. A dedicated commercial
-   address will be published here; until then, open an issue at
-   <https://github.com/walkthestars/polymorph> and it will be routed.
+   product or offering it as part of a commercial service. Write to
+   <licensing@shienar.com>. A free evaluation licence is available on request for
+   organisations that want to trial Polymorph outside the AGPL.
 
 This file explains what the AGPL means at the point of install. It is not legal
 advice; if the distinction matters to your organisation, ask your counsel.
@@ -49,6 +49,6 @@ licence, so contributions that do not carry them cannot be merged.
 ## Release metadata
 
 Every release carries `license = "AGPL-3.0-only"` (SPDX) in `Cargo.toml` and in
-each crate's metadata. A release is the pair `vX.Y.Z` tag + crates.io packages +
-GitHub release; the licence shown in the README at that tag is the licence that
-applies to that release.
+each crate's metadata. A release is the `vX.Y.Z` tag and its GitHub release; the
+crates are not published on crates.io. The licence shown in the README at that tag
+is the licence that applies to that release.

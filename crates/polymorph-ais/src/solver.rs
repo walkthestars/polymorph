@@ -138,13 +138,17 @@ impl SolverSpec {
 fn not_found_message(first: &str) -> String {
     let mut message = format!("solver executable {first:?} was not found.");
     if first == "z3" {
-        message.push_str(
-            " The proof commands need the z3 SMT solver, which is not bundled.              Install it (Windows: `scoop install z3`; macOS: `brew install z3`;              Debian or Ubuntu: `sudo apt install z3`; or a release from              https://github.com/Z3Prover/z3/releases) and check with `z3 --version`.",
-        );
+        message.push_str(concat!(
+            " The proof commands need the z3 SMT solver, which is not bundled.",
+            " Install it (Windows: `scoop install z3`; macOS: `brew install z3`;",
+            " Debian or Ubuntu: `sudo apt install z3`; or a release from",
+            " https://github.com/Z3Prover/z3/releases) and check with `z3 --version`.",
+        ));
     }
-    message.push_str(
-        " Where another solver is accepted, set POLYMORPH_AIS_SOLVER to a command          line containing {input} (docs/PROOF.md, section 2).",
-    );
+    message.push_str(concat!(
+        " Where another solver is accepted, set POLYMORPH_AIS_SOLVER to a command",
+        " line containing {input} (docs/PROOF.md, section 2).",
+    ));
     message
 }
 
@@ -691,6 +695,7 @@ mod tests {
         assert!(message.contains("brew install z3"), "{message}");
         assert!(message.contains("z3 --version"), "{message}");
         assert!(message.contains("POLYMORPH_AIS_SOLVER"), "{message}");
+        assert!(!message.contains("  "), "{message}");
     }
 
     #[test]
