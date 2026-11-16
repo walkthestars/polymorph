@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2] — 2026-11-16
+
+### Fixed
+
+- The missing-`z3` message no longer contains runs of spaces.
+- The console no longer shows the model client's per-chunk `EMPTY CHOICE CONTENT`
+  warnings, which some gateways trigger by the hundred. They remain in the log file,
+  and `RUST_LOG` still overrides the filter.
+- Docs: the MCP server is described with both of its tools, the README command table
+  lists `clean`, `proof` and `eval sweep`, and `docs/LICENSING.md` no longer says
+  releases include crates.io packages.
+- Docs: commercial and evaluation licence enquiries now go to `licensing@shienar.com`
+  (previously "open an issue").
+
 ## [1.1.1] — 2026-11-14
 
 ### Fixed
