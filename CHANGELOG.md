@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.3] — 2026-11-18
+
+### Changed
+
+- Docs: `docs/LICENSING.md` no longer says a free evaluation licence is available on
+  request; it gives `licensing@shienar.com` for evaluation and commercial licences.
+
 ## [1.1.2] — 2026-11-16
 
 ### Fixed

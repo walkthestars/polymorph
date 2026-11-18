@@ -5,9 +5,8 @@ Polymorph is **dual-licensed**:
 1. **Open source:** [AGPL-3.0-only](../LICENSE) for everyone. Running it, modifying
    it, and self-hosting it are free.
 2. **Commercial:** a separate licence for embedding Polymorph in a proprietary
-   product or offering it as part of a commercial service. Write to
-   <licensing@shienar.com>. A free evaluation licence is available on request for
-   organisations that want to trial Polymorph outside the AGPL.
+   product or offering it as part of a commercial service. For an evaluation or
+   commercial licence, write to <licensing@shienar.com>.
 
 This file explains what the AGPL means at the point of install. It is not legal
 advice; if the distinction matters to your organisation, ask your counsel.
