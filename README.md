@@ -6,7 +6,7 @@
 
 <h1 align="center">Polymorph</h1>
 
-<p align="center">A Rust-native execution substrate for AI coding harnesses.<br>
+<p align="center">A Rust-native AI coding agent and headless SWE compiler.<br>
 Clean-context reviewer loops, content-addressed hashline edits, role-routed model chains,
 and a 32-server LSP matrix.</p>
 
